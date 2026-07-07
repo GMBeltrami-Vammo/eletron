@@ -1,12 +1,34 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { getRepository } from "@/lib/data/repository.server";
 import { Providers } from "@/components/providers";
 import { AppSidebar } from "@/components/vammo/sidebar";
 import { MobileNav } from "@/components/vammo/mobile-nav";
+import type { NavBadgeCounts } from "@/components/vammo/nav-items";
 import { Toaster } from "@/components/ui/sonner";
 
 import { signOutAction } from "./actions";
+
+/** Badge counts must never break the shell — snapshot load failures show 0. */
+async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
+  try {
+    const repo = getRepository();
+    const [alerts, irregularities] = await Promise.all([
+      repo.getAlerts(),
+      repo.getIrregularities(),
+    ]);
+    return {
+      alertas: alerts.filter((a) => a.status === "open").length,
+      revisao:
+        irregularities.joinAlerts.length +
+        irregularities.unmatchedAccounts.length +
+        irregularities.unmatchedCharges.length,
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 export default async function AppLayout({
   children,
@@ -18,6 +40,8 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  const counts = await loadBadgeCounts();
+
   return (
     <Providers>
       <div className="flex min-h-svh bg-background">
@@ -27,10 +51,11 @@ export default async function AppLayout({
             email: session.user.email,
             image: session.user.image,
           }}
+          counts={counts}
           onSignOut={signOutAction}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <MobileNav />
+          <MobileNav counts={counts} />
           <main className="flex-1 p-4 md:p-6">{children}</main>
         </div>
       </div>
