@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
-import { authConfig } from "@/auth.config";
+import { authConfig } from "./auth.config";
 
 // Uses the edge-safe config only (no Credentials provider) so this bundles for Edge Middleware.
 const { auth } = NextAuth(authConfig);
