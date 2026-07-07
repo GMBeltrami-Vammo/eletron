@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>Vammo — Rider App UI Kit</title>
+<link rel="stylesheet" href="app.css?v=3">
+<style>
+  body { margin: 0; background: #ECECEC; font-family: 'Inter', sans-serif; padding: 28px 24px 60px; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .header img { height: 22px; }
+  .header .meta { font-size: 12px; color: #6B6B6B; }
+  .lab { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #6B6B6B; margin: 0 0 10px; text-align: center; }
+  .row { display: flex; gap: 24px; align-items: flex-start; overflow-x: auto; padding-bottom: 12px; }
+  .col { display: flex; flex-direction: column; align-items: center; flex: 0 0 auto; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.553.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <img src="../../assets/logo/Vammo_Logo_Black.svg" alt="vammo">
+    <div class="meta">Rider App · iOS · 5 screens · click any tab bar / button to navigate</div>
+  </div>
+  <div id="root"></div>
+
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="Primitives.jsx"></script>
+  <script type="text/babel" src="MapScreen.jsx"></script>
+  <script type="text/babel" src="ProfileScreen.jsx"></script>
+  <script type="text/babel" src="ReservationScreen.jsx"></script>
+  <script type="text/babel" src="InvoicesScreen.jsx"></script>
+  <script type="text/babel" src="ChargeDetailScreen.jsx"></script>
+
+  <script type="text/babel">
+    const LABELS = {
+      'map': 'Mapa · Trocar bateria',
+      'profile-with':    'Perfil · com moto',
+      'profile-without': 'Perfil · sem moto',
+      'reservation':     'Reserva confirmada',
+      'invoices-paid':    'Fatura paga',
+      'invoices-open':    'Fatura aberta',
+      'invoices-overdue': 'Fatura vencida',
+      'invoices-closed':  'Fatura fechada',
+      'charge': 'Detalhes da cobrança',
+    };
+
+    function PhoneCol({ initial }) {
+      const [s, setS] = React.useState(initial);
+
+      // simple cross-screen navigation
+      const nav = (target) => {
+        // From a screen's tab bar (home/profile), or button → set new screen key
+        if (target === 'home')          setS('map');
+        else if (target === 'profile')  setS('profile-with');
+        else if (target === 'reservation') setS('reservation');
+        else if (target === 'invoices') setS('invoices-open');
+        else if (typeof target === 'string') setS(target);
+      };
+
+      const onLineClick = (kind) => { if (kind === 'maintenance') setS('charge'); };
+
+      let Screen;
+      if (s === 'map')                Screen = <MapScreen onNav={nav} />;
+      else if (s === 'profile-with')  Screen = <ProfileScreen onNav={nav} state="withBike" />;
+      else if (s === 'profile-without') Screen = <ProfileScreen onNav={nav} state="withoutBike" />;
+      else if (s === 'reservation')   Screen = <ReservationScreen onNav={nav} />;
+      else if (s === 'invoices-paid')    Screen = <InvoicesScreen onNav={nav} status="paid" onLineClick={onLineClick} />;
+      else if (s === 'invoices-open')    Screen = <InvoicesScreen onNav={nav} status="open" onLineClick={onLineClick} />;
+      else if (s === 'invoices-overdue') Screen = <InvoicesScreen onNav={nav} status="overdue" onLineClick={onLineClick} />;
+      else if (s === 'invoices-closed')  Screen = <InvoicesScreen onNav={nav} status="closed" onLineClick={onLineClick} />;
+      else if (s === 'charge')         Screen = <ChargeDetailScreen onNav={(t) => t === 'invoices' ? setS('invoices-closed') : nav(t)} />;
+
+      React.useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [s]);
+
+      return (
+        <div className="col">
+          <div className="lab">{LABELS[s] || s}</div>
+          <IOSDevice width={360} height={780}>
+            {Screen}
+          </IOSDevice>
+        </div>
+      );
+    }
+
+    function App() {
+      const initials = ['map', 'profile-with', 'reservation', 'invoices-open', 'invoices-closed'];
+      return <div className="row">{initials.map(s => <PhoneCol key={s} initial={s} />)}</div>;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

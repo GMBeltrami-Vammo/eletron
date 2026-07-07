@@ -1,0 +1,29 @@
+# deps / build
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# env & credentials — never commit
+.env
+.env.local
+.env*.local
+credentials.json
+client_secret.json
+token.json
+.drive_token.json
+*.pem
+
+# real bills / spreadsheets with PII and bank data (kept local as fixtures)
+context/
+
+# misc
+.DS_Store
+npm-debug.log*
+.vercel
+coverage/
+
+# local agent settings
+.claude/settings.local.json

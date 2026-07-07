@@ -1,0 +1,468 @@
+/* Vammo Rider App — light theme, matches Figma flows.
+   Reference screens: Reservation confirmation, Model selection, Profile (with/without bike),
+   Invoices (Paid/Open/Overdue/Closed), Charge detail, Map. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* { box-sizing: border-box; }
+
+:root {
+  --ra-bg: #F2F2F2;       /* outside-card background */
+  --ra-surface: #FFFFFF;
+  --ra-ink: #0E0E10;
+  --ra-ink-2: #6B6B6B;
+  --ra-ink-3: #9A9A9A;
+  --ra-border: #E5E5E5;
+  --ra-divider: #EDEDED;
+
+  /* Black "header card" — used on Profile, Reservation confirmation */
+  --ra-card-dark: #0E0E10;
+  --ra-card-dark-fg: #FFFFFF;
+
+  /* Filled primary button */
+  --ra-btn-primary-bg: #0E0E10;
+  --ra-btn-primary-fg: #FFFFFF;
+
+  /* Destructive button (outline) */
+  --ra-danger: #DE4841;
+
+  /* Status card pastels (matches the Faturas screens exactly) */
+  --status-paid-bg:    #C8EBC9;  --status-paid-pill:    #2E7D32;  --status-paid-pill-fg: #FFFFFF;
+  --status-open-bg:    #C9E2F4;  --status-open-pill:    #0992DC;  --status-open-pill-fg: #FFFFFF;
+  --status-overdue-bg: #F5C2C0;  --status-overdue-pill: #DE4841;  --status-overdue-pill-fg: #FFFFFF;
+  --status-closed-bg:  #FBE6A8;  --status-closed-pill:  #C28A0E;  --status-closed-pill-fg: #FFFFFF;
+  --status-new-pill:   #DFFF00;  /* neon yellow "NOVO" tag */
+
+  --ra-radius-card: 16px;
+  --ra-radius-btn: 12px;
+}
+
+/* Screen surface inside the iOS frame */
+.ra {
+  width: 100%;
+  height: 100%;
+  background: var(--ra-bg);
+  color: var(--ra-ink);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.ra-scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: 52px;   /* clear iOS status bar */
+  padding-bottom: 90px; /* clear tab bar */
+}
+
+/* Nav header (back + centered title) */
+.ra-navbar {
+  position: absolute;
+  top: 52px;
+  left: 0; right: 0;
+  height: 44px;
+  background: var(--ra-bg);
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  z-index: 5;
+}
+.ra-navbar .back, .ra-navbar .right {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.ra-navbar .back svg, .ra-navbar .right svg { width: 22px; height: 22px; stroke-width: 1.75; }
+.ra-navbar .title {
+  text-align: center; font-size: 16px; font-weight: 600;
+}
+.ra-with-navbar .ra-scroll { padding-top: 96px; }
+
+/* Page title (used in full-bleed screens like Profile) */
+.ra-page-title {
+  padding: 8px 20px 12px;
+  font-size: 14px; color: var(--ra-ink-2); font-weight: 500;
+}
+
+/* Card containers */
+.ra-card {
+  background: var(--ra-surface);
+  border-radius: var(--ra-radius-card);
+  margin: 0 16px 12px;
+  padding: 16px;
+}
+.ra-card.dark {
+  background: var(--ra-card-dark);
+  color: var(--ra-card-dark-fg);
+}
+.ra-card.flush { padding: 0; overflow: hidden; }
+
+/* Profile black card */
+.ra-profile-card {
+  background: var(--ra-card-dark);
+  color: #fff;
+  border-radius: 20px;
+  margin: 0 16px 18px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ra-profile-card .title { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+.ra-profile-card .name-row {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.ra-profile-card .name-row svg { width: 18px; height: 18px; stroke-width: 1.75; opacity: 0.85; }
+.ra-profile-card .name-row span { font-size: 15px; font-weight: 500; }
+.ra-profile-card .stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.ra-stat {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.ra-stat .lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+.ra-stat .num { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.ra-stat .unit { font-size: 12px; color: rgba(255,255,255,0.65); }
+
+/* "Minha moto" section */
+.ra-section-title {
+  font-size: 14px; font-weight: 600; padding: 0 24px; margin: 14px 0 8px; color: var(--ra-ink);
+}
+
+/* List row (Pagamentos / Configurações / etc) */
+.ra-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px;
+  background: var(--ra-surface);
+  border-bottom: 1px solid var(--ra-divider);
+  cursor: pointer;
+}
+.ra-row:last-child { border-bottom: 0; }
+.ra-row .ico { width: 24px; display: flex; align-items: center; justify-content: center; }
+.ra-row .ico svg { width: 22px; height: 22px; stroke-width: 1.5; }
+.ra-row .lbl { flex: 1; font-size: 15px; font-weight: 500; }
+.ra-row .right { color: var(--ra-ink-3); }
+.ra-row .right svg { width: 18px; height: 18px; stroke-width: 1.75; }
+.ra-row .new-tag {
+  background: var(--status-new-pill);
+  color: #0E0E10;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 3px 6px; border-radius: 4px;
+}
+
+/* Group of rows in one rounded white container */
+.ra-rows {
+  background: var(--ra-surface);
+  border-radius: var(--ra-radius-card);
+  margin: 0 16px 12px;
+  overflow: hidden;
+}
+.ra-rows .ra-row { border-radius: 0; }
+.ra-rows .ra-row:last-child { border-bottom: 0; }
+
+/* "Moto não cadastrada" / "RFT-5768 Reserva" — bike card */
+.ra-bike-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ra-surface);
+  border-radius: var(--ra-radius-card);
+  margin: 0 16px 12px;
+  padding: 14px;
+}
+.ra-bike-card .ico { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--ra-ink); }
+.ra-bike-card .ico svg { width: 28px; height: 28px; stroke-width: 1.5; }
+.ra-bike-card .body { flex: 1; min-width: 0; }
+.ra-bike-card .t1 { font-size: 16px; font-weight: 600; letter-spacing: -0.005em; }
+.ra-bike-card .t2 { font-size: 12px; color: var(--ra-ink-2); margin-top: 2px; }
+.ra-bike-card .reserva {
+  background: #E5E5E5; color: #525252; font-size: 11px; font-weight: 600;
+  padding: 4px 8px; border-radius: 6px;
+}
+
+/* Outline button (e.g. "Ver documento") */
+.ra-btn-outline {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--ra-surface);
+  color: var(--ra-ink);
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-btn);
+  font: 600 15px 'Inter', sans-serif;
+  padding: 13px 16px;
+  margin: 0 16px 12px;
+  cursor: pointer;
+}
+.ra-btn-outline svg { width: 18px; height: 18px; stroke-width: 1.75; }
+
+/* Primary filled button (used inside modals and CTAs) */
+.ra-btn-primary {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%;
+  background: var(--ra-btn-primary-bg);
+  color: var(--ra-btn-primary-fg);
+  border: 0;
+  border-radius: var(--ra-radius-btn);
+  font: 600 15px 'Inter', sans-serif;
+  padding: 15px 16px;
+  cursor: pointer;
+}
+.ra-btn-primary svg { width: 18px; height: 18px; stroke-width: 1.75; }
+
+/* Destructive button (white bg, red border, red text) */
+.ra-btn-danger {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%;
+  background: var(--ra-surface);
+  color: var(--ra-danger);
+  border: 1.5px solid var(--ra-danger);
+  border-radius: var(--ra-radius-btn);
+  font: 600 15px 'Inter', sans-serif;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+/* Tab bar (2 tabs only — Home, Perfil) */
+.ra-tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 80px; padding: 8px 0 20px;
+  background: var(--ra-surface);
+  border-top: 1px solid var(--ra-divider);
+  display: flex; align-items: center; justify-content: space-around;
+}
+.ra-tab {
+  display: flex; flex-direction: column; align-items: center;
+  width: 100px;
+  color: var(--ra-ink-3);
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+}
+.ra-tab.active { color: var(--ra-ink); }
+.ra-tab svg { width: 26px; height: 26px; stroke-width: 1.5; }
+
+/* Invoice status card (Fatura paga / aberta / vencida / fechada) */
+.ra-fatura {
+  border-radius: var(--ra-radius-card);
+  padding: 22px 18px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.ra-fatura .amount { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; color: var(--ra-ink); }
+.ra-fatura .pill {
+  display: inline-block; margin-top: 8px;
+  padding: 4px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ra-fatura .sub { margin-top: 10px; font-size: 13px; color: var(--ra-ink); opacity: 0.7; }
+
+.ra-fatura.paid    { background: var(--status-paid-bg); }
+.ra-fatura.open    { background: var(--status-open-bg); }
+.ra-fatura.overdue { background: var(--status-overdue-bg); }
+.ra-fatura.closed  { background: var(--status-closed-bg); }
+
+.ra-fatura.paid    .pill { background: var(--status-paid-pill);    color: var(--status-paid-pill-fg); }
+.ra-fatura.open    .pill { background: var(--status-open-pill);    color: var(--status-open-pill-fg); }
+.ra-fatura.overdue .pill { background: var(--status-overdue-pill); color: var(--status-overdue-pill-fg); }
+.ra-fatura.closed  .pill { background: var(--status-closed-pill);  color: var(--status-closed-pill-fg); }
+
+/* Date tabs (above invoice card) */
+.ra-date-tabs {
+  display: flex; justify-content: space-around; padding: 0 16px 12px;
+  font-size: 14px;
+}
+.ra-date-tab {
+  padding: 6px 4px; color: var(--ra-ink-3); position: relative; cursor: pointer;
+}
+.ra-date-tab.active { color: var(--ra-ink); font-weight: 600; }
+.ra-date-tab.active::after {
+  content: ""; position: absolute; left: 8%; right: 8%; bottom: -2px; height: 2px; background: var(--ra-ink); border-radius: 2px;
+}
+
+/* Invoice line item */
+.ra-line {
+  display: grid; grid-template-columns: 22px 1fr auto 14px; gap: 10px;
+  align-items: center;
+  padding: 14px 14px;
+  border-bottom: 1px solid var(--ra-divider);
+}
+.ra-line:last-child { border-bottom: 0; }
+.ra-line .ico { color: var(--ra-ink); }
+.ra-line .ico svg { width: 20px; height: 20px; stroke-width: 1.5; }
+.ra-line .t1 { font-size: 13px; font-weight: 500; line-height: 1.25; }
+.ra-line .t2 { font-size: 11px; color: var(--ra-ink-2); margin-top: 2px; }
+.ra-line .amt { text-align: right; white-space: nowrap; }
+.ra-line .amt .v { font-size: 13px; font-weight: 600; }
+.ra-line .amt .ts { font-size: 11px; color: var(--ra-ink-2); margin-top: 2px; }
+.ra-line .chev { color: var(--ra-ink-3); }
+.ra-line .chev svg { width: 16px; height: 16px; }
+.ra-line .access-pill {
+  display: inline-block; background: var(--status-new-pill); color: #0E0E10;
+  font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px; margin-top: 3px;
+}
+
+/* Bottom sheet modal */
+.ra-sheet-bg {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: flex-end;
+  z-index: 30;
+}
+.ra-sheet {
+  width: 100%;
+  background: var(--ra-surface);
+  border-radius: 20px 20px 0 0;
+  padding: 22px 18px 28px;
+}
+.ra-sheet .head {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.ra-sheet .head svg.icon { width: 24px; height: 24px; stroke-width: 1.5; }
+.ra-sheet .head .h {
+  flex: 1; font-size: 16px; font-weight: 700;
+}
+.ra-sheet .head .close { color: var(--ra-ink-2); cursor: pointer; }
+.ra-sheet .head .close svg { width: 22px; height: 22px; }
+.ra-sheet p.body { font-size: 14px; color: var(--ra-ink-2); margin: 0 0 18px; line-height: 1.5; }
+.ra-sheet .actions { display: flex; flex-direction: column; gap: 10px; }
+
+/* Radio list (cancel reason form) */
+.ra-radio-list {
+  display: flex; flex-direction: column;
+  margin: 0 -2px 18px;
+}
+.ra-radio-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 2px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.ra-radio {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid var(--ra-border);
+  position: relative; flex: 0 0 18px;
+}
+.ra-radio.checked { border-color: var(--ra-ink); }
+.ra-radio.checked::after {
+  content: ""; position: absolute; inset: 3px;
+  border-radius: 50%; background: var(--ra-ink);
+}
+
+/* Confirmation green check */
+.ra-check {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: #2E7D32; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 12px;
+}
+.ra-check svg { width: 30px; height: 30px; stroke-width: 2.5; }
+
+/* Map screen styles */
+.ra-map {
+  flex: 1;
+  background: #EFE9DC;  /* warm map base */
+  position: relative;
+  overflow: hidden;
+}
+.ra-map-svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+}
+.ra-map-label {
+  position: absolute;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.18em;
+  color: rgba(60,55,40,0.45);
+  text-transform: uppercase;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.ra-street-label {
+  position: absolute;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px; font-weight: 500;
+  color: rgba(60,55,40,0.55);
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* battery markers */
+.ra-pin {
+  position: absolute;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 8px;
+  background: var(--status-new-pill);
+  color: #0E0E10;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  z-index: 1;
+}
+.ra-pin.grey { background: #BABABA; color: #0E0E10; }
+.ra-pin svg { width: 14px; height: 14px; stroke-width: 2; }
+
+/* In-app banner (e.g. "Nova cobrança de manutenção") */
+.ra-banner {
+  position: absolute; top: 96px; left: 12px; right: 12px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ra-surface);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  z-index: 2;
+}
+.ra-banner .ico {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: #F2F2F2; display: flex; align-items: center; justify-content: center;
+}
+.ra-banner .ico svg { width: 18px; height: 18px; stroke-width: 1.75; }
+.ra-banner .body { flex: 1; min-width: 0; }
+.ra-banner .t1 { font-size: 13px; font-weight: 700; }
+.ra-banner .t2 { font-size: 11px; color: var(--ra-ink-2); margin-top: 2px; }
+.ra-banner .cta {
+  background: var(--ra-card-dark); color: #fff;
+  padding: 8px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+
+/* "Trocar bateria" floating CTA */
+.ra-fab {
+  position: absolute; bottom: 110px; left: 16px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--ra-card-dark); color: #fff;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-size: 14px; font-weight: 600;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.2);
+  z-index: 3;
+}
+.ra-fab svg { width: 18px; height: 18px; }
+
+/* Reservation confirmed card group (used on Reservation screen) */
+.ra-reservation {
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.ra-reservation .summary {
+  background: var(--ra-surface);
+  border-radius: var(--ra-radius-card);
+  padding: 16px;
+}
+.ra-summary-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ra-divider);
+  font-size: 14px;
+}
+.ra-summary-row:last-child { border-bottom: 0; }
+.ra-summary-row .k { color: var(--ra-ink-2); }
+.ra-summary-row .v { font-weight: 600; }

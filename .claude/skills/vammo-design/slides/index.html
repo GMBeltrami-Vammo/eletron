@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>Vammo — Slide Templates</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  :root {
+    --slide-w: 1920px;
+    --slide-h: 1080px;
+  }
+  html, body { margin: 0; height: 100%; background: #0A0A0A; }
+
+  /* Each slide is a 1920x1080 section */
+  deck-stage section {
+    width: 1920px;
+    height: 1080px;
+    position: relative;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    color: #fff;
+    background: #000;
+  }
+
+  /* Reusable bits ----------------------------------------------- */
+  .s-logo { position: absolute; top: 48px; left: 64px; height: 36px; z-index: 5; }
+  .s-foot {
+    position: absolute; bottom: 48px; left: 64px; right: 64px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 18px; color: rgba(255,255,255,0.5); font-weight: 500; letter-spacing: 0.04em;
+  }
+  .s-foot .num { font-family: var(--font-mono); }
+  .s-eyebrow {
+    font-size: 22px; font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: #2EC2FF;
+  }
+  .light { background: #FAFAFA !important; color: #000 !important; }
+  .light .s-foot { color: rgba(0,0,0,0.45); }
+
+  /* Slide 1 — TITLE / cover with zigzag mark ------------------- */
+  .s-cover .zig {
+    position: absolute; top: 0; left: 0; right: 0; height: 540px;
+    background: url('../assets/patterns/zigzag-blue-wide.png') no-repeat center / cover;
+  }
+  .s-cover .zig::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 40%, #000 100%);
+  }
+  .s-cover .body {
+    position: absolute; left: 64px; right: 64px; bottom: 220px;
+  }
+  .s-cover h1 {
+    font-size: 220px; font-weight: 700; letter-spacing: -0.03em;
+    line-height: 0.9; text-transform: lowercase; margin: 0;
+  }
+  .s-cover .meta {
+    margin-top: 36px; display: flex; gap: 40px; font-size: 22px; color: rgba(255,255,255,0.7);
+  }
+  .s-cover .meta strong { color: #fff; font-weight: 600; }
+
+  /* Slide 2 — SECTION DIVIDER --------------------------------- */
+  .s-divider { background: #2EC2FF !important; color: #000 !important; display: flex; align-items: center; padding: 0 120px; }
+  .s-divider .s-logo { filter: brightness(0); }
+  .s-divider .num { font-size: 36px; font-family: var(--font-mono); font-weight: 700; color: rgba(0,0,0,0.5); }
+  .s-divider h2 {
+    font-size: 200px; font-weight: 700; letter-spacing: -0.03em;
+    line-height: 0.9; text-transform: lowercase; margin-top: 24px;
+  }
+  .s-divider .s-foot { color: rgba(0,0,0,0.5); }
+
+  /* Slide 3 — CONTENT / bullets + visual ---------------------- */
+  .s-content { padding: 130px 64px 130px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 80px; align-items: center; }
+  .s-content h2 {
+    font-size: 96px; font-weight: 700; letter-spacing: -0.025em; line-height: 0.95;
+    text-transform: lowercase; margin: 18px 0 56px;
+  }
+  .s-content ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 28px; }
+  .s-content li { font-size: 30px; line-height: 1.4; display: flex; gap: 22px; }
+  .s-content li::before {
+    content: ""; flex: 0 0 12px; width: 12px; height: 12px;
+    background: #2EC2FF; margin-top: 18px;
+  }
+  .s-content .visual {
+    aspect-ratio: 1/1; background:
+      radial-gradient(circle at 65% 35%, rgba(46,194,255,0.7), transparent 55%),
+      repeating-linear-gradient(45deg, #141414 0 24px, #1A1A1A 24px 25px),
+      #000;
+    border-radius: 8px; position: relative; overflow: hidden;
+  }
+  .s-content .visual .tag {
+    position: absolute; top: 24px; left: 24px; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase; color: #2EC2FF;
+  }
+  .s-content .visual .big {
+    position: absolute; bottom: 32px; left: 32px; right: 32px;
+    font-size: 96px; font-weight: 700; letter-spacing: -0.025em; line-height: 0.95;
+  }
+
+  /* Slide 4 — BIG STAT ---------------------------------------- */
+  .s-stat { padding: 160px 96px 130px; display: flex; flex-direction: column; gap: 48px; }
+  .s-stat .num-wrap { display: flex; align-items: baseline; gap: 32px; flex-wrap: wrap; }
+  .s-stat .num {
+    font-size: 380px; font-weight: 700; letter-spacing: -0.04em; line-height: 0.85;
+    color: #2EC2FF; text-transform: lowercase;
+  }
+  .s-stat .unit { font-size: 96px; font-weight: 700; color: #fff; letter-spacing: -0.02em; line-height: 0.9; }
+  .s-stat .cap { font-size: 32px; max-width: 1200px; font-weight: 500; color: rgba(255,255,255,0.8); line-height: 1.35; }
+
+  /* Slide 5 — QUOTE ------------------------------------------ */
+  .s-quote { padding: 180px 220px 180px; display: flex; flex-direction: column; justify-content: center; }
+  .s-quote .mark { font-size: 220px; line-height: 0.6; color: #2EC2FF; font-weight: 700; margin-bottom: -40px; }
+  .s-quote p { font-size: 72px; font-weight: 500; line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 56px; }
+  .s-quote .who { font-size: 24px; color: rgba(255,255,255,0.7); }
+  .s-quote .who strong { color: #fff; font-weight: 700; }
+
+  /* Slide 6 — COMPARISON / split ------------------------------ */
+  .s-split { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 0; background: #000; }
+  .s-split .pane { padding: 160px 80px; min-height: 1080px; display: flex; flex-direction: column; justify-content: center; }
+  .s-split .pane.dark  { background: #000; color: #fff; }
+  .s-split .pane.neon  { background: #2EC2FF; color: #000; }
+  .s-split .pane h3 { font-size: 64px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.0; text-transform: lowercase; margin: 16px 0 32px; }
+  .s-split .pane .stat { font-size: 200px; font-weight: 700; letter-spacing: -0.03em; line-height: 0.9; margin-bottom: 32px; }
+  .s-split .pane.dark .stat { color: rgba(255,255,255,0.4); }
+  .s-split .pane ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 20px; font-size: 26px; }
+  .s-split .pane.dark li::before { content: "—"; margin-right: 16px; color: rgba(255,255,255,0.4); }
+  .s-split .pane.neon li::before { content: "—"; margin-right: 16px; color: rgba(0,0,0,0.4); }
+  .s-split .pane .lbl { font-size: 22px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+  .s-split .pane.dark .lbl { color: #2EC2FF; }
+  .s-split .pane.neon .lbl { color: #000; opacity: 0.6; }
+
+  /* Slide 7 — CLOSING ---------------------------------------- */
+  .s-close { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 60px; }
+  .s-close .zig {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: url('../assets/patterns/zigzag-blue-wide.png') no-repeat center / cover;
+    opacity: 0.9;
+  }
+  .s-close .zig::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 75%); }
+  .s-close .inner { position: relative; z-index: 2; text-align: center; padding: 0 80px; }
+  .s-close h1 { font-size: 220px; font-weight: 700; letter-spacing: -0.03em; line-height: 0.9; text-transform: lowercase; margin: 0; }
+  .s-close .meta { margin-top: 60px; font-size: 28px; color: rgba(255,255,255,0.8); }
+  .s-close .meta strong { color: #fff; font-weight: 700; }
+</style>
+</head>
+<body>
+<deck-stage>
+
+  <!-- 1 ─ TITLE / cover -->
+  <section class="s-cover" data-screen-label="01 Title">
+    <div class="zig"></div>
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_White.svg" alt="vammo">
+    <div class="body">
+      <span class="s-eyebrow">vammo · investor deck</span>
+      <h1>troque,<br>ande, repita.</h1>
+      <div class="meta"><span><strong>São Paulo</strong> · Q2 2025</span><span><strong>Ana Castro</strong>, COO</span></div>
+    </div>
+    <div class="s-foot"><span>vammo.com.br</span><span class="num">01 / 07</span></div>
+  </section>
+
+  <!-- 2 ─ SECTION DIVIDER -->
+  <section class="s-divider" data-screen-label="02 Section">
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_Black.svg" alt="vammo">
+    <div>
+      <span class="num">02</span>
+      <h2>o que<br>a vammo faz.</h2>
+    </div>
+    <div class="s-foot"><span>vammo.com.br</span><span class="num">02 / 07</span></div>
+  </section>
+
+  <!-- 3 ─ CONTENT / bullets + visual -->
+  <section class="s-content" data-screen-label="03 Content">
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_White.svg" alt="vammo">
+    <div>
+      <span class="s-eyebrow">como funciona</span>
+      <h2>swap em<br>60 segundos.</h2>
+      <ul>
+        <li>Assinatura mensal — moto, bateria e manutenção inclusos.</li>
+        <li>Rede de estações de troca em toda São Paulo.</li>
+        <li>Zero pane: chegou com bateria fraca, sai com bateria cheia.</li>
+        <li>App rastreia disponibilidade em tempo real.</li>
+      </ul>
+    </div>
+    <div class="visual">
+      <span class="tag">swap time</span>
+      <div class="big">60s</div>
+    </div>
+    <div class="s-foot"><span>vammo.com.br</span><span class="num">03 / 07</span></div>
+  </section>
+
+  <!-- 4 ─ BIG STAT -->
+  <section class="s-stat" data-screen-label="04 Big Stat">
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_White.svg" alt="vammo">
+    <div>
+      <span class="s-eyebrow">trocas em 2024</span>
+      <div class="num-wrap">
+        <span class="num">1,2M</span>
+        <span class="unit">trocas</span>
+      </div>
+    </div>
+    <p class="cap">Mais de 1,2 milhão de baterias trocadas em São Paulo — uma média de 3.300 trocas por dia, todas em menos de 60 segundos.</p>
+    <div class="s-foot"><span>vammo.com.br</span><span class="num">04 / 07</span></div>
+  </section>
+
+  <!-- 5 ─ QUOTE -->
+  <section class="s-quote" data-screen-label="05 Quote">
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_White.svg" alt="vammo">
+    <span class="mark">"</span>
+    <p>antes eu ficava 40 minutos no posto.<br>hoje paro 60 segundos e volto pra rua.</p>
+    <div class="who"><strong>Bruno R.</strong> · entregador, Vila Mariana · vammo desde mar/24</div>
+    <div class="s-foot"><span>vammo.com.br</span><span class="num">05 / 07</span></div>
+  </section>
+
+  <!-- 6 ─ COMPARISON / split -->
+  <section class="s-split" data-screen-label="06 Comparison">
+    <div class="pane dark">
+      <span class="lbl">moto a combustão</span>
+      <h3>caro, lento,<br>polui.</h3>
+      <div class="stat">R$ 1.840</div>
+      <ul>
+        <li>Gastos médios mensais (combustível + manutenção)</li>
+        <li>40 min em fila no posto</li>
+        <li>2,3 t de CO₂ por ano</li>
+      </ul>
+    </div>
+    <div class="pane neon">
+      <span class="lbl">vammo pro</span>
+      <h3>menos, mais<br>simples.</h3>
+      <div class="stat">R$ 690</div>
+      <ul>
+        <li>Tudo incluso: moto, bateria, manutenção</li>
+        <li>60s de troca, sem fila</li>
+        <li>Zero emissão direta</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 ─ CLOSING -->
+  <section class="s-close" data-screen-label="07 Close">
+    <div class="zig"></div>
+    <img class="s-logo" src="../assets/logo/Vammo_Logo_White.svg" alt="vammo">
+    <div class="inner">
+      <h1>vammo.</h1>
+      <div class="meta">
+        <strong>ana@vammo.com.br</strong> · vammo.com.br · @vammo.sp
+      </div>
+    </div>
+    <div class="s-foot" style="position:absolute;z-index:3"><span>obrigada.</span><span class="num">07 / 07</span></div>
+  </section>
+
+</deck-stage>
+
+<script src="deck-stage.js"></script>
+</body>
+</html>

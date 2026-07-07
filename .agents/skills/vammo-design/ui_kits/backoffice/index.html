@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>Vammo BackOffice — Coupons</title>
+<link rel="stylesheet" href="bo.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.553.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="Sidebar.jsx"></script>
+  <script type="text/babel" src="PageHeader.jsx"></script>
+  <script type="text/babel" src="Home.jsx"></script>
+  <script type="text/babel" src="Campaigns.jsx"></script>
+
+  <script type="text/babel">
+    const PAGE_TITLE = {
+      'home': 'Home',
+      'campaign-management': 'Campaign management',
+      'campaign-builder': 'Campaign builder',
+      'manage-codes': 'Manage codes',
+      'detailed-usage': 'Detailed usage',
+    };
+
+    function HomeView() {
+      return (
+        <>
+          <PageHeader title="Home" actions={[
+            { label: 'Create campaign', icon: 'plus', onClick: () => {} },
+          ]} />
+          <HomeKpis />
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
+            <MiniBarChart />
+            <RecentActivity />
+          </div>
+        </>
+      );
+    }
+
+    function CampaignsView() {
+      return (
+        <>
+          <PageHeader title="Campaign management" actions={[
+            { label: 'Create campaign', icon: 'plus', onClick: () => {} },
+          ]} />
+          <TableControls />
+          <CampaignsTable />
+        </>
+      );
+    }
+
+    function ManageCodesView() {
+      return (
+        <>
+          <PageHeader title="Manage codes" actions={[
+            { label: 'Create new codes', icon: 'plus', onClick: () => {} },
+          ]} />
+          <TableControls />
+          <div className="bo-table-card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted-foreground)' }}>
+            <Icon name="code" />
+            <div style={{ marginTop: 8, fontSize: 14 }}>Codes table — same shape as Campaigns table.</div>
+          </div>
+        </>
+      );
+    }
+
+    function Placeholder({ title, icon }) {
+      return (
+        <>
+          <PageHeader title={title} />
+          <div className="bo-table-card" style={{ padding: 60, textAlign: 'center', color: 'var(--muted-foreground)' }}>
+            <i data-lucide={icon}></i>
+            <div style={{ marginTop: 12, fontSize: 14 }}>{title} view — wired via vammo-ui.</div>
+          </div>
+        </>
+      );
+    }
+
+    function App() {
+      const [active, setActive] = React.useState('campaign-management');
+      React.useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+      let body;
+      switch (active) {
+        case 'home':                body = <HomeView />; break;
+        case 'campaign-management': body = <CampaignsView />; break;
+        case 'manage-codes':        body = <ManageCodesView />; break;
+        case 'campaign-builder':    body = <Placeholder title="Campaign builder" icon="footprints" />; break;
+        case 'detailed-usage':      body = <Placeholder title="Detailed usage"   icon="bar-chart-3" />; break;
+        default: body = null;
+      }
+      return (
+        <div className="bo-shell">
+          <Sidebar active={active} onSelect={setActive} />
+          <div className="bo-main">
+            <div className="bo-topbar">
+              <div className="toggle"><i data-lucide="panel-left"></i></div>
+              <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>Coupons / {PAGE_TITLE[active]}</div>
+              <div className="spacer"></div>
+              <div className="icon-btn"><i data-lucide="sun"></i></div>
+              <div className="icon-btn"><i data-lucide="languages"></i></div>
+            </div>
+            <div className="bo-content">{body}</div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

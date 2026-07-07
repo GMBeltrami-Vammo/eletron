@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Vammo Design System — preview (real assets, reconstructed layout)</title>
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: var(--s-8, 32px);
+    background: #fff;
+    color: var(--brand-primary);
+    font-family: var(--font-product);
+  }
+  .banner {
+    background: var(--vammo-yellow-light);
+    border: 1px solid var(--vammo-yellow-mid-dark);
+    border-radius: var(--r-2, 8px);
+    padding: var(--s-4, 16px);
+    margin-bottom: var(--s-8, 32px);
+    font-size: 14px;
+  }
+  h1 { font-family: var(--font-brand); }
+  section { margin-bottom: var(--s-12, 48px); }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: var(--s-3, 12px); }
+  .swatch {
+    width: 120px;
+    border-radius: var(--r-3, 12px);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .swatch .fill { height: 64px; }
+  .swatch .label { padding: var(--s-2, 8px); font-size: 12px; }
+  .swatch .label code { display: block; font-size: 11px; color: var(--vammo-gray-500); }
+  .type-row { margin-bottom: var(--s-3, 12px); }
+  .type-row .tag { font-size: 11px; color: var(--vammo-gray-500); margin-right: var(--s-2, 8px); }
+  .btn {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: var(--r-2, 8px);
+    background: var(--brand-accent);
+    color: #000;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform var(--d-1) var(--ease-standard);
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .space-row { display: flex; align-items: flex-end; gap: 8px; }
+  .space-block { background: var(--brand-accent); }
+  .space-label { font-size: 11px; margin-top: 4px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="banner">
+  <strong>Reconstructed preview</strong> — this page's layout is my own stand-in, not the
+  official DS review card. Everything it renders — <code>colors_and_type.css</code>, the real
+  Supria Sans <code>.otf</code> files, the logo SVGs, and the Zimmzag pattern below — is the
+  real asset Gabriel sent (2026-07-07), so brand-track type renders in actual Supria Sans now,
+  not a fallback.
+</div>
+
+<h1>Vammo Design System</h1>
+<p>Product track shown by default (Inter, rounded corners) — this workspace's projects (VammoGrid, goBuy, VammoTestFleet) are all product track.</p>
+
+<section>
+  <h2>Primary trio</h2>
+  <div class="swatch-row">
+    <div class="swatch"><div class="fill" style="background:var(--brand-primary)"></div><div class="label">Black<code>#000000</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--brand-white); border-bottom:1px solid var(--border)"></div><div class="label">White<code>#FFFFFF</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--brand-accent)"></div><div class="label">Neon Blue<code>#2EC2FF</code></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Blue tonal scale (use freely)</h2>
+  <div class="swatch-row">
+    <div class="swatch"><div class="fill" style="background:var(--vammo-blue-light)"></div><div class="label">Light<code>#93DFFF</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--vammo-blue-mid-light)"></div><div class="label">Mid-light<code>#60D1FF</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--vammo-blue-base)"></div><div class="label">Base<code>#2EC2FF</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--vammo-blue-mid-dark)"></div><div class="label">Mid-dark<code>#0AB8FF</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--vammo-blue-dark)"></div><div class="label">Dark<code>#0099EF</code></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Restricted neons (semantic use only)</h2>
+  <div class="swatch-row">
+    <div class="swatch"><div class="fill" style="background:var(--brand-neon-yellow)"></div><div class="label">Yellow — passed<code>#DFFF00</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--brand-neon-pink)"></div><div class="label">Pink — failed<code>#FF6ED8</code></div></div>
+    <div class="swatch"><div class="fill" style="background:var(--brand-neon-orange)"></div><div class="label">Orange — notify<code>#FF8032</code></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Exception palette (conventional product UI)</h2>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <span class="chip" style="background:rgba(102,186,80,.15); color:#3d7a2c;">success #66BA50</span>
+    <span class="chip" style="background:rgba(219,72,65,.15); color:#a3312c;">error #DB4841</span>
+    <span class="chip" style="background:rgba(239,225,51,.25); color:#7a6f0f;">warning #EFE133</span>
+    <span class="chip" style="background:rgba(11,161,246,.15); color:#0a6ea8;">info #0BA1F6</span>
+  </div>
+</section>
+
+<section>
+  <h2>Typography — product track (Inter)</h2>
+  <div class="type-row"><span class="tag">.v-h1</span><span class="v-h1">Próxima troca</span></div>
+  <div class="type-row"><span class="tag">.v-h3</span><span class="v-h3">Status da bateria</span></div>
+  <div class="type-row"><span class="tag">.v-body</span><span class="v-body">Sua próxima troca está a 3 quadras.</span></div>
+  <div class="type-row"><span class="tag">.v-tabular</span><span class="v-body v-tabular">R$ 189,90 · 60 km · 14h32</span></div>
+</section>
+
+<section>
+  <h2>Typography — brand track (Supria Sans → fallback shown)</h2>
+  <div class="type-row"><span class="tag">.b-display-1</span><div class="b-display-1" style="text-transform:lowercase;">o corre não para</div></div>
+  <div class="type-row"><span class="tag">.b-headline-2</span><div class="b-headline-2">the future is electric</div></div>
+  <div class="type-row"><span class="tag">.b-body-1</span><div class="b-body-1">Regenerating the future — beyond mitigating harm, restoring and nurturing.</div></div>
+</section>
+
+<section>
+  <h2>Spacing (4pt grid)</h2>
+  <div class="space-row">
+    <div><div class="space-block" style="width:var(--s-1);height:var(--s-1)"></div><div class="space-label">s-1</div></div>
+    <div><div class="space-block" style="width:var(--s-2);height:var(--s-2)"></div><div class="space-label">s-2</div></div>
+    <div><div class="space-block" style="width:var(--s-4);height:var(--s-4)"></div><div class="space-label">s-4</div></div>
+    <div><div class="space-block" style="width:var(--s-6);height:var(--s-6)"></div><div class="space-label">s-6</div></div>
+    <div><div class="space-block" style="width:var(--s-8);height:var(--s-8)"></div><div class="space-label">s-8</div></div>
+    <div><div class="space-block" style="width:var(--s-16);height:var(--s-16)"></div><div class="space-label">s-16</div></div>
+    <div><div class="space-block" style="width:var(--s-24);height:var(--s-24)"></div><div class="space-label">s-24</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>Radius &amp; buttons</h2>
+  <div style="display:flex; gap:16px; align-items:center;">
+    <a class="btn">Trocar agora</a>
+    <div style="width:64px;height:64px;background:var(--vammo-gray-100);border-radius:var(--r-3)"></div>
+    <div style="width:64px;height:64px;background:var(--vammo-gray-100);border-radius:var(--r-0)"></div>
+    <div style="width:64px;height:24px;background:var(--vammo-gray-100);border-radius:var(--r-pill)"></div>
+  </div>
+</section>
+
+<section>
+  <h2>Logo</h2>
