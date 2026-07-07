@@ -1,0 +1,185 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-emphasis: var(--success-emphasis);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-emphasis: var(--warning-emphasis);
+  --color-error: var(--error);
+  --color-error-subtle: var(--error-subtle);
+  --color-error-emphasis: var(--error-emphasis);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-emphasis: var(--info-emphasis);
+  --color-vammo-blue: var(--vammo-blue);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Vammo DS — Product track (BackOffice) light theme; source: vammo-ui src/index.css via vammo-design skill */
+  --background: #f2f2f2;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #e6e6e6;
+  --muted-foreground: #919191;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --destructive: #de4841;
+  --destructive-foreground: #fafafa;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #18181b;
+  /* charts: Vammo blue tonal ramp + neutral */
+  --chart-1: #2ec2ff;
+  --chart-2: #0099ef;
+  --chart-3: #93dfff;
+  --chart-4: #096598;
+  --chart-5: #919191;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #18181b;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f4f4f5;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #18181b;
+  /* Vammo exception alert palette (brandbook p.48) — status semantics */
+  --success: #66ba50;
+  --success-subtle: #f0f8ed;
+  --success-emphasis: #3e7130;
+  --warning: #efe133;
+  --warning-subtle: #fffacc;
+  --warning-emphasis: #6b6000;
+  --error: #de4841;
+  --error-subtle: #fcedec;
+  --error-emphasis: #93302b;
+  --info: #0ba1f6;
+  --info-subtle: #e7f6fe;
+  --info-emphasis: #096598;
+  --vammo-blue: #2ec2ff;
+  /* BackOffice 10-color badge palette (identical in both themes) */
+  --badge-black-text: #f2f2f2;      --badge-black-bg: #000000;
+  --badge-grey-text: #f2f2f2;       --badge-grey-bg: #919191;
+  --badge-blue-text: #f2f2f2;       --badge-blue-bg: #0992dc;
+  --badge-green-text: #f2f2f2;      --badge-green-bg: #66ab50;
+  --badge-red-text: #f2f2f2;        --badge-red-bg: #de4841;
+  --badge-yellow-text: #1a1a1a;     --badge-yellow-bg: #e5cf00;
+  --badge-brown-text: #f2f2f2;      --badge-brown-bg: #92400e;
+  --badge-orange-text: #1a1a1a;     --badge-orange-bg: #f97316;
+  --badge-white-text: #1b1c1d;      --badge-white-bg: #fafafa;
+  --badge-dark-green-text: #f2f2f2; --badge-dark-green-bg: #2e7d32;
+}
+
+.dark {
+  --background: #232426;
+  --foreground: #fafafa;
+  --card: #1b1c1d;
+  --card-foreground: #fafafa;
+  --popover: #1b1c1d;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #1b1c1d;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --destructive: #b91c1c;
+  --destructive-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #d4d4d8;
+  --chart-1: #2ec2ff;
+  --chart-2: #0099ef;
+  --chart-3: #93dfff;
+  --chart-4: #60d1ff;
+  --chart-5: #7e7e7e;
+  --sidebar: #1b1c1d;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #fafafa;
+  --sidebar-primary-foreground: #1b1c1d;
+  --sidebar-accent: #27272a;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #d4d4d8;
+  --success: #66ba50;
+  --success-subtle: #16330e;
+  --success-emphasis: #a3d696;
+  --warning: #efe133;
+  --warning-subtle: #333005;
+  --warning-emphasis: #f2e270;
+  --error: #de4841;
+  --error-subtle: #3a1210;
+  --error-emphasis: #eb918d;
+  --info: #0ba1f6;
+  --info-subtle: #082c40;
+  --info-emphasis: #88d2fc;
+  --vammo-blue: #2ec2ff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
