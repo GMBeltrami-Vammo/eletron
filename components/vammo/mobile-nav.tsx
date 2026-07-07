@@ -36,8 +36,8 @@ export function MobileNav({ counts }: { counts?: NavBadgeCounts }) {
                 src="/vammo-logo-black.svg"
                 alt="Vammo"
                 width={72}
-                height={19}
-                className="dark:invert"
+                height={13}
+                className="h-auto w-[72px] dark:invert"
               />
               <span className="text-sm font-semibold">Eletron</span>
             </SheetTitle>
@@ -76,8 +76,8 @@ export function MobileNav({ counts }: { counts?: NavBadgeCounts }) {
         src="/vammo-logo-black.svg"
         alt="Vammo"
         width={72}
-        height={19}
-        className="dark:invert"
+        height={13}
+        className="h-auto w-[72px] dark:invert"
       />
       <span className="text-sm font-semibold">Eletron</span>
     </header>

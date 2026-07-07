@@ -35,8 +35,8 @@ export function AppSidebar({
           src="/vammo-logo-black.svg"
           alt="Vammo"
           width={84}
-          height={22}
-          className="dark:invert"
+          height={15}
+          className="h-auto w-[84px] dark:invert"
           priority
         />
         <div className="min-w-0">

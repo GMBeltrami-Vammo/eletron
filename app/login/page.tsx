@@ -21,8 +21,8 @@ export default function LoginPage() {
             src="/vammo-logo-black.svg"
             alt="Vammo"
             width={120}
-            height={32}
-            className="mb-2 dark:invert"
+            height={21}
+            className="mb-2 h-auto w-[120px] dark:invert"
             priority
           />
           <CardTitle>Eletron</CardTitle>
@@ -42,6 +42,20 @@ export default function LoginPage() {
               Entrar com Google
             </Button>
           </form>
+          {process.env.NODE_ENV === "development" &&
+          process.env.AUTH_DEV_LOGIN === "1" ? (
+            <form
+              className="mt-2"
+              action={async () => {
+                "use server";
+                await signIn("dev-login", { redirectTo: "/estacoes" });
+              }}
+            >
+              <Button type="submit" variant="outline" className="w-full">
+                Entrar como dev (local)
+              </Button>
+            </form>
+          ) : null}
         </CardContent>
       </Card>
     </main>

@@ -14,7 +14,6 @@ import {
   CHARGE_KIND,
   CHARGE_STATUS,
   STATION_STATUS,
-  UTILITY_BILL_STATUS,
   type ChargeStatus,
   type Contract,
 } from "@/lib/domain";
@@ -184,12 +183,23 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
   });
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
-  const overdueStates = snapshot.utilityAccountStates.filter(
-    (s) => s.billStatus === UTILITY_BILL_STATUS.vencida,
+  // Canonical overdue definition = the overdue_bill alert rule (raw
+  // billStatus === 'vencida' would recount EDP bills that already have a
+  // registered comprovante — n8n VencidasEnelWarning parity). Keeps this KPI
+  // equal to the "Faturas vencidas" quick-filter chip and /alertas.
+  const overdueAlerts = alerts.filter(
+    (a) => a.alertType === ALERT_TYPE.overdueBill,
   );
   const vencidasTotal =
     Math.round(
-      overdueStates.reduce((sum, s) => sum + (s.lastBilling ?? 0), 0) * 100,
+      overdueAlerts.reduce(
+        (sum, a) =>
+          sum +
+          (typeof a.payload.lastBilling === "number"
+            ? a.payload.lastBilling
+            : 0),
+        0,
+      ) * 100,
     ) / 100;
 
   // Only installations attached to accounts count for the DA KPIs.
@@ -202,7 +212,7 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
   const kpis: EstacoesKpis = {
     ativas: rows.filter((r) => r.status === STATION_STATUS.ACTIVE).length,
     totalEstacoes: rows.length,
-    vencidasCount: overdueStates.length,
+    vencidasCount: overdueAlerts.length,
     vencidasTotal,
     venceSemDaCount: alerts.filter(
       (a) => a.alertType === ALERT_TYPE.dueSoonNoAutoDebit,
