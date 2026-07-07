@@ -23,6 +23,7 @@ Full design spec: `docs/superpowers/specs/2026-07-07-eletron-design.md` (+ appen
 | 11 | Component library | `@leopardaelectric/vammo-ui` first (Sidebar, PageHeader, TableControls, StatCard, badges); bare shadcn/ui only for gaps; Vammo DS Product track (Inter, 8/12 px radius, alert palette) | Bare shadcn/ui like VammoGrid/goBuy | Workspace gotcha says check vammo-ui before adding UI components; eletron becomes the first Desktop/Vammo project to actually consume it |
 | 12 | Rollout | 3 phases: (1) read-only visibility + meter-reading UI; (2) Supabase + sync + first writes (meter readings, comprovantes, alert lifecycle); (3) AI ingestion + contract onboarding | Everything in v1 | Each phase ships something usable; risky writes come after the foundation hardens; approved by Gabriel 2026-07-07 |
 | 13 | n8n migration | Design-for-replacement now, migrate later; every workflow has a designated home (see spec §n8n); the two read-only alert workflows are cut over first after parity; Arqia SIM stays in n8n (out of scope — IoT telemetry, not station finance) | Replace n8n in v1; coexist indefinitely | Gabriel's call 2026-07-07; lowest-risk order is read-only alerts → comprovantes → email ingestion → cadastro form |
+| 14 | Vercel deployment (2026-07-07) | GitHub repo `GMBeltrami-Vammo/eletron` connected to Vercel project `eletron` (auto-deploy on push); local working copy linked via `vercel link` for CLI access (`vercel env pull`, `vercel dev`, preview deploys) | Deploy via CLI only, no GitHub integration | Matches decision #1 (Next.js on Vercel); GitHub integration gives PR preview deploys, CLI link enables pulling env vars locally once Supabase/next-auth secrets exist in Phase 2 |
 
 ---
 
@@ -43,7 +44,7 @@ Full design spec: `docs/superpowers/specs/2026-07-07-eletron-design.md` (+ appen
 | # | Question | Status |
 |---|---|---|
 | Q1 | Phase 2: write `Comprovante`/`Financeiro Check` back to the sheets during transition, or cut the n8n comprovante flow over entirely? | Open — decide at Phase 2 start; prefer full cutover if Phase 1 alert parity held |
-| Q2 | Production domain (eletron.vammo.com?) and Vercel project naming | Open — needed at first deploy |
+| Q2 | Production domain (eletron.vammo.com?) | Open — Vercel project itself is created and named `eletron`, connected to GitHub + linked locally (decision #14); custom domain still unset |
 | Q3 | Vercel Pro `maxDuration=300` for cron routes (Phase 2 sheet-sync) | Open — verify plan/limits before Phase 2 |
 | Q4 | `@leopardaelectric/vammo-ui` install access (private GitHub package) and current version | Open — resolve during scaffold; fall back to shadcn/ui equivalents if blocked, keeping the same visual tokens |
 | Q5 | DIA store↔station and Hubees address↔station mappings: who owns/maintains them (admin screen exists in design) | Open — Phase 3 concern |

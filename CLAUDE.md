@@ -10,6 +10,7 @@ Users: finance/charging team, Google OAuth restricted to @vammo.com.
 - Phase 1 (read-only visibility) in progress; Supabase arrives in Phase 2.
 - Spec: `docs/superpowers/specs/2026-07-07-eletron-design.md` + `appendix/` (full data model SQL, screen-by-screen UX, security/ops chapters).
 - Data sources v1: live Google Sheets read (scraper sheet `1MBJwXex...` + rent sheet `18FxHr2F...`) cached ~15 min, with `context/*.xlsx` snapshots as dev/test fixtures.
+- Deployed on Vercel as of 2026-07-07: GitHub repo connected to Vercel project `eletron` (auto-deploy), local checkout linked via `vercel link` (`.vercel/repo.json`, gitignored) — see decision #14. Use `vercel env pull .env.local` once env vars exist; custom domain still open (Q2).
 
 ## Stack
 

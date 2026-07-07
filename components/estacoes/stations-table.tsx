@@ -1,0 +1,328 @@
+"use client";
+
+/**
+ * Sections B + C of /estacoes: quick-filter chips (the n8n warning categories
+ * made permanent), facet selects writing TanStack columnFilters, and the
+ * dense station DataTable. Deep links via ?filtro= (KPI cards).
+ */
+
+import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { ColumnFiltersState } from "@tanstack/react-table";
+import { X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { DataTable } from "@/components/vammo/data-table";
+import { cn } from "@/lib/utils";
+import {
+  ALERT_TYPE_UI,
+  AUTO_DEBIT_UI,
+  CHARGE_STATUS_UI,
+  STATION_STATUS_UI,
+  UTILITY_BILL_STATUS_SEVERITY,
+  UTILITY_BILL_STATUS_UI,
+} from "@/lib/labels";
+
+import {
+  buildColumns,
+  INITIAL_COLUMN_VISIBILITY,
+  RENT_OPEN_SENTINEL,
+} from "./columns";
+import type { EstacaoRow } from "./types";
+
+/** Chip order: the 7 recurring n8n warning categories (spec §2 C). */
+const CHIP_TYPES = [
+  "overdue_bill",
+  "due_soon_no_auto_debit",
+  "no_auto_debit",
+  "scraper_stale",
+  "new_installation",
+  "negotiated_invoice",
+  "scheduled_shutdown",
+] as const;
+
+/** ?filtro= → preselected chip. */
+const FILTRO_TO_CHIP: Record<string, (typeof CHIP_TYPES)[number]> = {
+  vencidas: "overdue_bill",
+  venceSemDA: "due_soon_no_auto_debit",
+  semDA: "no_auto_debit",
+  scraperParado: "scraper_stale",
+  novas: "new_installation",
+  negociadas: "negotiated_invoice",
+  desligamento: "scheduled_shutdown",
+};
+
+/** ?filtro= → preselected facet columnFilter. */
+const FILTRO_TO_FACET: Record<string, { id: string; value: string }> = {
+  ativas: { id: "status", value: "ACTIVE" },
+  aluguelPendente: { id: "aluguelMes", value: RENT_OPEN_SENTINEL },
+};
+
+function chipsFor(filtro: string | null): Set<string> {
+  const chip = filtro ? FILTRO_TO_CHIP[filtro] : undefined;
+  return chip ? new Set([chip]) : new Set();
+}
+
+function filtersFor(filtro: string | null): ColumnFiltersState {
+  const facet = filtro ? FILTRO_TO_FACET[filtro] : undefined;
+  return facet ? [{ id: facet.id, value: facet.value }] : [];
+}
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+interface FacetOption {
+  value: string;
+  label: string;
+}
+
+/** One facet select bound to a TanStack columnFilter id. */
+function FacetSelect({
+  label,
+  columnId,
+  options,
+  filters,
+  onChange,
+}: {
+  label: string;
+  columnId: string;
+  options: FacetOption[];
+  filters: ColumnFiltersState;
+  onChange: (columnId: string, value: string | null) => void;
+}) {
+  const current = filters.find((f) => f.id === columnId);
+  const value = typeof current?.value === "string" ? current.value : "all";
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <Select
+      value={value}
+      onValueChange={(v) => onChange(columnId, v === "all" ? null : String(v))}
+    >
+      <SelectTrigger
+        size="sm"
+        className={cn("bg-card text-xs", value !== "all" && "border-ring")}
+        aria-label={label}
+      >
+        <span className="text-muted-foreground">{label}:</span>{" "}
+        <span className="font-medium">{selected?.label ?? "Todos"}</span>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Todos</SelectItem>
+        {options
+          .filter((o) => o.value !== "all")
+          .map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const filtro = searchParams.get("filtro");
+
+  const [activeChips, setActiveChips] = React.useState<Set<string>>(() =>
+    chipsFor(filtro),
+  );
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    () => filtersFor(filtro),
+  );
+
+  // KPI clicks while mounted change ?filtro= without remounting — re-apply.
+  const lastFiltro = React.useRef(filtro);
+  React.useEffect(() => {
+    if (filtro === lastFiltro.current) return;
+    lastFiltro.current = filtro;
+    setActiveChips(chipsFor(filtro));
+    setColumnFilters(filtersFor(filtro));
+  }, [filtro]);
+
+  const today = React.useMemo(localToday, []);
+  const columns = React.useMemo(() => buildColumns(today), [today]);
+
+  const chipCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const type of CHIP_TYPES) {
+      counts.set(
+        type,
+        rows.filter((r) => r.alertTypes.includes(type)).length,
+      );
+    }
+    return counts;
+  }, [rows]);
+
+  /** Chips pre-filter the data (station has ANY selected alert type). */
+  const filteredRows = React.useMemo(() => {
+    if (activeChips.size === 0) return rows;
+    return rows.filter((r) => r.alertTypes.some((t) => activeChips.has(t)));
+  }, [rows, activeChips]);
+
+  function toggleChip(type: string) {
+    setActiveChips((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  }
+
+  function setFacet(columnId: string, value: string | null) {
+    setColumnFilters((prev) => {
+      const next = prev.filter((f) => f.id !== columnId);
+      if (value !== null) next.push({ id: columnId, value });
+      return next;
+    });
+  }
+
+  const hasFilters = activeChips.size > 0 || columnFilters.length > 0;
+
+  function clearFilters() {
+    setActiveChips(new Set());
+    setColumnFilters([]);
+    if (filtro !== null) router.replace("/estacoes", { scroll: false });
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Quick-filter chips — n8n warning categories made permanent */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {CHIP_TYPES.map((type) => {
+          const ui = ALERT_TYPE_UI[type];
+          const active = activeChips.has(type);
+          const count = chipCounts.get(type) ?? 0;
+          return (
+            <button
+              key={type}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggleChip(type)}
+              title={ui.description}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+                !active &&
+                  "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              style={
+                active
+                  ? {
+                      backgroundColor: `var(--badge-${ui.color}-bg)`,
+                      borderColor: `var(--badge-${ui.color}-bg)`,
+                      color: `var(--badge-${ui.color}-text)`,
+                    }
+                  : undefined
+              }
+            >
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: active
+                    ? `var(--badge-${ui.color}-text)`
+                    : `var(--badge-${ui.color}-bg)`,
+                }}
+              />
+              {ui.label}
+              <span className="tabular-nums">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <DataTable<EstacaoRow>
+        columns={columns}
+        data={filteredRows}
+        searchPlaceholder="Buscar por nome, endereço, id…"
+        initialSorting={[{ id: "id", desc: false }]}
+        initialColumnVisibility={INITIAL_COLUMN_VISIBILITY}
+        pageSize={50}
+        csvFilename="estacoes"
+        emptyMessage="Nenhuma estação encontrada."
+        onRowClick={(row) => router.push(`/estacoes/${row.stationId}`)}
+        columnFilters={columnFilters}
+        onColumnFiltersChange={setColumnFilters}
+        toolbarLeft={
+          <div className="flex flex-wrap items-center gap-1.5">
+            <FacetSelect
+              label="Status"
+              columnId="status"
+              options={Object.entries(STATION_STATUS_UI).map(([value, ui]) => ({
+                value,
+                label: ui.label,
+              }))}
+              filters={columnFilters}
+              onChange={setFacet}
+            />
+            <FacetSelect
+              label="Provedor"
+              columnId="fontes"
+              options={[
+                { value: "enel", label: "Enel" },
+                { value: "edp", label: "EDP" },
+                { value: "rent", label: "Aluguel" },
+                { value: "third_party", label: "Terceiro" },
+              ]}
+              filters={columnFilters}
+              onChange={setFacet}
+            />
+            <FacetSelect
+              label="Fatura"
+              columnId="statusFatura"
+              options={UTILITY_BILL_STATUS_SEVERITY.map((status) => ({
+                value: status,
+                label: UTILITY_BILL_STATUS_UI[status].label,
+              }))}
+              filters={columnFilters}
+              onChange={setFacet}
+            />
+            <FacetSelect
+              label="DA"
+              columnId="debitoAutomatico"
+              options={Object.entries(AUTO_DEBIT_UI).map(([value, ui]) => ({
+                value,
+                label: ui.label,
+              }))}
+              filters={columnFilters}
+              onChange={setFacet}
+            />
+            <FacetSelect
+              label="Aluguel"
+              columnId="aluguelMes"
+              options={[
+                { value: RENT_OPEN_SENTINEL, label: "Em aberto" },
+                ...Object.entries(CHARGE_STATUS_UI).map(([value, ui]) => ({
+                  value,
+                  label: ui.label,
+                })),
+              ]}
+              filters={columnFilters}
+              onChange={setFacet}
+            />
+            {hasFilters ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={clearFilters}
+              >
+                <X className="size-3.5" strokeWidth={2} />
+                Limpar filtros
+              </Button>
+            ) : null}
+          </div>
+        }
+      />
+    </div>
+  );
+}
