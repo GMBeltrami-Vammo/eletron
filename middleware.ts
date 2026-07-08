@@ -1,14 +1,5 @@
-import NextAuth from "next-auth";
+import { auth } from "@/auth";
 import { NextResponse } from "next/server";
-
-import { authConfig } from "./auth.config";
-
-// Edge Middleware uses the providers-less edge-safe config only. Providers
-// (Google, dev-login Credentials) live in auth.ts and pull Node-only deps
-// (oauth4webapi) that break the Edge runtime; keeping them out of this bundle
-// is what makes the middleware deployable. The session cookie is still read
-// and `authorized` still runs — providers are only needed for the sign-in flow.
-const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth?.user;
@@ -34,9 +25,6 @@ export default auth((req) => {
 });
 
 export const config = {
-  // Node.js runtime (not Edge): next-auth v5 pulls @auth/core code that the
-  // Next 15.5 Edge bundler can't run (__dirname ReferenceError). See next.config.ts.
-  runtime: "nodejs",
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
