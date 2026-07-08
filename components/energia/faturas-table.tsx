@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCOUNT_TYPE_UI } from "@/lib/labels";
+import { ACCOUNT_TYPE_UI, FISCAL_EXPORT_UI } from "@/lib/labels";
 import {
   formatBRL,
   formatCompetencia,
@@ -209,15 +209,15 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     ),
   },
   {
-    id: "financeiro",
-    header: "Financeiro",
-    accessorFn: (r) => (r.financeiroCheck ? "Sim" : "Não"),
+    id: "fiscal",
+    header: FISCAL_EXPORT_UI.header,
+    accessorFn: (r) => (r.fiscalExported ? "Sim" : "Não"),
     cell: ({ row }) => (
       <span
         className="flex justify-center"
-        title="Financeiro check — somente leitura na fase 1"
+        title={FISCAL_EXPORT_UI.tooltip}
       >
-        {row.original.financeiroCheck ? (
+        {row.original.fiscalExported ? (
           <Check className="size-4 text-success-emphasis" strokeWidth={2} />
         ) : (
           <Minus className="size-4 text-muted-foreground" strokeWidth={2} />
@@ -351,10 +351,10 @@ export function FaturasTable({ rows }: { rows: FaturaRow[] }) {
         </>
       }
       toolbarRight={
-        <span title="Disponível na fase 2">
+        <span title="Marcado pelo export fiscal (Apps Script) — importação na fase 3">
           <Button variant="outline" size="sm" className="h-9 bg-card" disabled>
             <ListChecks className="size-4" strokeWidth={2} />
-            Financeiro check em lote
+            Enviar ao fiscal em lote
           </Button>
         </span>
       }

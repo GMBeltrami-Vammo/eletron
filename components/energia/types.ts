@@ -69,7 +69,7 @@ export interface FaturaRow {
   leituraAtual: string | null;
   /** ENEL C1–C6 joined, or EDP classificação · modalidade. */
   tariffClass: string | null;
-  financeiroCheck: boolean;
+  fiscalExported: boolean;
   /** Installation-level last receipt (state.ultimoComprovante presence). */
   hasComprovante: boolean;
   /** Parsed registration date of that receipt, when available. */

@@ -21,6 +21,7 @@ import {
   ACCOUNT_TYPE_UI,
   AUTO_DEBIT_UI,
   CHARGE_STATUS_UI,
+  FISCAL_EXPORT_UI,
   UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
 import {
@@ -520,17 +521,17 @@ const invoiceColumns: ColumnDef<InvoiceRow, unknown>[] = [
     },
   },
   {
-    id: "financeiro",
-    header: "Financeiro",
-    accessorFn: (r) => (r.details?.financeiroCheck ? "sim" : "não"),
-    // Phase 1 is read-only: the human 'paid' checkbox renders as a static icon.
+    id: "fiscal",
+    header: FISCAL_EXPORT_UI.header,
+    accessorFn: (r) => (r.details?.fiscalExported ? "sim" : "não"),
+    // "Enviado ao fiscal" = exported to the FISCAL sheet, NOT paid (decision #21).
     cell: ({ row }) =>
-      row.original.details?.financeiroCheck ? (
-        <span title="Financeiro check (somente leitura na fase 1)">
+      row.original.details?.fiscalExported ? (
+        <span title={FISCAL_EXPORT_UI.tooltip}>
           <Check
             className="mx-auto size-4 text-success-emphasis"
             strokeWidth={2}
-            aria-label="Conferido pelo financeiro"
+            aria-label={FISCAL_EXPORT_UI.header}
           />
         </span>
       ) : (

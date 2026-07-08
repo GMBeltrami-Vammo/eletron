@@ -162,7 +162,7 @@ function buildRows(snapshot: LoadedSnapshot): {
       leituraAnterior: details.leituraAnterior,
       leituraAtual: details.leituraAtual,
       tariffClass: tariffClass(details),
-      financeiroCheck: details.financeiroCheck,
+      fiscalExported: details.fiscalExported,
       hasComprovante: Boolean(state?.ultimoComprovante),
       comprovanteDate: state?.ultimoComprovanteDate ?? null,
       faturaDriveUrl: details.faturaDriveUrl,

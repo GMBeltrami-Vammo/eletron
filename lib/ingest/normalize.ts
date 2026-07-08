@@ -34,6 +34,7 @@ import {
   type Charge,
   type ChargeEnergyDetails,
   type ChargeKind,
+  type ChargeStatus,
   type ChargeLine,
   type Contract,
   type ContractType,
@@ -1174,6 +1175,18 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
   // ── Charges: Faturas_ENEL / Faturas_EDP ──────────────────────────────────
   const seenChargeKeys = new Set<string>();
 
+  // Portal bill status → charge status (decision #21: the fiscal-export flag
+  // never implies paid). 'sem_contas' is absent → falls through to 'pendente'.
+  const billStatusToCharge: Partial<Record<UtilityBillStatus, ChargeStatus>> = {
+    [UTILITY_BILL_STATUS.paga]: CHARGE_STATUS.pago,
+    [UTILITY_BILL_STATUS.vencida]: CHARGE_STATUS.atrasado,
+    [UTILITY_BILL_STATUS.pendente]: CHARGE_STATUS.pendente,
+    [UTILITY_BILL_STATUS.aVencer]: CHARGE_STATUS.pendente,
+    [UTILITY_BILL_STATUS.emCompensacao]: CHARGE_STATUS.emCompensacao,
+    [UTILITY_BILL_STATUS.faturaNegociada]: CHARGE_STATUS.negociada,
+    [UTILITY_BILL_STATUS.na]: CHARGE_STATUS.naoAplicavel,
+  };
+
   function pushUtilityCharge(
     tab: "Faturas_ENEL" | "Faturas_EDP",
     row: RawRow,
@@ -1241,9 +1254,37 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
         `unparseable invoice value '${amountRaw}'`, amountRaw,
       );
     }
-    const financeiroCheck = parseBoolean(row["Financeiro Check"] ?? "") ?? false;
+    const fiscalExported = parseBoolean(row["Financeiro Check"] ?? "") ?? false;
     const autoDebit = parseAutoDebit(row["auto_debit"] ?? "");
     const competencia = dueDate ? `${dueDate.slice(0, 7)}-01` : null;
+
+    // Status derivation (decision #21): NEVER from the fiscal-export flag.
+    // Precedence: per-row receipt link → pago; decision #16 EDP receipted-by-due
+    // → pago; else the current bill's portal status; else honest 'pendente' for
+    // historical rows with no paid signal.
+    const state = stateByAccountId.get(account.id);
+    const hasComprovante = cleanCell(row["Comprovante"] ?? "") !== "";
+    let status: ChargeStatus;
+    if (hasComprovante) {
+      status = CHARGE_STATUS.pago;
+    } else if (
+      !isEnel &&
+      state?.ultimoComprovanteDate &&
+      dueDate !== null &&
+      state.ultimoComprovanteDate >= dueDate
+    ) {
+      status = CHARGE_STATUS.pago;
+    } else if (
+      state &&
+      state.dueDate !== null &&
+      dueDate !== null &&
+      state.dueDate === dueDate &&
+      state.billStatus !== null
+    ) {
+      status = billStatusToCharge[state.billStatus] ?? CHARGE_STATUS.pendente;
+    } else {
+      status = CHARGE_STATUS.pendente;
+    }
 
     const charge: Charge = {
       id: dedupeKey,
@@ -1257,7 +1298,7 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       amount,
       expectedAmount: null,
       dueDate,
-      status: financeiroCheck ? CHARGE_STATUS.pago : CHARGE_STATUS.pendente,
+      status,
       matchStatus:
         account.stationId !== null
           ? MATCH_STATUS.autoMatched
@@ -1308,9 +1349,14 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       autoDebit: autoDebit.status,
       autoDebitRegistration: cleanCell(row["auto_debit_registration"] ?? "") || null,
       faturaDriveUrl: extractHyperlinkUrl(row["link_fatura"] ?? ""),
-      financeiroCheck,
+      fiscalExported,
+      fiscalExportedAt: null,
     });
   }
+
+  // Current per-installation state, keyed by account id — feeds the charge
+  // status derivation above (built here so `states` is fully populated).
+  const stateByAccountId = new Map(states.map((s) => [s.billingAccountId, s]));
 
   raw["Faturas_ENEL"].forEach((row, i) =>
     pushUtilityCharge("Faturas_ENEL", row, sheetRowNumber(row, i)),

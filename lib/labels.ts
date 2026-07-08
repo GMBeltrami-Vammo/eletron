@@ -158,3 +158,15 @@ export const ALERT_TYPE_UI: Record<string, LabelBadge & { description: string }>
     description: "Cadastro cuja estação não existe mais",
   },
 };
+
+/**
+ * Canonical UI strings for the Faturas `fiscal_exported` flag (sheet
+ * "Financeiro Check"). It means "exported to the FISCAL spreadsheet", NOT paid
+ * (decision #21) — the label must never suggest payment.
+ */
+export const FISCAL_EXPORT_UI = {
+  header: "Enviado ao fiscal",
+  tooltip: "Exportado à planilha fiscal — não significa pago",
+  yes: "Enviado ao fiscal",
+  no: "Não enviado ao fiscal",
+} as const;

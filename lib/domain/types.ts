@@ -285,8 +285,13 @@ export interface ChargeEnergyDetails {
   autoDebitRegistration: string | null;
   /** fatura_drive_url — parsed from the =HYPERLINK link_fatura formula. */
   faturaDriveUrl: string | null;
-  /** financeiro_check — the human-ticked 'paid' checkbox. */
-  financeiroCheck: boolean;
+  /**
+   * fiscal_exported — sheet 'Financeiro Check'. Means "exported to the FISCAL
+   * spreadsheet" (decision #21), NOT paid. Never drives charge.status.
+   */
+  fiscalExported: boolean;
+  /** fiscal_exported_at — no timestamp in the sheet, so null from sync. */
+  fiscalExportedAt: string | null;
 }
 
 /** eletron.receipts — one row per receipt PAGE. (No Phase 1 source yet.) */

@@ -230,7 +230,7 @@ describe("charges from Faturas_ENEL / Faturas_EDP", () => {
     );
     expect(charge).toBeDefined();
     expect(charge?.amount).toBe(289.47);
-    expect(charge?.status).toBe("pago"); // Financeiro Check TRUE
+    expect(charge?.status).toBe("pago"); // has a Comprovante link (not from the fiscal flag)
     expect(charge?.competencia).toBe("2026-07-01");
     expect(charge?.competenciaSource).toBe("inferred_due_date");
 
@@ -245,7 +245,7 @@ describe("charges from Faturas_ENEL / Faturas_EDP", () => {
     expect(details?.leituraAnterior).toBe("2026-05-16");
     expect(details?.leituraAtual).toBe("2026-06-12");
     expect(details?.faturaDriveUrl).toMatch(/^https:\/\/drive\.google\.com\//);
-    expect(details?.financeiroCheck).toBe(true);
+    expect(details?.fiscalExported).toBe(true);
   });
 
   it("every utility charge has energy details", () => {
