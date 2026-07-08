@@ -38,6 +38,7 @@ import {
   recordPayment,
   updateChargeStatus,
 } from "@/app/actions/charges";
+import { adjustCharge } from "@/app/actions/alterations";
 import type { ChargeStatus, PaymentMethod } from "@/lib/domain";
 import { CHARGE_STATUS_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL } from "@/lib/format";
@@ -59,7 +60,16 @@ type DialogMode =
   | { kind: "status"; target: ChargeStatus }
   | { kind: "pago" }
   | { kind: "confirm" }
+  | { kind: "adjust" }
   | null;
+
+/** pt-BR money string → number, or null. */
+function parseMoney(raw: string): number | null {
+  const t = raw.trim().replace(/[r$\s]/gi, "");
+  if (t === "") return null;
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(n) ? n : null;
+}
 
 export function StatusActions({
   row,
@@ -79,6 +89,9 @@ export function StatusActions({
   const [method, setMethod] = React.useState<string>("");
   // Status dialog reason.
   const [reason, setReason] = React.useState("");
+  // Adjust dialog fields.
+  const [adjAmount, setAdjAmount] = React.useState("");
+  const [adjDue, setAdjDue] = React.useState("");
 
   const uuid = row.chargeUuid;
   const disabledReason = !canWrite
@@ -110,6 +123,35 @@ export function StatusActions({
     setReason("");
     setMethod("");
     setPaidAt(TODAY());
+    setAdjAmount("");
+    setAdjDue("");
+  }
+
+  function openAdjust() {
+    setAdjAmount(row.amount != null ? String(row.amount) : "");
+    setAdjDue("");
+    setReason("");
+    setMode({ kind: "adjust" });
+  }
+
+  function runAdjust() {
+    if (!uuid) return;
+    const newAmount = parseMoney(adjAmount);
+    startTransition(async () => {
+      const res = await adjustCharge({
+        chargeId: uuid,
+        newAmount: newAmount,
+        newDueDate: adjDue || null,
+        reason: reason.trim(),
+      });
+      if (res.ok) {
+        toast.success("Cobrança ajustada.");
+        close();
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
   }
 
   function runStatus(target: ChargeStatus) {
@@ -175,8 +217,10 @@ export function StatusActions({
     );
   }
 
+  // adjust_charge refuses pago; everything else may be re-priced / re-dated
+  const canAdjust = !isTerminal;
   const nothingToDo =
-    !canPay && !isConciliado && availableTargets.length === 0;
+    !canPay && !isConciliado && !canAdjust && availableTargets.length === 0;
 
   return (
     <div className="flex justify-end">
@@ -198,6 +242,11 @@ export function StatusActions({
           {canPay ? (
             <DropdownMenuItem onClick={() => setMode({ kind: "pago" })}>
               Marcar como pago…
+            </DropdownMenuItem>
+          ) : null}
+          {canAdjust ? (
+            <DropdownMenuItem onClick={openAdjust}>
+              Ajustar valor/vencimento…
             </DropdownMenuItem>
           ) : null}
           {availableTargets.length > 0 ? (
@@ -283,6 +332,62 @@ export function StatusActions({
             <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
             <Button onClick={runPago} disabled={pending || row.amount === null}>
               Registrar pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ajuste de valor/vencimento (adjust_charge — pró-rata / dívida adiada) */}
+      <Dialog open={mode?.kind === "adjust"} onOpenChange={(o) => (o ? null : close())}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ajustar cobrança</DialogTitle>
+            <DialogDescription>
+              Novo valor e/ou vencimento (pró-rata, dívida adiada). O motivo fica
+              no histórico e a cobrança é marcada como ajustada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="adj-valor">Novo valor</Label>
+              <Input
+                id="adj-valor"
+                inputMode="decimal"
+                value={adjAmount}
+                onChange={(e) => setAdjAmount(e.target.value)}
+                placeholder={row.amount != null ? formatBRL(row.amount) : "0,00"}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="adj-venc">Novo vencimento</Label>
+              <Input
+                id="adj-venc"
+                type="date"
+                value={adjDue}
+                onChange={(e) => setAdjDue(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="adj-reason">Motivo</Label>
+              <Textarea
+                id="adj-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Ex.: pró-rata de instalação, renegociação de dívida…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <Button
+              onClick={runAdjust}
+              disabled={
+                pending ||
+                !reason.trim() ||
+                (parseMoney(adjAmount) === null && !adjDue)
+              }
+            >
+              Salvar ajuste
             </Button>
           </DialogFooter>
         </DialogContent>

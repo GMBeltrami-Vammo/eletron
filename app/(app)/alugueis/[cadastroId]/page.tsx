@@ -26,6 +26,8 @@ import {
 } from "@/components/alugueis/rent-charges-table";
 import { getRepository } from "@/lib/data/repository.server";
 import { readPaymentLinks, summarizeLinks } from "@/lib/data/payment-links";
+import { ContractAlterations } from "@/components/alugueis/contract-alterations";
+import { readContractRef } from "./contract-ref";
 import { formatBRL, formatDate } from "@/lib/format";
 import {
   ALERT_TYPE_UI,
@@ -46,9 +48,10 @@ export default async function ContractDetailPage({
   if (!Number.isInteger(id)) notFound();
 
   const repo = getRepository();
-  const [snapshot, links] = await Promise.all([
+  const [snapshot, links, contractRef] = await Promise.all([
     repo.getSnapshot(),
     readPaymentLinks(),
+    readContractRef(id),
   ]);
   const contract = snapshot.contracts.find((c) => c.cadastroId === id);
   if (!contract) notFound();
@@ -122,6 +125,9 @@ export default async function ContractDetailPage({
           <StatusBadge color={typeUi.color}>{typeUi.label}</StatusBadge>
         ) : null}
         <EndsChip info={endInfo} />
+        {contract.rentManual ? (
+          <StatusBadge color="blue">Cobrança manual</StatusBadge>
+        ) : null}
         <FreshnessDot
           label="Planilha de aluguéis"
           timestamp={snapshot.fetchedAt}
@@ -130,6 +136,17 @@ export default async function ContractDetailPage({
           className="ml-auto"
         />
       </div>
+
+      {contractRef ? (
+        <div className="mb-4">
+          <ContractAlterations
+            contractUuid={contractRef.uuid}
+            cadastroId={id}
+            rentManual={contractRef.rentManual}
+            status={contractRef.status}
+          />
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

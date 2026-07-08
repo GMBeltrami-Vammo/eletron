@@ -29,6 +29,7 @@ export const CORE_ALERT_TYPES = [
   "overdue_bill",
   "due_soon_no_auto_debit",
   "no_auto_debit",
+  "manual_rent_reminder",
   "new_installation",
   "negotiated_invoice",
   "scheduled_shutdown",
@@ -148,6 +149,15 @@ export function alertDetail(row: AlertRow): string {
       return date
         ? `Desligamento em ${formatDate(date)}${window}`
         : "Desligamento programado";
+    }
+    case "manual_rent_reminder": {
+      const parts: string[] = [];
+      const cadastro = num(p.cadastroId);
+      if (cadastro !== null) parts.push(`Cadastro ${cadastro}`);
+      const competencia = str(p.competencia);
+      if (competencia) parts.push(`competência ${formatCompetencia(`${competencia}-01`)}`);
+      parts.push("cobrança manual pendente");
+      return parts.join(" · ");
     }
     case "station_without_contract":
       return "Estação ativa sem cadastro de locação";

@@ -531,5 +531,49 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
     );
   }
 
+  // manual_rent_reminder (Phase 2.5 R4): ACTIVE rent_manual contracts (Ipiranga
+  // / Smart Kitchens) whose current-month rent charge hasn't been created yet —
+  // gerar_mes deliberately skips them, so a human must collect the rent. The
+  // dedupe_key carries the competência and the reminder auto-resolves once a
+  // rent charge for that month exists.
+  const rentChargeMonths = new Set<string>();
+  for (const c of snapshot.charges) {
+    if (
+      (c.kind === "aluguel" || c.kind === "aluguel_energia") &&
+      c.competencia !== null
+    ) {
+      const key = c.billingAccountId ?? `station:${c.stationId ?? "na"}`;
+      rentChargeMonths.add(`${key}:${c.competencia.slice(0, 7)}`);
+    }
+  }
+  const rentAccountByContract = new Map<string, string>();
+  for (const a of snapshot.billingAccounts) {
+    if (a.accountType === "rent" && a.contractId !== null) {
+      rentAccountByContract.set(a.contractId, a.id);
+    }
+  }
+  for (const contract of snapshot.contracts) {
+    if (contract.status !== STATION_STATUS.ACTIVE) continue;
+    if (contract.rentManual !== true) continue;
+    const rentAccountId = rentAccountByContract.get(contract.id);
+    const key = rentAccountId ?? `station:${contract.stationId ?? "na"}`;
+    const hasCharge = rentChargeMonths.has(`${key}:${currentMonth}`);
+    if (hasCharge) continue;
+    push(
+      makeAlert(
+        ALERT_TYPE.manualRentReminder,
+        ALERT_SEVERITY.warning,
+        `manual_rent_reminder:${contract.id}:${currentMonth}`,
+        { stationId: contract.stationId, billingAccountId: rentAccountId ?? null },
+        {
+          contractId: contract.id,
+          cadastroId: contract.cadastroId,
+          address: contract.address,
+          competencia: currentMonth,
+        },
+      ),
+    );
+  }
+
   return Array.from(alerts.values());
 }

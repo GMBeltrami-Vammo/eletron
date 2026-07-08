@@ -6,15 +6,17 @@ import {
   UnmatchedAccountsTable,
   type UnmatchedAccountRow,
 } from "@/components/revisao/unmatched-accounts-table";
+import type { StationChoice } from "@/components/revisao/match-actions";
 import { DataTableSkeleton } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { getRepository } from "@/lib/data/repository.server";
+import { suggestStations, type GeoStation } from "@/lib/matching/suggest";
 
 export const metadata: Metadata = { title: "Instalações não vinculadas" };
 
 const DESCRIPTION =
-  "Instalações coletadas pelo scraper sem estação correspondente — o vínculo manual substitui o loop do Slack na fase 2";
+  "Instalações sem estação correspondente — sugestões geodésicas (como o match semanal) substituem o loop do Slack";
 
 export default function InstalacoesPage() {
   return (
@@ -39,6 +41,18 @@ async function InstalacoesContent() {
     snapshot.utilityAccountStates.map((state) => [state.billingAccountId, state]),
   );
 
+  // station coordinates for the geodesic matcher (station lat/lon; skip nulls)
+  const geoStations: GeoStation[] = snapshot.stations.map((s) => ({
+    id: s.id,
+    name: s.name,
+    address: s.address,
+    lat: s.latitude,
+    lon: s.longitude,
+  }));
+  const stationChoices: StationChoice[] = snapshot.stations
+    .map((s) => ({ id: s.id, name: s.name }))
+    .sort((a, b) => a.id - b.id);
+
   const rows: UnmatchedAccountRow[] = irregularities.unmatchedAccounts.map(
     (account) => {
       const state = stateByAccount.get(account.id);
@@ -58,6 +72,12 @@ async function InstalacoesContent() {
         firstSeenAt: state?.firstSeenAt ?? null,
         scrapedAt: state?.scrapedAt ?? null,
         notes: account.notes,
+        suggestions: suggestStations(
+          state?.lat ?? null,
+          state?.lon ?? null,
+          geoStations,
+          3,
+        ),
       };
     },
   );
@@ -74,7 +94,7 @@ async function InstalacoesContent() {
           />
         }
       />
-      <UnmatchedAccountsTable rows={rows} />
+      <UnmatchedAccountsTable rows={rows} stations={stationChoices} />
     </div>
   );
 }

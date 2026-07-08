@@ -505,6 +505,86 @@ describe("evaluateAlerts", () => {
     ]);
   });
 
+  it("raises manual_rent_reminder for a rent_manual contract missing the month's charge", () => {
+    const snapshot = emptySnapshot();
+    snapshot.stations = [station(1), station(2)];
+    const mkContract = (
+      id: string,
+      cadastroId: number,
+      stationId: number,
+      rentManual: boolean,
+    ) => ({
+      id,
+      cadastroId,
+      stationId,
+      counterpartyId: null,
+      status: "ACTIVE" as const,
+      address: null,
+      contactName: null,
+      phone: null,
+      email: null,
+      enelConnectionNumber: null,
+      contractType: "fixo" as const,
+      boxCount: null,
+      minBox: null,
+      valorPorBox: null,
+      valorMensal: 500,
+      dueDay: 5,
+      paymentMethod: "pix" as const,
+      banco: null,
+      agencia: null,
+      conta: null,
+      chavePix: null,
+      startsOn: null,
+      endsOn: null,
+      observations: null,
+      rentManual,
+      raw: {},
+    });
+    snapshot.contracts = [
+      mkContract("contract:1", 1, 1, true), // manual, no charge → reminder
+      mkContract("contract:2", 2, 2, true), // manual, but has July charge → no reminder
+    ];
+    snapshot.billingAccounts = [
+      { ...account("r1", 1, "rent"), contractId: "contract:1" },
+      { ...account("r2", 2, "rent"), contractId: "contract:2" },
+    ];
+    snapshot.charges = [
+      {
+        id: "pag:2:2026-07:aluguel",
+        billingAccountId: "r2",
+        stationId: 2,
+        kind: "aluguel",
+        competencia: "2026-07-01",
+        competenciaSource: "explicit",
+        amount: 500,
+        expectedAmount: 500,
+        dueDate: "2026-07-05",
+        status: "pendente",
+        matchStatus: "manually_matched",
+        paymentMethod: "pix",
+        banco: null,
+        agencia: null,
+        conta: null,
+        chavePix: null,
+        linhaDigitavel: null,
+        notaFiscal: null,
+        documentoNumero: null,
+        issuerCnpj: null,
+        source: "gerar_mes",
+        dedupeKey: "pag:2:2026-07:aluguel",
+        legacyRef: null,
+        notes: null,
+        raw: {},
+      },
+    ];
+    const alerts = evaluateAlerts(snapshot, NOW);
+    const reminders = alerts.filter((a) => a.alertType === "manual_rent_reminder");
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0].dedupeKey).toBe("manual_rent_reminder:contract:1:2026-07");
+    expect(reminders[0].payload.competencia).toBe("2026-07");
+  });
+
   it("emits unique deterministic dedupe keys", () => {
     const snapshot = emptySnapshot();
     snapshot.stations = [station(1)];
