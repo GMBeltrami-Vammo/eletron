@@ -604,7 +604,8 @@ const CONTRACT_TYPE_MAP: Record<string, ContractType> = {
   "casa vammo": CONTRACT_TYPE.casaVammo,
 };
 
-const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
+/** Deaccented/lowercased "Tipo de Pagamento" → enum (shared with cobrancas.ts). */
+export const PAYMENT_METHOD_MAP: Record<string, PaymentMethod> = {
   pix: PAYMENT_METHOD.pix,
   "boleto (celular)": PAYMENT_METHOD.boletoCelular,
   "boleto (email)": PAYMENT_METHOD.boletoEmail,
@@ -619,7 +620,8 @@ const STATION_STATUS_MAP: Record<string, StationStatus> = {
   PRE_INSTALLATION: STATION_STATUS.PRE_INSTALLATION,
 };
 
-const CHARGE_KIND_MAP: Record<string, ChargeKind> = {
+/** Deaccented/lowercased "Tipo de Cobrança" → enum (shared with cobrancas.ts). */
+export const CHARGE_KIND_MAP: Record<string, ChargeKind> = {
   aluguel: CHARGE_KIND.aluguel,
   energia: CHARGE_KIND.energia,
   "aluguel + energia": CHARGE_KIND.aluguelEnergia,

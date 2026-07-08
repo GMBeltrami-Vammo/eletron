@@ -8,9 +8,10 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth?.user;
   const { pathname } = req.nextUrl;
 
-  // Cron endpoints are machine-called (n8n / Vercel Cron) with a CRON_SECRET
-  // bearer, never a session — let the route's own constant-time check gate them.
-  if (pathname.startsWith("/api/cron")) {
+  // Cron + ingest endpoints are machine-called (n8n / Vercel Cron) with a
+  // bearer secret, never a session — let the route's own constant-time check
+  // gate them (CRON_SECRET / N8N_INGEST_SECRET).
+  if (pathname.startsWith("/api/cron") || pathname.startsWith("/api/ingest")) {
     return NextResponse.next();
   }
 
