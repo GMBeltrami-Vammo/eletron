@@ -226,6 +226,7 @@ interface ContractRow {
   starts_on: string | null;
   ends_on: string | null;
   observations: string | null;
+  rent_manual: boolean | null;
 }
 interface BillingAccountRow {
   id: string;
@@ -496,6 +497,7 @@ export async function loadChargingWorld(
     startsOn: r.starts_on,
     endsOn: r.ends_on,
     observations: r.observations,
+    rentManual: r.rent_manual ?? false,
     raw: {},
   }));
 

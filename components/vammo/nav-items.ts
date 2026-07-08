@@ -1,6 +1,7 @@
 import {
   BatteryCharging,
   Bell,
+  CalendarRange,
   Camera,
   FileCheck,
   Home,
@@ -23,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/estacoes", label: "Estações", icon: BatteryCharging },
   { href: "/energia", label: "Energia", icon: Zap },
   { href: "/alugueis", label: "Aluguéis", icon: Home },
+  { href: "/mensal", label: "Mensal", icon: CalendarRange },
   { href: "/pagamentos", label: "Pagamentos", icon: Receipt },
   { href: "/comprovantes", label: "Comprovantes", icon: FileCheck },
   { href: "/leituras", label: "Leituras", icon: Camera },

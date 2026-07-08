@@ -110,6 +110,12 @@ export interface Contract {
   startsOn: string | null;
   endsOn: string | null;
   observations: string | null;
+  /**
+   * rent_manual (Phase 2.5) — rent collected manually (Ipiranga / Smart
+   * Kitchens): gerar_mes skips it and the manual_rent_reminder alert targets
+   * it. Optional: only the Supabase backend carries it (sheets → false).
+   */
+  rentManual?: boolean;
   raw: Record<string, string>;
 }
 
