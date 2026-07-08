@@ -1,31 +1,29 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
+
+import { authOptions } from "./auth.config";
 
 /**
  * Dev-only login bypass for local UI verification (no Google round-trip).
  * Structurally impossible in production: requires NODE_ENV=development AND
  * AUTH_DEV_LOGIN=1 (set only in .env.local, which is gitignored), so the
- * production bundle's providers array is [Google] only.
+ * production providers array is [Google] only.
  */
 const devLoginEnabled =
   process.env.NODE_ENV === "development" &&
   process.env.AUTH_DEV_LOGIN === "1";
 
 /**
- * Single edge-safe auth config, imported directly by middleware (Edge) and by
- * the route handler / server components (Node). Everything here must stay
- * edge-compatible — no Node-only imports — which is why this mirrors goBuy's
- * proven setup exactly. See root CLAUDE.md "Auth on Vercel".
+ * Full app auth instance — used by the route handler, server components and
+ * server actions (all Node runtime). Adds the Node-only Credentials provider
+ * that must NOT reach the Edge Middleware bundle (middleware imports the
+ * Google-only instance from ./auth.config instead). Both instances share
+ * AUTH_SECRET and the same cookie, so their sessions interoperate.
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authOptions,
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      // hd pre-filters the Google account picker; enforcement is the signIn callback below.
-      authorization: { params: { hd: "vammo.com" } },
-    }),
+    ...authOptions.providers,
     ...(devLoginEnabled
       ? [
           Credentials({
@@ -40,19 +38,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         ]
       : []),
   ],
-
-  pages: { signIn: "/login", error: "/login" },
-
-  callbacks: {
-    // Only verified @vammo.com Google accounts may sign in.
-    signIn({ user, profile }) {
-      const isVammo = user.email?.toLowerCase().endsWith("@vammo.com") ?? false;
-      const isVerified = profile?.email_verified !== false;
-      return isVammo && isVerified;
-    },
-
-    authorized({ auth: session }) {
-      return !!session?.user;
-    },
-  },
 });

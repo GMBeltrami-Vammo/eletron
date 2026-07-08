@@ -1,6 +1,8 @@
-import { auth } from "@/auth";
+import { auth } from "@/auth.config";
 import { NextResponse } from "next/server";
 
+// Imports the PRE-BUILT, Google-only edge instance from auth.config (no
+// Credentials, so no Node-only module reaches the Edge bundle). See auth.config.ts.
 export default auth((req) => {
   const isLoggedIn = !!req.auth?.user;
   const { pathname } = req.nextUrl;
