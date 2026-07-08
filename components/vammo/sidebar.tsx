@@ -8,6 +8,7 @@ import { LogOut } from "lucide-react";
 import { NAV_ITEMS, type NavBadgeCounts } from "@/components/vammo/nav-items";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/vammo/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type SidebarUser = {
@@ -99,6 +100,7 @@ export function AppSidebar({
             {user.email ?? ""}
           </div>
         </div>
+        <ThemeToggle className="size-8 text-muted-foreground" />
         <form action={onSignOut}>
           <Button
             type="submit"

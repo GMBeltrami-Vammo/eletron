@@ -170,6 +170,12 @@
   --info-subtle: #082c40;
   --info-emphasis: #88d2fc;
   --vammo-blue: #2ec2ff;
+  /* badge palette is shared across themes; only the two low-contrast-on-dark
+     entries get overrides (white chip on dark card, grey outline) */
+  --badge-white-text: #fafafa;
+  --badge-white-bg: #3a3a3d;
+  --badge-grey-text: #d4d4d8;
+  --badge-grey-bg: #52525b;
 }
 
 @layer base {

@@ -330,6 +330,16 @@ function InstallationCard({
                 tickFormatter={(v: number) => formatBRL(v)}
               />
               <RechartsTooltip
+                contentStyle={{
+                  backgroundColor: "var(--popover)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  color: "var(--popover-foreground)",
+                  fontSize: "12px",
+                }}
+                itemStyle={{ color: "var(--popover-foreground)" }}
+                labelStyle={{ color: "var(--muted-foreground)" }}
+                cursor={{ fill: "var(--muted)", opacity: 0.4 }}
                 formatter={(value, name) =>
                   name === "R$"
                     ? formatBRL(Number(value))

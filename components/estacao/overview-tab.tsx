@@ -203,7 +203,17 @@ export function OverviewTab({
                   tickFormatter={(v: number) => formatBRL(v)}
                 />
                 <RechartsTooltip
-                  formatter={(value) => formatBRL(Number(value))}
+                  contentStyle={{
+                  backgroundColor: "var(--popover)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  color: "var(--popover-foreground)",
+                  fontSize: "12px",
+                }}
+                itemStyle={{ color: "var(--popover-foreground)" }}
+                labelStyle={{ color: "var(--muted-foreground)" }}
+                cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+                formatter={(value) => formatBRL(Number(value))}
                   labelClassName="text-xs"
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />

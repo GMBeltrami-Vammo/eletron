@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { NAV_ITEMS, type NavBadgeCounts } from "@/components/vammo/nav-items";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/vammo/theme-toggle";
 import {
   Sheet,
   SheetContent,
@@ -80,6 +81,7 @@ export function MobileNav({ counts }: { counts?: NavBadgeCounts }) {
         className="h-auto w-[72px] dark:invert"
       />
       <span className="text-sm font-semibold">Eletron</span>
+      <ThemeToggle className="ml-auto" />
     </header>
   );
 }
