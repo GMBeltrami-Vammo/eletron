@@ -20,12 +20,15 @@ export interface AlertRow {
   payload: Record<string, unknown>;
 }
 
-/** The 7 rule categories always shown as cards, even at zero. */
+/**
+ * The rule categories always shown as cards, even at zero. Phase 2.5 retired
+ * `scraper_stale` (frozen data) — historical rows still render in the list,
+ * they just lose the pinned card.
+ */
 export const CORE_ALERT_TYPES = [
   "overdue_bill",
   "due_soon_no_auto_debit",
   "no_auto_debit",
-  "scraper_stale",
   "new_installation",
   "negotiated_invoice",
   "scheduled_shutdown",

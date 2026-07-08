@@ -44,19 +44,15 @@ export async function userClientFor(email: string): Promise<UserClient> {
 }
 
 /**
- * Whether `email` has a write role (operator OR admin). Uses the user token's
- * SELECT on `user_roles` (RLS); a query error fails closed.
+ * ROLES SUSPENDED (Gabriel, 2026-07-08 — test environment): any authenticated
+ * @vammo.com session may write. Migration 8 redefines charging.is_operator()/
+ * is_admin() to is_vammo_user() in Postgres; this mirrors it app-side. The
+ * signature is kept so the ~15 call sites stay untouched and roles can return
+ * later by restoring the user_roles lookup that lived here.
  */
 export async function isOperatorEmail(
-  client: UserClient,
+  _client: UserClient,
   email: string,
 ): Promise<boolean> {
-  const { data, error } = await client
-    .from("user_roles")
-    .select("role")
-    .eq("email", email)
-    .maybeSingle();
-  if (error) return false;
-  const role = (data as { role?: string } | null)?.role;
-  return role === "admin" || role === "operator";
+  return email.endsWith("@vammo.com");
 }

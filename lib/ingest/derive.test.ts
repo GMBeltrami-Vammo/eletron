@@ -330,23 +330,44 @@ describe("evaluateAlerts", () => {
     expect(noAd[0].dedupeKey).toBe("no_auto_debit:enel:fresh");
   });
 
-  it("raises scraper_stale inside the 3–30 day window only", () => {
+  it("never raises the retired scraper_stale (Phase 2.5 sever)", () => {
+    const snapshot = emptySnapshot();
+    snapshot.stations = [station(1)];
+    snapshot.billingAccounts = [account("enel:stale", 1, "energy_enel")];
+    snapshot.utilityAccountStates = [
+      state("enel:stale", { scrapedAt: "2026-06-08T13:41:16" }), // 29 days
+    ];
+    const alerts = evaluateAlerts(snapshot, NOW);
+    expect(alerts.filter((a) => a.alertType === "scraper_stale")).toHaveLength(0);
+  });
+
+  it("gates overdue_bill / due_soon on scrape recency (frozen data goes quiet)", () => {
     const snapshot = emptySnapshot();
     snapshot.stations = [station(1)];
     snapshot.billingAccounts = [
-      account("enel:ok", 1, "energy_enel"),
-      account("enel:stale", 1, "energy_enel"),
-      account("enel:dead", 1, "energy_enel"),
+      account("enel:frozen", 1, "energy_enel"),
+      account("enel:live", 1, "energy_enel"),
     ];
     snapshot.utilityAccountStates = [
-      state("enel:ok", { scrapedAt: "2026-07-06T03:00:00" }), // 1 day
-      state("enel:stale", { scrapedAt: "2026-06-08T13:41:16" }), // 29 days
-      state("enel:dead", { scrapedAt: "2026-05-01T03:00:00" }), // 67 days
+      state("enel:frozen", {
+        billStatus: "vencida",
+        dueDate: "2026-07-10", // 3 days ahead — inside the due_soon window
+        autoDebit: "nao_cadastrado",
+        scrapedAt: "2026-05-01T03:00:00", // 67 days — frozen clone
+      }),
+      state("enel:live", {
+        billStatus: "vencida",
+        dueDate: "2026-07-03",
+        scrapedAt: "2026-07-06T03:00:00", // 1 day — fresh
+      }),
     ];
     const alerts = evaluateAlerts(snapshot, NOW);
-    const stale = alerts.filter((a) => a.alertType === "scraper_stale");
-    expect(stale).toHaveLength(1);
-    expect(stale[0].dedupeKey).toBe("scraper_stale:enel:stale");
+    const overdue = alerts.filter((a) => a.alertType === "overdue_bill");
+    expect(overdue).toHaveLength(1);
+    expect(overdue[0].billingAccountId).toBe("enel:live");
+    expect(
+      alerts.filter((a) => a.alertType === "due_soon_no_auto_debit"),
+    ).toHaveLength(0);
   });
 
   it("raises new_installation for accounts first seen under 3 days ago", () => {

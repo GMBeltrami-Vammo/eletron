@@ -18,6 +18,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // skill assets (Claude Code workspace tooling), not app code
+      ".agents/**",
+      ".claude/**",
     ],
   },
 ];

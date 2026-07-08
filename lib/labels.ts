@@ -131,7 +131,7 @@ export const ALERT_TYPE_UI: Record<string, LabelBadge & { description: string }>
   scraper_stale: {
     label: "Scraper parado",
     color: "yellow",
-    description: "Sem coleta entre 3 e 30 dias — scraper quebrado ou estação removida",
+    description: "Regra desativada (dados de energia congelados) — alertas históricos",
   },
   new_installation: {
     label: "Novas instalações",
@@ -157,6 +157,12 @@ export const ALERT_TYPE_UI: Record<string, LabelBadge & { description: string }>
     label: "Contrato sem estação",
     color: "orange",
     description: "Cadastro cuja estação não existe mais",
+  },
+  manual_rent_reminder: {
+    label: "Aluguel de cobrança manual",
+    color: "blue",
+    description:
+      "Contrato com cobrança manual de aluguel sem cobrança gerada na competência",
   },
 };
 

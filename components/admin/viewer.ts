@@ -6,17 +6,15 @@ import "server-only";
  * concept, but it is app-wide: every gated server component calls it once and
  * passes the derived booleans down to its client view.
  *
- * Identity comes from the next-auth `@vammo.com` session; the exact role is
- * read from `charging.user_roles` via the service-role client (server
- * components already sit behind the auth middleware gate — same rationale as
- * repository.server.ts). Degrades to `role: null` when Supabase env is absent
- * or the read fails, so dev/sheets mode never crashes — it just renders every
- * write control disabled. Postgres re-checks the role inside each RPC, so this
- * is a UX affordance, never the security boundary.
+ * ROLES SUSPENDED (Gabriel, 2026-07-08 — test environment): any authenticated
+ * @vammo.com session gets full write affordances (`role: "admin"`), matching
+ * migration 8's is_operator()/is_admin() → is_vammo_user() in Postgres.
+ * Restoration point = the `charging.user_roles` read that lived here.
+ * Still degrades to `role: null` when Supabase env is absent, so dev/sheets
+ * mode renders write controls disabled (they would fail anyway).
  */
 
 import { getSessionEmail } from "@/lib/http/guards";
-import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export type ViewerRole = "admin" | "operator" | null;
 
@@ -36,23 +34,10 @@ function hasSupabaseEnv(): boolean {
 
 export async function getViewer(): Promise<Viewer> {
   const email = await getSessionEmail();
-  if (!email) {
-    return { email: null, role: null, supabaseConfigured: hasSupabaseEnv() };
-  }
-  try {
-    const { data, error } = await supabaseAdmin()
-      .from("user_roles")
-      .select("role")
-      .eq("email", email)
-      .maybeSingle();
-    if (error) return { email, role: null, supabaseConfigured: true };
-    const role = (data as { role?: string } | null)?.role ?? null;
-    return {
-      email,
-      role: role === "admin" ? "admin" : role === "operator" ? "operator" : null,
-      supabaseConfigured: true,
-    };
-  } catch {
-    return { email, role: null, supabaseConfigured: false };
-  }
+  const supabaseConfigured = hasSupabaseEnv();
+  return {
+    email,
+    role: email && supabaseConfigured ? "admin" : null,
+    supabaseConfigured,
+  };
 }

@@ -7,10 +7,11 @@ Users: finance/charging team, Google OAuth restricted to @vammo.com.
 
 ## Current state
 
-- Phase 1 (read-only visibility) shipped; **Phase 2 in progress** (dark mode, `charging` Supabase schema + first writes, Drive file store, comprovante pipeline, manual bills, Gerar mês).
-- Specs: `docs/superpowers/specs/2026-07-07-eletron-design.md` + `appendix/` (Phase 1) and `appendix/phase2/` (schema-writes, drive-comprovantes, ux-screens, **review-resolutions.md — authoritative where docs conflict**).
-- Data sources: live Google Sheets read (scraper sheet `1MBJwXex...` + rent sheet `18FxHr2F...`) cached ~15 min, `context/*.xlsx` fixtures for dev/test; Phase 2 adds the `charging` schema on the shared "Vammo Automations" Supabase project behind a `REPOSITORY_BACKEND` flag.
-- Deployed on Vercel as of 2026-07-07: GitHub repo connected to Vercel project `eletron` (auto-deploy), local checkout linked via `vercel link` (`.vercel/repo.json`, gitignored) — see decision #14. Use `vercel env pull .env.local` once env vars exist; custom domain still open (Q2).
+- Phase 1 (read-only visibility) and Phase 2 (dark mode, `charging` schema + writes, Drive file store, comprovante pipeline, manual bills, Gerar mês) shipped; **Phase 2.5 in progress** — sheets severed, Supabase-only test environment (decisions #25-28), roles suspended, milestones R0-R4 (plan: `.claude/plans` "Phase 2.5 Reformulation").
+- Specs: `docs/superpowers/specs/2026-07-07-eletron-design.md` + `appendix/` (Phase 1) and `appendix/phase2/` (schema-writes, drive-comprovantes, ux-screens, **review-resolutions.md — authoritative where docs conflict**); decisions #25-28 override all of them where they touch sheets/roles.
+- Data sources after the R2 cutover: the `charging` schema on the shared "Vammo Automations" Supabase project (one FINAL sheet clone at cutover, then frozen scraper data), Metabase cards 28816/28556 direct, uploads + the n8n `POST /api/ingest/cobrancas` webhook, Drive comprovantes poll.
+  Until the cutover the app still serves from the live Google Sheets read behind `REPOSITORY_BACKEND=sheets`; `context/*.xlsx` fixtures for dev/test.
+- Deployed on Vercel as of 2026-07-07: GitHub repo connected to Vercel project `eletron` (auto-deploy), local checkout linked via `vercel link` (`.vercel/repo.json`, gitignored) — see decision #14. Custom domain still open (Q2). Always commit and push to main (Gabriel's standing instruction).
 
 ## Stack
 
@@ -20,10 +21,12 @@ Users: finance/charging team, Google OAuth restricted to @vammo.com.
 
 ## Rules specific to this repo
 
-- The Vammo-Enel scraper and its Google Sheet are upstream; scraper-owned state tabs (enel_data, edp_data, Vammo_data, backups) are READ-ONLY, always.
-  Exception (decision #19): the app may APPEND rows to `Faturas_ENEL`, `Faturas_EDP` and `2_Pagamentos`, only via `lib/sheets/faturas-writeback.ts` (tab allowlist asserted in code, outbox with retries, DB is source of truth).
-- Resolve sheet columns by header name only — month columns (`F_MMMAA`/`R_MMMAA`, lowercase `mmmaa` on EDP) are inserted dynamically.
-- All pt-BR parsing (money, dates, comma decimals, "Não/Nao cadastrado", UNIDENTIFIED sentinels) lives ONLY in `lib/ingest/normalize.ts` — screens never see raw sheet strings.
+- SHEETS SEVERED (decision #25): the app NEVER writes any Google Sheet, and after the R2 cutover it never reads one either.
+  The only permitted sheet read is the one final clone via `scripts/backfill.ts`/`runSheetSync` at the cutover ritual; `lib/sheets/faturas-writeback.ts` and the `sheet_writebacks` outbox are dormant — do not wire new call sites to them.
+- The Vammo-Enel scraper stays untouched (decision #10); it keeps writing its own sheet, which this app simply no longer consumes.
+- Sheet-clone code resolves columns by header name only — month columns (`F_MMMAA`/`R_MMMAA`, lowercase `mmmaa` on EDP) are inserted dynamically.
+- All pt-BR parsing (money, dates, comma decimals, "Não/Nao cadastrado", UNIDENTIFIED sentinels) lives ONLY in `lib/ingest/normalize.ts` — screens never see raw source strings.
 - Domain types in `lib/domain/` mirror the Supabase **`charging`** schema (appendix phase2/schema-writes.md + review-resolutions.md); keep them in sync with any schema evolution.
 - "Financeiro Check" / `fiscal_exported` means "exported to the FISCAL spreadsheet", never "paid" (decision #21); `pago` only via `confirm_charge`/`record_payment`.
+- Roles are suspended (decision #26): every write gate reduces to "authenticated @vammo.com"; keep the gate call sites (`isOperatorEmail`, `withOperator`, `getViewer`) intact so roles can be restored by reinstating the `user_roles` lookups.
 - `context/` holds real bills/spreadsheets with PII and bank data: gitignored, never commit, never paste contents into logs.

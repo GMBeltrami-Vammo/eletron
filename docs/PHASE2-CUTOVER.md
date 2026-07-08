@@ -1,5 +1,10 @@
 # Eletron Phase 2 — Cutover runbook
 
+> **HISTORICAL (2026-07-08).**
+> Superseded by the Phase 2.5 reformulation (decisions #25-28): the sheets are being severed entirely, so the "parallel transition" this runbook describes never happens.
+> The replacement is the **R2 cutover ritual**: final clone (`scripts/backfill.ts`) → re-run migration 8's `rent_manual` seed → Gabriel swaps the n8n append node for `POST /api/ingest/cobrancas` → flip `REPOSITORY_BACKEND=supabase`.
+> Steps below that still apply (backfill count checks, write-flow verification) will be folded into the R2 ritual doc; the sheet-writeback checks no longer apply.
+
 Everything Phase 2 is built, deployed to `main`, and the `charging` schema is live.
 This is the short list of steps only you can run to switch the app from reading the Google Sheets to reading Supabase, and to confirm the write flows work end-to-end.
 Nothing here is destructive; the sheets pipeline keeps running untouched, and every step is reversible.

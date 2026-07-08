@@ -356,6 +356,12 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
     const isEdp = account?.accountType === ACCOUNT_TYPE.energyEdp;
     const base = { stationId, billingAccountId: state.billingAccountId };
 
+    // Phase 2.5 sever: portal data froze at the final clone. Bill-level rules
+    // only fire while the scrape is recent (≤30 days) so they quietly stop on
+    // frozen data instead of alerting forever (plan M2).
+    const scrapeFresh =
+      state.scrapedAt !== null && daysSince(state.scrapedAt, now) <= 30;
+
     // 1. overdue_bill — current status 'Vencida', or a 'Vencida' entry in the
     // invoice history; EDP rows whose Ultimo Comprovante is dated on the due
     // date already have a registered receipt and are skipped (n8n
@@ -369,6 +375,7 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
       state.dueDate !== null &&
       state.ultimoComprovanteDate >= state.dueDate;
     if (
+      scrapeFresh &&
       (state.billStatus === UTILITY_BILL_STATUS.vencida || historyOverdue) &&
       !receipted
     ) {
@@ -390,6 +397,7 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
 
     // 2. due_soon_no_auto_debit — bill due in 0..7 days without auto-debit.
     if (
+      scrapeFresh &&
       state.dueDate !== null &&
       state.autoDebit !== AUTO_DEBIT_STATUS.cadastrado &&
       state.billStatus !== null &&
@@ -426,22 +434,10 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
       );
     }
 
-    // 4. scraper_stale — last scrape 3..30 days old (beyond 30 the account is
-    // treated as decommissioned upstream, matching the n8n rule window).
-    if (state.scrapedAt !== null) {
-      const age = daysSince(state.scrapedAt, now);
-      if (age >= 3 && age <= 30) {
-        push(
-          makeAlert(
-            ALERT_TYPE.scraperStale,
-            ALERT_SEVERITY.warning,
-            `scraper_stale:${state.billingAccountId}`,
-            base,
-            { scrapedAt: state.scrapedAt, ageDays: age },
-          ),
-        );
-      }
-    }
+    // 4. scraper_stale — RETIRED (Phase 2.5 sever): the scraper no longer
+    // feeds this app, so "no scrape for 3..30 days" is the expected steady
+    // state, not an anomaly. The alert type stays in the enum + auto-resolve
+    // set so old rows clear.
 
     // 5. new_installation — first seen by the scraper < 3 days ago.
     if (state.firstSeenAt !== null && daysSince(state.firstSeenAt, now) < 3) {

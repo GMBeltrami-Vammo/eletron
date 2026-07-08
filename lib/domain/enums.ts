@@ -199,6 +199,8 @@ export const ALERT_TYPE = {
   manualBillSheetAppendFailed: "manual_bill_sheet_append_failed",
   encryptedComprovante: "encrypted_comprovante",
   sheetSyncStale: "sheet_sync_stale",
+  /** Phase 2.5 (R4): rent_manual contract without the month's rent charge. */
+  manualRentReminder: "manual_rent_reminder",
 } as const;
 export type AlertType = (typeof ALERT_TYPE)[keyof typeof ALERT_TYPE];
 

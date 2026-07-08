@@ -3,14 +3,15 @@ import "server-only";
 /**
  * Manual energy-bill upload core — shared by the route (/api/uploads/manual-bill)
  * and the `createManualBill` server action so there is ONE canonical definition
- * (drive-comprovantes §3.3, decision #17/#19/#20).
+ * (drive-comprovantes §3.3, decision #17/#20).
  *
  * Ordering (D7 — a DB row never points at a missing file):
  *   validate → resolve account → hash-dedupe → Drive upload (shareAnyoneReader,
  *   collision → `-manual-N` never overwriting the scraper's file) → insert
- *   `documents` → `create_manual_bill` RPC (C1 dedupe guard inside) → enqueue
- *   `sheet_writebacks` (the deployed RPC does NOT enqueue) → drain the outbox
- *   inline (best-effort; cron retries).
+ *   `documents` → `create_manual_bill` RPC (C1 dedupe guard inside).
+ * Phase 2.5 (sheets severed): the `sheet_writebacks` enqueue + drain that
+ * followed the RPC is GONE — the DB is the only record; the Drive PDF upload
+ * stays (scraper folder naming kept for continuity).
  */
 
 import { DOCUMENT_KIND, type DocumentKind } from "@/lib/domain";
@@ -18,10 +19,6 @@ import type { ChargingClient } from "@/lib/data/supabase-repository";
 import { parseBrMoney } from "@/lib/comprovantes/parse";
 import { driveFolderId, findByName, uploadFile } from "@/lib/drive/client";
 import { billCollisionName, buildBillPdfName } from "@/lib/drive/naming";
-import {
-  buildManualBillWriteback,
-  processWritebackOutbox,
-} from "@/lib/sheets/faturas-writeback";
 import { UploadError } from "@/lib/http/errors";
 import type { UserClient } from "@/lib/http/guards";
 import { validateUpload } from "./validate";
@@ -49,7 +46,6 @@ export interface ManualBillUploadResult {
   chargeId: string;
   documentId: string;
   webViewLink: string;
-  sheetAppended: boolean;
   possibleDuplicate: boolean;
   warnings: string[];
 }
@@ -215,33 +211,5 @@ export async function createManualBillFromUpload(
   }
   const chargeId = chargeData as string;
 
-  // 7. enqueue the sheet writeback (deployed RPC does not enqueue) + 8. drain
-  const wb = buildManualBillWriteback(provider, {
-    externalId,
-    valueNumber: amount,
-    dueDateIso: input.dueDate,
-    nf: input.nf ?? null,
-    webViewLink,
-    autoDebitRegistration: account.auto_debit_registration ?? null,
-  });
-  const { error: enqErr } = await input.admin.from("sheet_writebacks").insert({
-    charge_id: chargeId,
-    spreadsheet: "scraper",
-    tab: wb.tab,
-    payload: wb.payload,
-    status: "pending",
-  });
-  if (enqErr) warnings.push(`fila de escrita na planilha falhou: ${enqErr.message}`);
-
-  let sheetAppended = false;
-  try {
-    const drained = await processWritebackOutbox(input.admin);
-    sheetAppended = drained.completed + drained.skipped > 0;
-  } catch (err) {
-    warnings.push(
-      `escrita na planilha adiada: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  return { chargeId, documentId, webViewLink, sheetAppended, possibleDuplicate, warnings };
+  return { chargeId, documentId, webViewLink, possibleDuplicate, warnings };
 }

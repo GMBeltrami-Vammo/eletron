@@ -1,7 +1,8 @@
 /**
  * Pure-logic tests for alerts-eval: the FK-resolving row mapper and the
- * auto-resolve selection (only rule-driven alerts that cleared; never
- * acknowledged/muted rows, never the job-emitted self-alerts).
+ * auto-resolve selection (only rule-driven alerts that cleared; never muted
+ * rows). Phase 2.5: the retired scraper_stale/sheet_sync_stale types ARE in
+ * the auto-resolve set (one release) so lingering open ones self-resolve.
  */
 
 import { describe, expect, it } from "vitest";
@@ -63,11 +64,15 @@ describe("alertsToAutoResolve", () => {
     const evaluatedKeys = new Set(["overdue:enel:2"]);
     const resolved = alertsToAutoResolve(evaluatedKeys, existing);
 
-    // enel:1 (cleared open) + enel:4 (cleared acknowledged) → resolve
-    expect(resolved).toEqual(["overdue:enel:1", "scraper_stale:enel:4"]);
-    // enel:2 still detected; enel:3 muted; sheet_sync_stale is a self-alert → untouched
+    // enel:1 (cleared open) + enel:4 (cleared acknowledged) + the retired
+    // sheet_sync_stale (never emitted anymore) → resolve
+    expect(resolved).toEqual([
+      "overdue:enel:1",
+      "scraper_stale:enel:4",
+      "sheet_sync_stale:sheet-sync",
+    ]);
+    // enel:2 still detected; enel:3 muted → untouched
     expect(resolved).not.toContain("overdue:enel:2");
     expect(resolved).not.toContain("no_auto_debit:enel:3");
-    expect(resolved).not.toContain("sheet_sync_stale:sheet-sync");
   });
 });

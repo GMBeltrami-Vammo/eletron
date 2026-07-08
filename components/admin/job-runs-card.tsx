@@ -72,18 +72,18 @@ function duration(startedAt: string, finishedAt: string | null): string {
   return `${m} min ${Math.round(s % 60)} s`;
 }
 
-type RunnableJob = "sheet-sync" | "alerts-eval" | "daily";
+type RunnableJob = "metabase-sync" | "alerts-eval" | "daily";
 
 const JOB_OPTIONS: { job: RunnableJob; label: string; hint: string }[] = [
   {
     job: "daily",
     label: "Rotina diária",
-    hint: "Sincroniza a planilha e reavalia os alertas",
+    hint: "Sincroniza o Metabase e reavalia os alertas",
   },
   {
-    job: "sheet-sync",
-    label: "Sincronizar planilha",
-    hint: "Lê a planilha e atualiza o banco",
+    job: "metabase-sync",
+    label: "Sincronizar Metabase",
+    hint: "Atualiza estações e boxes ativos direto do Metabase",
   },
   {
     job: "alerts-eval",
@@ -93,11 +93,11 @@ const JOB_OPTIONS: { job: RunnableJob; label: string; hint: string }[] = [
 ];
 
 /**
- * Admin-gated manual job trigger (rendered in the card header). A dropdown
- * picks which job — rotina diária is the first/default choice; each runs the
- * job to completion (runJobNow awaits it), then toasts and invalidates the Jobs
- * query. Non-admins see it disabled with a tooltip; runJobNow re-checks the
- * admin role server-side, so this is only the affordance.
+ * Manual job trigger (rendered in the card header). A dropdown picks which
+ * job — rotina diária is the first/default choice; each runs the job to
+ * completion (runJobNow awaits it), then toasts and invalidates the Jobs
+ * query. runJobNow re-checks the session server-side, so this is only the
+ * affordance (roles suspended — any @vammo.com session may run jobs).
  */
 function RunJobMenu({ isAdmin }: { isAdmin: boolean }) {
   const router = useRouter();

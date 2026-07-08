@@ -4,9 +4,9 @@
  * constant-time Bearer CRON_SECRET (middleware-exempt). Job-leased via
  * `claim_job`. Steps: cursor read → list new files (2-min overlap for clock
  * skew) → skip already-ingested drive ids + hashed dupes → ingest + process →
- * sweep stale `pending` comprovantes → drain the sheet-writeback outbox →
- * advance the cursor. Idempotent (hash dedupe + upserted receipts); n8n keeps
- * writing the sheet Comprovante column in parallel — no shared writes.
+ * sweep stale `pending` comprovantes → advance the cursor. Idempotent (hash
+ * dedupe + upserted receipts). Phase 2.5: the sheet-writeback drain is GONE —
+ * the app no longer touches the sheets.
  */
 
 import { NextResponse } from "next/server";
@@ -18,7 +18,7 @@ import { claimJob, finalizeJob } from "@/lib/sync/job-runs";
 import { processComprovanteDocument } from "@/lib/comprovantes/pipeline";
 import { pdfPageCount, PdfEncryptedError } from "@/lib/comprovantes/extract";
 import { downloadFile, driveFolderId, listFolder } from "@/lib/drive/client";
-import { processWritebackOutbox } from "@/lib/sheets/faturas-writeback";
+import { sweepComprovantes } from "@/lib/comprovantes/sweep";
 import { isEncryptedPdf, validateUpload } from "@/lib/uploads/validate";
 
 export const runtime = "nodejs";
@@ -27,7 +27,6 @@ export const dynamic = "force-dynamic";
 
 const JOB_NAME = "comprovantes-drive-poll";
 const OVERLAP_MS = 2 * 60 * 1000;
-const SWEEP_LIMIT = 50;
 
 interface PollStats {
   filesSeen: number;
@@ -37,7 +36,6 @@ interface PollStats {
   encrypted: number;
   failed: number;
   swept: number;
-  writeback: { completed: number; failed: number; pending: number };
 }
 
 async function readCursor(admin: ChargingClient): Promise<string | null> {
@@ -70,7 +68,6 @@ async function runPoll(admin: ChargingClient): Promise<PollStats> {
     encrypted: 0,
     failed: 0,
     swept: 0,
-    writeback: { completed: 0, failed: 0, pending: 0 },
   };
   let maxModified = cursorIso ? new Date(cursorIso).getTime() : 0;
 
@@ -167,23 +164,9 @@ async function runPoll(admin: ChargingClient): Promise<PollStats> {
   }
 
   // sweep comprovantes left `pending` (upload deferral / crashed run)
-  const twoMinAgo = new Date(Date.now() - OVERLAP_MS).toISOString();
-  const { data: stale } = await admin
-    .from("documents")
-    .select("id")
-    .eq("processing_status", "pending")
-    .eq("kind", "comprovante")
-    .lt("created_at", twoMinAgo)
-    .limit(SWEEP_LIMIT);
-  for (const row of (stale ?? []) as { id: string }[]) {
-    const r = await processComprovanteDocument(row.id, admin);
-    stats.swept += 1;
-    if (r.status === "failed") stats.failed += 1;
-  }
-
-  // drain the manual-bill sheet-writeback outbox
-  const wb = await processWritebackOutbox(admin);
-  stats.writeback = { completed: wb.completed, failed: wb.failed, pending: wb.pending };
+  const sweep = await sweepComprovantes(admin);
+  stats.swept = sweep.swept;
+  stats.failed += sweep.failed;
 
   // advance the cursor to the newest modifiedTime seen
   const newCursorIso = maxModified > 0 ? new Date(maxModified).toISOString() : cursorIso;

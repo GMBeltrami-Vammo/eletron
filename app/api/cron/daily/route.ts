@@ -1,27 +1,26 @@
 /**
- * POST/GET /api/cron/daily — the single Vercel Hobby daily cron (see
- * vercel.json). A resilient CATCH-UP that runs sheet-sync then alerts-eval in
- * one invocation (decision #22 / H6): the n8n schedulers do the 3×/day sync +
- * chained alerts during the day; this guarantees at least one full pass even if
- * n8n is down. Auth: constant-time Bearer CRON_SECRET.
+ * POST/GET /api/cron/daily — the single Vercel Hobby daily cron (vercel.json).
  *
- * Resilient: alerts-eval still runs even if sheet-sync errors/locks, so the
- * panel reflects the freshest data available (and can raise sheet_sync_stale).
+ * Phase 2.5 (sheets severed): the chain is metabase-sync → alerts-eval →
+ * comprovantes sweep. Sheet-sync is GONE — the scraper sheet is no longer an
+ * ingestion source; Metabase is queried directly and everything else arrives
+ * via the app (uploads, n8n webhook, Drive poll). Auth: constant-time Bearer
+ * CRON_SECRET. Resilient: each step runs even if the previous one failed.
  */
 
 import { NextResponse } from "next/server";
 
-import { loadRawTabs } from "@/lib/ingest/load-raw";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { runAlertsEval } from "@/lib/sync/alerts-eval";
 import { isAuthorizedCron } from "@/lib/sync/cron-auth";
-import { runSheetSync } from "@/lib/sync/sheet-sync";
+import { runMetabaseSync } from "@/lib/sync/metabase-sync";
+import { sweepComprovantes } from "@/lib/comprovantes/sweep";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-async function step<T extends { status: string }>(
+async function step<T>(
   run: () => Promise<T>,
 ): Promise<T | { status: "error"; error: string }> {
   try {
@@ -31,32 +30,31 @@ async function step<T extends { status: string }>(
   }
 }
 
+function failed(r: unknown): boolean {
+  return (
+    typeof r === "object" &&
+    r !== null &&
+    (r as { status?: string }).status === "error"
+  );
+}
+
 async function handle(req: Request): Promise<NextResponse> {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const admin = supabaseAdmin();
 
-  const sync = await step(async () => {
-    const r = await runSheetSync({
-      admin,
-      loadRaw: loadRawTabs,
-      trigger: "cron:daily",
-    });
-    // drop the (large) snapshot from the response
-    const { snapshot: _snapshot, ...summary } = r;
-    void _snapshot;
-    return summary;
-  });
-
-  const alerts = await step(() =>
-    runAlertsEval({ admin, trigger: "cron:daily" }),
+  const metabase = await step(() =>
+    runMetabaseSync({ admin, trigger: "cron:daily" }),
   );
+  const alerts = await step(() => runAlertsEval({ admin, trigger: "cron:daily" }));
+  const sweep = await step(() => sweepComprovantes(admin));
 
-  const ok = sync.status !== "error" && alerts.status !== "error";
-  return NextResponse.json({ ok, sheetSync: sync, alertsEval: alerts }, {
-    status: ok ? 200 : 500,
-  });
+  const ok = !failed(metabase) && !failed(alerts) && !failed(sweep);
+  return NextResponse.json(
+    { ok, metabaseSync: metabase, alertsEval: alerts, comprovantesSweep: sweep },
+    { status: ok ? 200 : 500 },
+  );
 }
 
 export const GET = handle;

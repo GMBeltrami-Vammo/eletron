@@ -9,10 +9,12 @@
  *   FKs refresh (per the parent task's explicit "no reopen").
  * - AUTO-RESOLVE the rule-driven alerts whose condition cleared (present in the
  *   DB as open/acknowledged, absent from this evaluation) →
- *   `resolved_by_email='system:alerts-eval'`. Only the 9 evaluateAlerts types
- *   are auto-resolved; the job-emitted self-alerts are left alone.
- * - Emit / clear `sheet_sync_stale` when the latest successful sheet-sync is
- *   older than 26h (H6).
+ *   `resolved_by_email='system:alerts-eval'`.
+ *
+ * Phase 2.5 (sheets severed): the `sheet_sync_stale` emission (old H6) and the
+ * `scraper_stale` rule are RETIRED — both types stay in the auto-resolve set
+ * for one release so any lingering open alert clears itself, then can be
+ * dropped from the set too.
  *
  * Server-only by convention (service-role writes). Shared by
  * /api/cron/alerts-eval and /api/cron/daily.
@@ -25,20 +27,22 @@ import {
   type ChargingClient,
 } from "@/lib/data/supabase-repository";
 import { claimJob, finalizeJob } from "./job-runs";
-import { SHEET_SYNC_JOB_NAME } from "./sheet-sync";
 
 export const ALERTS_EVAL_JOB_NAME = "alerts-eval";
-const STALE_HOURS = 26;
-const SHEET_SYNC_STALE_KEY = "sheet_sync_stale:sheet-sync";
 const BATCH = 500;
 
-/** The alert types evaluateAlerts() emits — the only ones auto-resolved. */
+/**
+ * The alert types this job may auto-resolve: what evaluateAlerts() emits, plus
+ * the retired `scraper_stale`/`sheet_sync_stale` (kept one release so open
+ * ones self-resolve — migration 8 also resolved them explicitly).
+ */
 export const EVAL_ALERT_TYPES: ReadonlySet<string> = new Set([
   "overdue_bill",
   "due_soon_no_auto_debit",
   "no_auto_debit",
   "new_installation",
   "scraper_stale",
+  "sheet_sync_stale",
   "negotiated_invoice",
   "scheduled_shutdown",
   "station_without_contract",
@@ -116,7 +120,6 @@ export interface AlertsEvalResult {
   status: "success" | "error" | "skipped_locked";
   evaluated: number;
   autoResolved: number;
-  sheetSyncStale: boolean;
   error?: string;
 }
 
@@ -142,26 +145,6 @@ async function fetchExistingAlerts(admin: ChargingClient): Promise<ExistingAlert
   return out;
 }
 
-/** Whether the most recent successful sheet-sync finished > STALE_HOURS ago. */
-async function isSheetSyncStale(
-  admin: ChargingClient,
-  now: Date,
-): Promise<{ stale: boolean; lastSuccessAt: string | null }> {
-  const { data, error } = await admin
-    .from("job_runs")
-    .select("finished_at,started_at")
-    .eq("job_name", SHEET_SYNC_JOB_NAME)
-    .eq("status", "success")
-    .order("started_at", { ascending: false })
-    .limit(1);
-  if (error) throw new Error(`job_runs staleness read failed: ${error.message}`);
-  const rows = (data ?? []) as { finished_at: string | null; started_at: string }[];
-  const last = rows[0]?.finished_at ?? rows[0]?.started_at ?? null;
-  if (last === null) return { stale: true, lastSuccessAt: null };
-  const ageHours = (now.getTime() - new Date(last).getTime()) / 3_600_000;
-  return { stale: ageHours > STALE_HOURS, lastSuccessAt: last };
-}
-
 /**
  * Evaluates + persists alerts over the current charging snapshot. Claims an
  * 'alerts-eval' job lease; returns skipped_locked if another run holds it.
@@ -180,7 +163,6 @@ export async function runAlertsEval(
       status: "skipped_locked",
       evaluated: 0,
       autoResolved: 0,
-      sheetSyncStale: false,
     };
   }
 
@@ -214,40 +196,12 @@ export async function runAlertsEval(
       if (error) throw new Error(`auto-resolve alerts failed: ${error.message}`);
     }
 
-    // sheet_sync_stale self-alert (H6)
-    const { stale, lastSuccessAt } = await isSheetSyncStale(admin, now);
-    if (stale) {
-      const { error } = await admin.from("alerts").upsert(
-        {
-          alert_type: "sheet_sync_stale",
-          severity: "critical",
-          dedupe_key: SHEET_SYNC_STALE_KEY,
-          payload: { lastSuccessAt, thresholdHours: STALE_HOURS },
-          last_detected_at: detectedAt,
-        },
-        { onConflict: "dedupe_key" },
-      );
-      if (error) throw new Error(`sheet_sync_stale upsert failed: ${error.message}`);
-    } else {
-      const { error } = await admin
-        .from("alerts")
-        .update({
-          status: "resolved",
-          resolved_by_email: "system:alerts-eval",
-          resolved_at: detectedAt,
-        })
-        .eq("dedupe_key", SHEET_SYNC_STALE_KEY)
-        .in("status", ["open", "acknowledged"]);
-      if (error) throw new Error(`sheet_sync_stale clear failed: ${error.message}`);
-    }
-
     await finalizeJob(admin, jobId, {
       status: "success",
       trigger,
       stats: {
         evaluated: evaluated.length,
         autoResolved: toResolve.length,
-        sheetSyncStale: stale,
       },
     });
 
@@ -256,7 +210,6 @@ export async function runAlertsEval(
       status: "success",
       evaluated: evaluated.length,
       autoResolved: toResolve.length,
-      sheetSyncStale: stale,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -18,8 +18,7 @@ import { PageHeader } from "@/components/vammo/page-header";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { IngestIssues } from "@/components/admin/ingest-issues";
 import { getViewer } from "@/components/admin/viewer";
-import { readJobRuns, readUserRoles } from "@/components/admin/admin-data";
-import { UserRolesCard } from "@/components/admin/user-roles-card";
+import { readJobRuns } from "@/components/admin/admin-data";
 import { JobRunsCard } from "@/components/admin/job-runs-card";
 import { getRepository } from "@/lib/data/repository.server";
 import { formatDateTime } from "@/lib/format";
@@ -115,15 +114,13 @@ export default function AdminPage() {
 }
 
 async function AdminManagementCards() {
+  // ROLES SUSPENDED (Phase 2.5): the Usuários e papéis card is hidden — any
+  // @vammo.com session can write. Restore <UserRolesCard/> if roles return.
   const viewer = await getViewer();
   const isAdmin = viewer.role === "admin";
-  const [userRoles, jobRuns] = await Promise.all([
-    isAdmin ? readUserRoles() : Promise.resolve(null),
-    readJobRuns(50),
-  ]);
+  const jobRuns = await readJobRuns(50);
   return (
     <div className="space-y-4">
-      {isAdmin && userRoles ? <UserRolesCard data={userRoles} /> : null}
       <JobRunsCard initial={jobRuns} isAdmin={isAdmin} />
     </div>
   );

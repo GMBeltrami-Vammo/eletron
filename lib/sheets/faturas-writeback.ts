@@ -3,9 +3,12 @@ import "server-only";
 /**
  * Faturas writeback — appends manual-bill rows to the scraper spreadsheet's
  * `Faturas_ENEL` / `Faturas_EDP` tabs and drains the `charging.sheet_writebacks`
- * outbox (decision #19, D5). The DB is the source of truth; the sheet append is
- * best-effort with retries so the parallel n8n/Apps-Script ecosystem keeps
- * receiving rows during the transition.
+ * outbox (decision #19, D5).
+ *
+ * DORMANT (Phase 2.5, 2026-07-08): the sheets were severed from the app — no
+ * call site imports this module anymore (manual-bill upload and the Drive poll
+ * dropped the enqueue/drain). Kept, with the `sheet_writebacks` table, as the
+ * restoration point if a sheet transition is ever needed again.
  *
  * HARD RULE (decision #19 / M1): the app may ONLY append to the three tabs in
  * `ALLOWED_WRITEBACK_TABS` — asserted in code below; every other tab is refused.

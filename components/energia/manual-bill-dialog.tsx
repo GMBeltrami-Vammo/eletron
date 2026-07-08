@@ -53,7 +53,6 @@ interface ManualBillResult {
   chargeId: string;
   documentId: string;
   webViewLink: string;
-  sheetAppended: boolean;
   possibleDuplicate: boolean;
   warnings: string[];
 }
@@ -279,14 +278,6 @@ function ManualBillForm({
               </a>
             ) : null}
           </div>
-
-          {!result.sheetAppended ? (
-            <p className="rounded-lg border border-warning/40 bg-warning-subtle/40 p-2.5 text-xs text-warning-emphasis">
-              Planilha pendente — a cobrança está salva, mas a linha na planilha
-              do scraper ainda não foi escrita. Ela será reenviada
-              automaticamente.
-            </p>
-          ) : null}
 
           {result.possibleDuplicate ? (
             <p className="flex items-start gap-1.5 rounded-lg border border-warning/40 bg-warning-subtle/40 p-2.5 text-xs text-warning-emphasis">
