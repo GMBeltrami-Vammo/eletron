@@ -11,8 +11,9 @@
 import { revalidatePath } from "next/cache";
 
 import { revalidateSnapshot } from "@/lib/data/repository.server";
-import { withOperator, type ActionResult } from "@/lib/http/actions";
+import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { processComprovanteDocument } from "@/lib/comprovantes/pipeline";
 import {
   createManualBillFromUpload,
   type ManualBillUploadResult,
@@ -51,5 +52,43 @@ export async function createManualBill(
     revalidatePath("/pagamentos");
     await revalidateSnapshot();
     return result;
+  });
+}
+
+/**
+ * Re-runs the extraction/match pipeline on a document (the inbox / deep-dive
+ * "Reprocessar" control for stuck-pending or failed docs). Idempotent — safe to
+ * re-run; receipts upsert and payments are unique. Operator-gated; the pipeline
+ * itself writes with the service role.
+ */
+export async function reprocessComprovante(
+  documentId: string,
+): Promise<ActionResult<{ receipts: number; auto: number; review: number }>> {
+  return withOperator(async () => {
+    const result = await processComprovanteDocument(documentId, supabaseAdmin());
+    revalidatePath("/comprovantes");
+    revalidatePath(`/comprovantes/${documentId}`);
+    revalidatePath("/revisao/comprovantes");
+    return result;
+  });
+}
+
+/**
+ * Marks an unmatched/needs-review receipt as "não é comprovante" (rejected), so
+ * it stops surfacing in the review queue. Refuses if payments are allocated.
+ */
+export async function rejectReceipt(
+  receiptId: string,
+  reason: string,
+): Promise<ActionResult<void>> {
+  return withOperator(async (client) => {
+    unwrapRpc(
+      await client.rpc("reject_receipt", {
+        p_receipt_id: receiptId,
+        p_reason: reason,
+      }),
+    );
+    revalidatePath("/revisao/comprovantes");
+    revalidatePath("/comprovantes");
   });
 }

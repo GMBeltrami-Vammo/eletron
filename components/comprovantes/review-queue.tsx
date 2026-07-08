@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryKey } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Ban, Link2 } from "lucide-react";
 
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { formatCnpjCpf } from "@/components/revisao/labels";
+import { rejectReceipt } from "@/app/actions/comprovantes";
 import { CHARGE_KIND_UI, MATCH_STATUS_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 
@@ -30,13 +31,54 @@ import type {
   ReviewReceiptRow,
   ViewerContext,
 } from "./types";
-import { Gate } from "./write-helpers";
+import { Gate, useRunAction } from "./write-helpers";
 
 const REVIEW_KEY = ["comprovantes-review"] as const;
 
 interface PickerTarget {
   row: ReviewReceiptRow;
   preselect: string | null;
+}
+
+/**
+ * Operator-gated "Não é comprovante": prompts for an optional reason (Cancel
+ * aborts) then calls `rejectReceipt`, which drops the receipt out of the review
+ * queue. Toast + query invalidation come from `useRunAction`.
+ */
+function RejectButton({
+  receiptId,
+  isOperator,
+  invalidate,
+}: {
+  receiptId: string;
+  isOperator: boolean;
+  invalidate: QueryKey[];
+}) {
+  const { run, pending } = useRunAction();
+  function onReject() {
+    const reason = window.prompt(
+      "Marcar como “não é comprovante”. Descreva o motivo (opcional):",
+      "",
+    );
+    if (reason === null) return; // cancelado
+    void run(() => rejectReceipt(receiptId, reason), {
+      success: "Recibo removido da fila (não é comprovante)",
+      invalidate,
+    });
+  }
+  return (
+    <Gate isOperator={isOperator}>
+      <Button
+        size="xs"
+        variant="ghost"
+        disabled={!isOperator || pending}
+        onClick={onReject}
+      >
+        <Ban className="size-3" strokeWidth={2} />
+        Não é comprovante
+      </Button>
+    </Gate>
+  );
 }
 
 export function ReviewQueue({
@@ -207,15 +249,11 @@ export function ReviewQueue({
                 Conciliar
               </Button>
             </Gate>
-            <span
-              className="inline-flex cursor-not-allowed"
-              title="Rejeição de recibo (“não é comprovante”) chega com o RPC de rejeição — fase 3"
-            >
-              <Button size="xs" variant="ghost" disabled>
-                <Ban className="size-3" strokeWidth={2} />
-                Não é comprovante
-              </Button>
-            </span>
+            <RejectButton
+              receiptId={row.original.id}
+              isOperator={viewer.isOperator}
+              invalidate={[REVIEW_KEY, ["comprovantes-inbox"]]}
+            />
           </div>
         ),
       },

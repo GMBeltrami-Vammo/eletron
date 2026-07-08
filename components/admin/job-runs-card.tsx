@@ -1,17 +1,28 @@
 "use client";
 
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Play } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Play } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
@@ -27,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import type { BadgeColor } from "@/components/vammo/status-badge";
+import { runJobNow } from "@/app/actions/admin";
 import { formatDateTime } from "@/lib/format";
 import { refreshJobRuns } from "./admin-actions";
 import type { AdminTableResult, JobRunRow } from "./admin-data";
@@ -58,6 +70,105 @@ function duration(startedAt: string, finishedAt: string | null): string {
   if (s < 60) return `${s.toFixed(1).replace(".", ",")} s`;
   const m = Math.floor(s / 60);
   return `${m} min ${Math.round(s % 60)} s`;
+}
+
+type RunnableJob = "sheet-sync" | "alerts-eval" | "daily";
+
+const JOB_OPTIONS: { job: RunnableJob; label: string; hint: string }[] = [
+  {
+    job: "daily",
+    label: "Rotina diária",
+    hint: "Sincroniza a planilha e reavalia os alertas",
+  },
+  {
+    job: "sheet-sync",
+    label: "Sincronizar planilha",
+    hint: "Lê a planilha e atualiza o banco",
+  },
+  {
+    job: "alerts-eval",
+    label: "Avaliar alertas",
+    hint: "Reavalia e regrava o painel de alertas",
+  },
+];
+
+/**
+ * Admin-gated manual job trigger (rendered in the card header). A dropdown
+ * picks which job — rotina diária is the first/default choice; each runs the
+ * job to completion (runJobNow awaits it), then toasts and invalidates the Jobs
+ * query. Non-admins see it disabled with a tooltip; runJobNow re-checks the
+ * admin role server-side, so this is only the affordance.
+ */
+function RunJobMenu({ isAdmin }: { isAdmin: boolean }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [pending, setPending] = React.useState<RunnableJob | null>(null);
+
+  async function trigger(job: RunnableJob, label: string) {
+    if (!window.confirm(`Executar "${label}" agora?`)) return;
+    setPending(job);
+    try {
+      const res = await runJobNow(job);
+      if (res.ok) {
+        toast.success(`${label}: execução concluída`);
+        queryClient.invalidateQueries({ queryKey: ["job-runs"] });
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao executar o job",
+      );
+    } finally {
+      setPending(null);
+    }
+  }
+
+  if (!isAdmin) {
+    return (
+      <span
+        title="Requer papel de administrador"
+        className="inline-flex cursor-not-allowed"
+      >
+        <Button variant="outline" size="sm" disabled>
+          <Play className="size-3.5" strokeWidth={2} />
+          Executar agora
+        </Button>
+      </span>
+    );
+  }
+
+  const busy = pending !== null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="outline" size="sm" />}
+        disabled={busy}
+      >
+        {busy ? (
+          <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
+        ) : (
+          <Play className="size-3.5" strokeWidth={2} />
+        )}
+        {busy ? "Executando…" : "Executar agora"}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>Executar job agora</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {JOB_OPTIONS.map((opt) => (
+          <DropdownMenuItem
+            key={opt.job}
+            onClick={() => trigger(opt.job, opt.label)}
+            className="flex-col items-start gap-0.5"
+          >
+            <span className="text-sm font-medium">{opt.label}</span>
+            <span className="text-xs text-muted-foreground">{opt.hint}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function JobRunsCard({
@@ -107,6 +218,9 @@ export function JobRunsCard({
           Últimas execuções dos jobs (sincronização, alertas, comprovantes).
           Atualiza automaticamente enquanto há execução em curso.
         </CardDescription>
+        <CardAction>
+          <RunJobMenu isAdmin={isAdmin} />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -119,14 +233,13 @@ export function JobRunsCard({
                 <TableHead>Duração</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Detalhes</TableHead>
-                <TableHead className="text-right">Ação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={6}
                     className="h-16 text-center text-sm text-muted-foreground"
                   >
                     Nenhuma execução registrada.
@@ -203,16 +316,6 @@ export function JobRunsCard({
                             <span className="text-muted-foreground">—</span>
                           ) : null}
                         </div>
-                      </TableCell>
-                      <TableCell className="py-2 text-right">
-                        {isAdmin ? (
-                          <span title="Disparo manual chega em breve (fase 2)">
-                            <Button variant="outline" size="xs" disabled>
-                              <Play className="size-3" strokeWidth={2} />
-                              Executar agora
-                            </Button>
-                          </span>
-                        ) : null}
                       </TableCell>
                     </TableRow>
                   );

@@ -10,13 +10,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Download, ExternalLink, TriangleAlert } from "lucide-react";
+import { Download, ExternalLink, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AuditByline } from "@/components/vammo/audit-byline";
 import { StatusBadge } from "@/components/vammo/status-badge";
+import { reprocessComprovante } from "@/app/actions/comprovantes";
 import { formatBRL } from "@/lib/format";
 
 import { fetchDeepDiveData } from "./actions";
@@ -25,7 +26,7 @@ import { PdfViewer } from "./pdf-viewer";
 import { ReceiptCard } from "./receipt-card";
 import { PROCESSING_STATUS_UI } from "./labels";
 import type { DeepDiveData, ViewerContext } from "./types";
-import { NOT_OPERATOR } from "./write-helpers";
+import { Gate, useRunAction } from "./write-helpers";
 
 function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -35,6 +36,34 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
       </span>
       <span className="text-sm font-semibold tabular-nums">{value}</span>
     </div>
+  );
+}
+
+/** Operator-gated "Reprocessar" for a failed or stuck-pending document. */
+function ReprocessButton({
+  isOperator,
+  pending,
+  onReprocess,
+}: {
+  isOperator: boolean;
+  pending: boolean;
+  onReprocess: () => void;
+}) {
+  return (
+    <Gate isOperator={isOperator}>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!isOperator || pending}
+        onClick={onReprocess}
+      >
+        <RefreshCw
+          className={pending ? "size-4 animate-spin" : "size-4"}
+          strokeWidth={2}
+        />
+        Reprocessar
+      </Button>
+    </Gate>
   );
 }
 
@@ -65,6 +94,15 @@ export function ComprovanteDetail({
   });
 
   const invalidate = React.useMemo(() => [detailKey], [detailKey]);
+
+  const { run, pending: actionPending } = useRunAction();
+  const reprocess = React.useCallback(() => {
+    void run(() => reprocessComprovante(documentId), {
+      success: "Reprocessamento concluído",
+      invalidate,
+    });
+  }, [run, documentId, invalidate]);
+
   const doc = data.document;
 
   if (!doc) {
@@ -203,17 +241,12 @@ export function ComprovanteDetail({
               <AlertTitle>Falha no processamento</AlertTitle>
               <AlertDescription>
                 {doc.processingError ?? "Não foi possível extrair este comprovante."}
-                <span
-                  className="mt-2 inline-flex cursor-not-allowed"
-                  title={
-                    viewer.isOperator
-                      ? "Reprocessamento manual chega na fase 3 (o cron reprocessa a fila)"
-                      : NOT_OPERATOR
-                  }
-                >
-                  <Button size="sm" variant="outline" disabled>
-                    Reprocessar
-                  </Button>
+                <span className="mt-2 inline-flex">
+                  <ReprocessButton
+                    isOperator={viewer.isOperator}
+                    pending={actionPending}
+                    onReprocess={reprocess}
+                  />
                 </span>
               </AlertDescription>
             </Alert>
@@ -222,6 +255,11 @@ export function ComprovanteDetail({
               <p className="text-sm text-muted-foreground">
                 Processando… os recibos aparecem assim que a extração terminar.
               </p>
+              <ReprocessButton
+                isOperator={viewer.isOperator}
+                pending={actionPending}
+                onReprocess={reprocess}
+              />
               <Skeleton className="h-28 w-full" />
               <Skeleton className="h-28 w-full" />
             </div>

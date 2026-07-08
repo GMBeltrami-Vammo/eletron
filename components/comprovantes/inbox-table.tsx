@@ -18,6 +18,7 @@ import { AuditByline } from "@/components/vammo/audit-byline";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatCard } from "@/components/vammo/stat-card";
 import { StatusBadge } from "@/components/vammo/status-badge";
+import { reprocessComprovante } from "@/app/actions/comprovantes";
 import { formatNumber } from "@/lib/format";
 
 import { fetchInboxData } from "./actions";
@@ -27,9 +28,43 @@ import {
 } from "./labels";
 import type { InboxData, InboxDocRow, ViewerContext } from "./types";
 import { UploadCard } from "./upload-card";
-import { NOT_OPERATOR } from "./write-helpers";
+import { Gate, useRunAction } from "./write-helpers";
 
 const INBOX_KEY = ["comprovantes-inbox"] as const;
+
+/** Operator-gated "Reprocessar" for a failed or stuck-pending inbox document. */
+function ReprocessButton({
+  documentId,
+  isOperator,
+}: {
+  documentId: string;
+  isOperator: boolean;
+}) {
+  const { run, pending } = useRunAction();
+  return (
+    <span className="inline-flex" onClick={(e) => e.stopPropagation()}>
+      <Gate isOperator={isOperator}>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={!isOperator || pending}
+          onClick={() =>
+            void run(() => reprocessComprovante(documentId), {
+              success: "Reprocessamento concluído",
+              invalidate: [INBOX_KEY],
+            })
+          }
+        >
+          <RefreshCw
+            className={pending ? "size-3 animate-spin" : "size-3"}
+            strokeWidth={2}
+          />
+          Reprocessar
+        </Button>
+      </Gate>
+    </span>
+  );
+}
 
 function buildColumns(
   isOperator: boolean,
@@ -105,27 +140,18 @@ function buildColumns(
       accessorFn: (r) => PROCESSING_STATUS_UI[r.processingStatus].label,
       cell: ({ row }) => {
         const ui = PROCESSING_STATUS_UI[row.original.processingStatus];
-        const failed = row.original.processingStatus === "failed";
+        const status = row.original.processingStatus;
+        const canReprocess = status === "failed" || status === "pending";
         return (
           <span className="inline-flex items-center gap-2">
             <span title={row.original.processingError ?? undefined}>
               <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
             </span>
-            {failed ? (
-              <span
-                title={
-                  isOperator
-                    ? "Reprocessamento manual chega na fase 3 (o cron reprocessa a fila)"
-                    : NOT_OPERATOR
-                }
-                className="inline-flex cursor-not-allowed"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Button size="xs" variant="outline" disabled>
-                  <RefreshCw className="size-3" strokeWidth={2} />
-                  Reprocessar
-                </Button>
-              </span>
+            {canReprocess ? (
+              <ReprocessButton
+                documentId={row.original.id}
+                isOperator={isOperator}
+              />
             ) : null}
           </span>
         );
