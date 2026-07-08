@@ -97,10 +97,22 @@ describe("toChargeRow", () => {
     expect(row.status_source).toBe("sync");
   });
 
-  it("includeStatus=false omits status/status_source (preserve human state)", () => {
+  it("includeStatus=false omits status + all human-owned columns (stickiness)", () => {
     const row = toChargeRow(charge(), anyStation, { includeStatus: false });
-    expect("status" in row).toBe(false);
-    expect("status_source" in row).toBe(false);
+    // a re-sync of an rpc-owned row must not clobber human attribution/flags/status
+    for (const col of [
+      "status",
+      "status_source",
+      "billing_account_id",
+      "station_id",
+      "match_status",
+      "flags",
+    ]) {
+      expect(col in row, `rpc row must omit ${col}`).toBe(false);
+    }
+    // ...but still refreshes objective sheet-derived data
+    expect(row.amount).toBe(charge().amount ?? 0);
+    expect(row.dedupe_key).toBe(charge().dedupeKey);
   });
 
   it("coalesces a null amount to 0 (charges.amount is NOT NULL)", () => {

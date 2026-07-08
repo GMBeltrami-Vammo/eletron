@@ -11,6 +11,8 @@ import type { PagamentoRow } from "@/components/pagamentos/types";
 import { getRepository } from "@/lib/data/repository.server";
 import { INGEST_SOURCE } from "@/lib/domain";
 import type { LoadedSnapshot } from "@/lib/data/repository";
+import { getViewer } from "@/components/admin/viewer";
+import { readChargeRefs, type ChargeRef } from "./charge-refs";
 
 export const metadata: Metadata = { title: "Pagamentos — Eletron" };
 
@@ -18,7 +20,10 @@ export const metadata: Metadata = { title: "Pagamentos — Eletron" };
  * Phase 1 ledger rows = the 2_Pagamentos backfill (source 'sheet_backfill').
  * Energy invoices from the scraper live in /energia › Faturas.
  */
-function buildRows(snapshot: LoadedSnapshot): PagamentoRow[] {
+function buildRows(
+  snapshot: LoadedSnapshot,
+  refs: Map<string, ChargeRef>,
+): PagamentoRow[] {
   const accountById = new Map(snapshot.billingAccounts.map((a) => [a.id, a]));
   const contractById = new Map(snapshot.contracts.map((c) => [c.id, c]));
   const counterpartyById = new Map(
@@ -27,8 +32,13 @@ function buildRows(snapshot: LoadedSnapshot): PagamentoRow[] {
   const stationById = new Map(snapshot.stations.map((s) => [s.id, s]));
 
   return snapshot.charges
-    .filter((charge) => charge.source === INGEST_SOURCE.sheetBackfill)
+    .filter(
+      (charge) =>
+        charge.source === INGEST_SOURCE.sheetBackfill ||
+        charge.source === INGEST_SOURCE.gerarMes,
+    )
     .map((charge) => {
+      const ref = refs.get(charge.dedupeKey);
       const account =
         charge.billingAccountId !== null
           ? accountById.get(charge.billingAccountId)
@@ -64,11 +74,17 @@ function buildRows(snapshot: LoadedSnapshot): PagamentoRow[] {
         source: charge.source,
         dedupeKey: charge.dedupeKey,
         notes: charge.notes,
+        chargeUuid: ref?.uuid ?? null,
+        flags: charge.flags ?? [],
+        statusSource: charge.statusSource ?? null,
+        lastActorEmail: ref?.lastActorEmail ?? null,
+        lastActorAt: ref?.lastActorAt ?? null,
       };
     });
 }
 
 async function PagamentosContent() {
+  const viewer = await getViewer();
   let snapshot: LoadedSnapshot;
   try {
     snapshot = await getRepository().getSnapshot();
@@ -91,7 +107,15 @@ async function PagamentosContent() {
     );
   }
 
-  return <PagamentosView rows={buildRows(snapshot)} />;
+  const refs = await readChargeRefs();
+
+  return (
+    <PagamentosView
+      rows={buildRows(snapshot, refs)}
+      canWrite={viewer.role !== null}
+      isAdmin={viewer.role === "admin"}
+    />
+  );
 }
 
 function PagamentosSkeleton() {

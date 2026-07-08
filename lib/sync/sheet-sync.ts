@@ -222,17 +222,14 @@ export function toChargeRow(
   validStation: ValidStation,
   opts: { includeStatus: boolean },
 ): Row {
-  const base: Row = {
-    billing_account_id: c.billingAccountId ? deterministicUuid(c.billingAccountId) : null,
-    station_id: validStation(c.stationId),
+  // Objective, sheet-derived columns — always safe to overwrite on re-sync.
+  const dataOnly: Row = {
     kind: c.kind,
     competencia: c.competencia,
     competencia_source: c.competenciaSource,
     amount: c.amount ?? 0, // charges.amount NOT NULL (unparseable Valor → 0, matchStatus already needs_review)
     expected_amount: c.expectedAmount,
     due_date: c.dueDate,
-    match_status: c.matchStatus,
-    flags: c.flags ?? [],
     payment_method: c.paymentMethod,
     banco: c.banco,
     agencia: c.agencia,
@@ -248,12 +245,24 @@ export function toChargeRow(
     raw: c.raw,
     notes: c.notes,
   };
-  // H2: only carry status (as 'sync') for rows the pipeline owns; for rows a
-  // human set to 'rpc' we omit status/status_source so the upsert preserves them.
+  // H2 + match/flag stickiness: for pipeline-owned rows (status_source='sync')
+  // the sync also writes the human-ownable columns (attribution, flags, status).
+  // For rows a human/RPC set (status_source='rpc' — confirm/record_payment/
+  // gerar_mes/resolve_unmatched_charge/assign_station_to_account), the upsert
+  // OMITS billing_account_id/station_id/match_status/flags/status so a re-sync
+  // never clobbers the human attribution, gerar_mes flags, or paid state.
   if (opts.includeStatus) {
-    return { ...base, status: c.status, status_source: "sync" };
+    return {
+      ...dataOnly,
+      billing_account_id: c.billingAccountId ? deterministicUuid(c.billingAccountId) : null,
+      station_id: validStation(c.stationId),
+      match_status: c.matchStatus,
+      flags: c.flags ?? [],
+      status: c.status,
+      status_source: "sync",
+    };
   }
-  return base;
+  return dataOnly;
 }
 
 export function toEnergyDetailRow(d: ChargeEnergyDetails, chargeUuid: string): Row {

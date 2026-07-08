@@ -8,12 +8,18 @@ import { DataTableSkeleton } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { EnergiaTabs } from "@/components/energia/energia-tabs";
+import { readEnergyAccounts } from "@/components/energia/energy-accounts";
 import type {
   EnergyProvider,
   FaturaRow,
   InstalacaoRow,
 } from "@/components/energia/types";
 import { getRepository } from "@/lib/data/repository.server";
+import {
+  getSessionEmail,
+  isOperatorEmail,
+  userClientFor,
+} from "@/lib/http/guards";
 import {
   ACCOUNT_TYPE,
   type ChargeEnergyDetails,
@@ -149,6 +155,7 @@ function buildRows(snapshot: LoadedSnapshot): {
       installationKey: account.enelId ?? account.edpUc ?? account.id,
       stationId: charge.stationId,
       matchStatus: charge.matchStatus,
+      source: charge.source,
       competencia: charge.competencia,
       dueDate: charge.dueDate,
       amount: charge.amount,
@@ -170,6 +177,18 @@ function buildRows(snapshot: LoadedSnapshot): {
   }
 
   return { instalacoes, faturas };
+}
+
+/** Best-effort operator check for the manual-bill write gate (fails closed). */
+async function currentIsOperator(): Promise<boolean> {
+  try {
+    const email = await getSessionEmail();
+    if (!email) return false;
+    const client = await userClientFor(email);
+    return await isOperatorEmail(client, email);
+  } catch {
+    return false;
+  }
 }
 
 async function EnergiaContent() {
@@ -201,6 +220,10 @@ async function EnergiaContent() {
   }
 
   const { instalacoes, faturas } = buildRows(snapshot);
+  const [accounts, canWrite] = await Promise.all([
+    readEnergyAccounts(),
+    currentIsOperator(),
+  ]);
 
   return (
     <>
@@ -222,7 +245,12 @@ async function EnergiaContent() {
           </div>
         }
       />
-      <EnergiaTabs instalacoes={instalacoes} faturas={faturas} />
+      <EnergiaTabs
+        instalacoes={instalacoes}
+        faturas={faturas}
+        accounts={accounts}
+        canWrite={canWrite}
+      />
     </>
   );
 }

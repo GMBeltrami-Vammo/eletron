@@ -4,15 +4,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { FaturasTable } from "./faturas-table";
 import { InstalacoesTable } from "./instalacoes-table";
-import type { FaturaRow, InstalacaoRow } from "./types";
+import type { EnergyAccountOption, FaturaRow, InstalacaoRow } from "./types";
 
 /** /energia — 'Instalações' (per enel_id/UC) + 'Faturas' (invoice ledger). */
 export function EnergiaTabs({
   instalacoes,
   faturas,
+  accounts,
+  canWrite,
 }: {
   instalacoes: InstalacaoRow[];
   faturas: FaturaRow[];
+  accounts: EnergyAccountOption[];
+  canWrite: boolean;
 }) {
   return (
     <Tabs defaultValue="instalacoes">
@@ -34,7 +38,7 @@ export function EnergiaTabs({
         <InstalacoesTable rows={instalacoes} />
       </TabsContent>
       <TabsContent value="faturas" className="mt-3">
-        <FaturasTable rows={faturas} />
+        <FaturasTable rows={faturas} accounts={accounts} canWrite={canWrite} />
       </TabsContent>
     </Tabs>
   );

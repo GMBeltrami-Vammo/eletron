@@ -6,12 +6,32 @@
 
 import type {
   AutoDebitStatus,
+  IngestSource,
   MatchStatus,
   UtilityBillStatus,
 } from "@/lib/domain";
 
 /** Energy-provider subset of AccountType. */
 export type EnergyProvider = "energy_enel" | "energy_edp";
+
+/**
+ * Energy billing account WITH its real charging uuid — the manual-bill RPC and
+ * the meter-reading account picker take the uuid, but the Repository hides it
+ * (domain ids are deterministic strings). Built server-side by
+ * `readEnergyAccounts()` (energy-accounts.ts) and passed to the client dialog.
+ * Plain/client-safe (no `server-only`) so client components may import the type.
+ */
+export interface EnergyAccountOption {
+  /** charging.billing_accounts.id (uuid). */
+  id: string;
+  provider: EnergyProvider;
+  /** enel_id or edp_uc. */
+  installationKey: string;
+  stationId: number | null;
+  stationName: string | null;
+  address: string | null;
+  meterReadingRequired: boolean;
+}
 
 /** One row per enel_id / UC in the "Instalações" tab. */
 export interface InstalacaoRow {
@@ -54,6 +74,8 @@ export interface FaturaRow {
   installationKey: string;
   stationId: number | null;
   matchStatus: MatchStatus;
+  /** Ingest provenance — `manual` renders a "Manual" source badge. */
+  source: IngestSource;
   /** 'YYYY-MM-01' or null. */
   competencia: string | null;
   dueDate: string | null;

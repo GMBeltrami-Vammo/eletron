@@ -31,7 +31,6 @@ suite("comprovante parser — real PDFs", () => {
     expect(hasNoExtractableText(pages)).toBe(false);
 
     const receipts = parseComprovantePages(pages);
-    // eslint-disable-next-line no-console
     console.log(
       `[DA] pages=${pageCount} receipts=${receipts.length}`,
       receipts.map((r) => ({
@@ -59,7 +58,6 @@ suite("comprovante parser — real PDFs", () => {
 
     const receipts = parseComprovantePages(pages);
     const withAmount = receipts.filter((r) => r.amount !== null);
-    // eslint-disable-next-line no-console
     console.log(
       `[mixed] pages=${pageCount} receipts=${receipts.length} withAmount=${withAmount.length}`,
       receipts.slice(0, 12).map((r) => ({

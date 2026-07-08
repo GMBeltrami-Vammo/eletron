@@ -23,8 +23,9 @@ import {
   formatNumber,
 } from "@/lib/format";
 
+import { ManualBillDialog } from "./manual-bill-dialog";
 import { StationCell } from "./station-cell";
-import type { FaturaRow } from "./types";
+import type { EnergyAccountOption, FaturaRow } from "./types";
 
 /** Typed CSV-override meta (DataTable reads `meta.csvValue`). */
 function csvMeta(
@@ -61,7 +62,16 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     accessorFn: (r) => ACCOUNT_TYPE_UI[r.provider].label,
     cell: ({ row }) => {
       const ui = ACCOUNT_TYPE_UI[row.original.provider];
-      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+      return (
+        <span className="flex items-center gap-1">
+          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+          {row.original.source === "manual" ? (
+            <StatusBadge color="grey" outline>
+              Manual
+            </StatusBadge>
+          ) : null}
+        </span>
+      );
     },
   },
   {
@@ -272,7 +282,15 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
   },
 ];
 
-export function FaturasTable({ rows }: { rows: FaturaRow[] }) {
+export function FaturasTable({
+  rows,
+  accounts,
+  canWrite,
+}: {
+  rows: FaturaRow[];
+  accounts: EnergyAccountOption[];
+  canWrite: boolean;
+}) {
   const [provider, setProvider] = React.useState("all");
   const [month, setMonth] = React.useState("all");
   const [missingOnly, setMissingOnly] = React.useState(false);
@@ -351,12 +369,15 @@ export function FaturasTable({ rows }: { rows: FaturaRow[] }) {
         </>
       }
       toolbarRight={
-        <span title="Marcado pelo export fiscal (Apps Script) — importação na fase 3">
-          <Button variant="outline" size="sm" className="h-9 bg-card" disabled>
-            <ListChecks className="size-4" strokeWidth={2} />
-            Enviar ao fiscal em lote
-          </Button>
-        </span>
+        <>
+          <ManualBillDialog accounts={accounts} canWrite={canWrite} />
+          <span title="Marcado pelo export fiscal (Apps Script) — importação na fase 3">
+            <Button variant="outline" size="sm" className="h-9 bg-card" disabled>
+              <ListChecks className="size-4" strokeWidth={2} />
+              Enviar ao fiscal em lote
+            </Button>
+          </span>
+        </>
       }
     />
   );

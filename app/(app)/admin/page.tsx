@@ -17,6 +17,10 @@ import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { IngestIssues } from "@/components/admin/ingest-issues";
+import { getViewer } from "@/components/admin/viewer";
+import { readJobRuns, readUserRoles } from "@/components/admin/admin-data";
+import { UserRolesCard } from "@/components/admin/user-roles-card";
+import { JobRunsCard } from "@/components/admin/job-runs-card";
 import { getRepository } from "@/lib/data/repository.server";
 import { formatDateTime } from "@/lib/format";
 
@@ -32,6 +36,10 @@ export default function AdminPage() {
       <div className="space-y-4">
         <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
           <IngestHealthCard />
+        </Suspense>
+
+        <Suspense fallback={<Skeleton className="h-72 w-full rounded-xl" />}>
+          <AdminManagementCards />
         </Suspense>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -102,6 +110,21 @@ export default function AdminPage() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+async function AdminManagementCards() {
+  const viewer = await getViewer();
+  const isAdmin = viewer.role === "admin";
+  const [userRoles, jobRuns] = await Promise.all([
+    isAdmin ? readUserRoles() : Promise.resolve(null),
+    readJobRuns(50),
+  ]);
+  return (
+    <div className="space-y-4">
+      {isAdmin && userRoles ? <UserRolesCard data={userRoles} /> : null}
+      <JobRunsCard initial={jobRuns} isAdmin={isAdmin} />
     </div>
   );
 }

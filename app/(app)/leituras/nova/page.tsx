@@ -1,24 +1,41 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { getRepository } from "@/lib/data/repository.server";
 import { STATION_STATUS } from "@/lib/domain";
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+  getSessionEmail,
+  isOperatorEmail,
+  userClientFor,
+} from "@/lib/http/guards";
+import { readEnergyAccounts } from "@/components/energia/energy-accounts";
+import { readMeterReadings } from "@/components/leituras/readings-read";
+import { ACCOUNT_TYPE_UI } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/vammo/page-header";
 import {
   NovaLeituraFlow,
+  type LastReading,
+  type MeterAccountOption,
   type StationOption,
 } from "@/components/leituras/nova-leitura-flow";
 
 export const metadata: Metadata = { title: "Nova leitura" };
+
+/** Best-effort operator check for the client write gate (fails closed). */
+async function currentIsOperator(): Promise<boolean> {
+  try {
+    const email = await getSessionEmail();
+    if (!email) return false;
+    const client = await userClientFor(email);
+    return await isOperatorEmail(client, email);
+  } catch {
+    return false;
+  }
+}
 
 export default async function NovaLeituraPage({
   searchParams,
@@ -53,14 +70,6 @@ export default async function NovaLeituraPage({
         />
       </div>
 
-      <Alert>
-        <Info strokeWidth={2} />
-        <AlertTitle>Fase 1 — teste do fluxo</AlertTitle>
-        <AlertDescription>
-          O registro chega na fase 2: a leitura enviada aqui não é salva.
-        </AlertDescription>
-      </Alert>
-
       <Suspense fallback={<NovaLeituraSkeleton />}>
         <NovaLeituraContent initialStationId={initialStationId} />
       </Suspense>
@@ -74,7 +83,14 @@ async function NovaLeituraContent({
   initialStationId: number | null;
 }) {
   const repo = getRepository();
-  const snapshot = await repo.getSnapshot();
+  const [snapshot, accounts, readingsResult, email, canWrite] =
+    await Promise.all([
+      repo.getSnapshot(),
+      readEnergyAccounts(),
+      readMeterReadings(),
+      getSessionEmail(),
+      currentIsOperator(),
+    ]);
 
   const stations: StationOption[] = snapshot.stations
     .filter((s) => s.status !== STATION_STATUS.DECOMMISSIONED)
@@ -87,8 +103,31 @@ async function NovaLeituraContent({
     }))
     .sort((a, b) => a.id - b.id);
 
+  // Group metered energy accounts per station (picker only renders when >1).
+  const meteredAccountsByStation: Record<number, MeterAccountOption[]> = {};
+  for (const a of accounts) {
+    if (a.stationId === null) continue;
+    const label = `${ACCOUNT_TYPE_UI[a.provider].label} · ${a.installationKey}`;
+    (meteredAccountsByStation[a.stationId] ??= []).push({ id: a.id, label });
+  }
+
+  // Latest reading per station (readings arrive newest-first).
+  const lastReadingByStation: Record<number, LastReading> = {};
+  for (const r of readingsResult.readings) {
+    if (!(r.stationId in lastReadingByStation)) {
+      lastReadingByStation[r.stationId] = { kwh: r.readingKwh, date: r.readingDate };
+    }
+  }
+
   return (
-    <NovaLeituraFlow stations={stations} initialStationId={initialStationId} />
+    <NovaLeituraFlow
+      stations={stations}
+      initialStationId={initialStationId}
+      meteredAccountsByStation={meteredAccountsByStation}
+      lastReadingByStation={lastReadingByStation}
+      canWrite={canWrite}
+      userEmail={email}
+    />
   );
 }
 

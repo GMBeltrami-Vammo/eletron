@@ -3,9 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarPlus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -13,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AuditByline } from "@/components/vammo/audit-byline";
 import { DataTable } from "@/components/vammo/data-table";
 import { PageHeader } from "@/components/vammo/page-header";
 import { StatCard } from "@/components/vammo/stat-card";
@@ -28,6 +27,9 @@ import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 import type { PagamentoRow } from "./types";
+import { GerarMesDialog } from "./gerar-mes-dialog";
+import { StatusActions } from "./status-actions";
+import { FlagBadges } from "./flag-badges";
 
 /**
  * Ingest source → pt-BR badge label (labels.ts has no ingest-source map yet;
@@ -41,7 +43,7 @@ const SOURCE_LABEL: Record<IngestSource, string> = {
   drive_poll: "Drive",
   manual: "manual",
   metabase_sync: "Metabase",
-  gerar_mes: "gerar mês",
+  gerar_mes: "Gerado",
   auto_match: "conciliação",
   app_upload: "upload",
 };
@@ -63,7 +65,7 @@ function hasMismatch(row: PagamentoRow): boolean {
   );
 }
 
-const columns: ColumnDef<PagamentoRow, unknown>[] = [
+const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
   {
     id: "estacao",
     header: "Estação",
@@ -171,9 +173,35 @@ const columns: ColumnDef<PagamentoRow, unknown>[] = [
     header: "Status",
     accessorFn: (r) => CHARGE_STATUS_UI[r.status].label,
     cell: ({ row }) => {
-      const ui = CHARGE_STATUS_UI[row.original.status];
-      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+      const r = row.original;
+      const ui = CHARGE_STATUS_UI[r.status];
+      return (
+        <div className="space-y-0.5">
+          {r.status === "conciliado" ? (
+            <StatusBadge color="orange">
+              Conciliado (aguardando confirmação)
+            </StatusBadge>
+          ) : (
+            <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+          )}
+          {r.statusSource === "rpc" && r.lastActorAt ? (
+            <AuditByline
+              actorEmail={r.lastActorEmail}
+              at={r.lastActorAt}
+              className="block"
+            />
+          ) : null}
+        </div>
+      );
     },
+  },
+  {
+    id: "flags",
+    header: "Sinalizações",
+    enableSorting: false,
+    accessorFn: (r) => r.flags.join(" "),
+    cell: ({ row }) => <FlagBadges flags={row.original.flags} />,
+    meta: csvMeta((r) => r.flags.join(", ")),
   },
   {
     id: "pagamento",
@@ -233,7 +261,17 @@ const columns: ColumnDef<PagamentoRow, unknown>[] = [
   },
 ];
 
-export function PagamentosView({ rows }: { rows: PagamentoRow[] }) {
+export function PagamentosView({
+  rows,
+  canWrite,
+  isAdmin,
+}: {
+  rows: PagamentoRow[];
+  /** operator or admin — enables Gerar mês + lifecycle actions. */
+  canWrite: boolean;
+  /** admin — additionally enables the "Cancelada" transition. */
+  isAdmin: boolean;
+}) {
   const months = React.useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) {
@@ -273,6 +311,25 @@ export function PagamentosView({ rows }: { rows: PagamentoRow[] }) {
     return { previstoSum, pagoCount, pagoSum, pendenteCount, pendenteSum };
   }, [filtered]);
 
+  const columns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
+    () => [
+      ...baseColumns,
+      {
+        id: "acoes",
+        enableSorting: false,
+        enableHiding: false,
+        cell: ({ row }) => (
+          <StatusActions
+            row={row.original}
+            canWrite={canWrite}
+            isAdmin={isAdmin}
+          />
+        ),
+      },
+    ],
+    [canWrite, isAdmin],
+  );
+
   const monthLabel =
     month === "all"
       ? "Todos os meses"
@@ -303,12 +360,7 @@ export function PagamentosView({ rows }: { rows: PagamentoRow[] }) {
                 <SelectItem value="all">Todos os meses</SelectItem>
               </SelectContent>
             </Select>
-            <span title="Disponível na fase 2">
-              <Button disabled>
-                <CalendarPlus className="size-4" strokeWidth={2} />
-                Gerar mês
-              </Button>
-            </span>
+            <GerarMesDialog canWrite={canWrite} />
           </>
         }
       />

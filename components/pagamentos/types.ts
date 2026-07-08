@@ -32,4 +32,13 @@ export interface PagamentoRow {
   source: IngestSource;
   dedupeKey: string;
   notes: string | null;
+  /** Postgres uuid (resolved from dedupe_key via charge-refs); null in sheets/dev. */
+  chargeUuid: string | null;
+  /** gerar_mes / pipeline flags (empty on sheet-backfill rows). */
+  flags: string[];
+  /** 'rpc' = human-set (sticky); 'sync' = pipeline; null when unknown. */
+  statusSource: "sync" | "rpc" | null;
+  /** Last write actor + timestamp for the AuditByline (rpc-touched rows only). */
+  lastActorEmail: string | null;
+  lastActorAt: string | null;
 }
