@@ -49,6 +49,8 @@ export type PaymentMethod = (typeof PAYMENT_METHOD)[keyof typeof PAYMENT_METHOD]
 export const CHARGE_STATUS = {
   pendente: "pendente",
   boletoRecebido: "boleto_recebido",
+  /** Auto-matched by the comprovante matcher; awaiting human `confirm_charge` (Phase 2, decision #24). */
+  conciliado: "conciliado",
   pago: "pago",
   atrasado: "atrasado",
   antecipado: "antecipado",
@@ -136,6 +138,12 @@ export const INGEST_SOURCE = {
   manual: "manual",
   metabaseSync: "metabase_sync",
   sheetBackfill: "sheet_backfill",
+  /** Rent charges generated in-app by the `gerar_mes` RPC (Phase 2). */
+  gerarMes: "gerar_mes",
+  /** Auto-matched payments written by the comprovante poller (Phase 2). */
+  autoMatch: "auto_match",
+  /** Files uploaded through an in-app upload route (Phase 2). */
+  appUpload: "app_upload",
 } as const;
 export type IngestSource = (typeof INGEST_SOURCE)[keyof typeof INGEST_SOURCE];
 
@@ -187,6 +195,10 @@ export const ALERT_TYPE = {
   missingMeterReading: "missing_meter_reading",
   valueMismatch: "value_mismatch",
   contractExpiring: "contract_expiring",
+  /** Phase 2 (M2) self-alerts — emitted by jobs/routes, not evaluateAlerts(). */
+  manualBillSheetAppendFailed: "manual_bill_sheet_append_failed",
+  encryptedComprovante: "encrypted_comprovante",
+  sheetSyncStale: "sheet_sync_stale",
 } as const;
 export type AlertType = (typeof ALERT_TYPE)[keyof typeof ALERT_TYPE];
 
@@ -207,3 +219,36 @@ export const COUNTERPARTY_KIND = {
   outro: "outro",
 } as const;
 export type CounterpartyKind = (typeof COUNTERPARTY_KIND)[keyof typeof COUNTERPARTY_KIND];
+
+/** charging.document_kind — what an ingested document is. */
+export const DOCUMENT_KIND = {
+  faturaEnel: "fatura_enel",
+  faturaEdp: "fatura_edp",
+  boletoAluguel: "boleto_aluguel",
+  boletoCondominio: "boleto_condominio",
+  notaDebito: "nota_debito",
+  nfse: "nfse",
+  comprovante: "comprovante",
+  contrato: "contrato",
+  fotoMedidor: "foto_medidor",
+  outro: "outro",
+} as const;
+export type DocumentKind = (typeof DOCUMENT_KIND)[keyof typeof DOCUMENT_KIND];
+
+/** charging.drive_folder_kind — which Drive folder a document lives in (decision #17). */
+export const DRIVE_FOLDER_KIND = {
+  meterPhotos: "meter_photos",
+  comprovantes: "comprovantes",
+  bills: "bills",
+  other: "other",
+} as const;
+export type DriveFolderKind = (typeof DRIVE_FOLDER_KIND)[keyof typeof DRIVE_FOLDER_KIND];
+
+/** charging.doc_processing_status — pipeline state of an ingested document. */
+export const DOC_PROCESSING_STATUS = {
+  pending: "pending",
+  processed: "processed",
+  needsReview: "needs_review",
+  failed: "failed",
+} as const;
+export type DocProcessingStatus = (typeof DOC_PROCESSING_STATUS)[keyof typeof DOC_PROCESSING_STATUS];

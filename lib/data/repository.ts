@@ -111,26 +111,24 @@ export interface Repository {
 }
 
 /**
- * Phase 1 implementation over a raw-tabs loader (live Sheets or xlsx
- * fixtures — injected). Normalization/derivation run once per instance and
- * are memoized; instance lifetime/caching is the caller's concern
- * (repository.server.ts holds the Next.js wiring).
+ * Backend-agnostic base: every read method derives from ONE `LoadedSnapshot`
+ * (normalize → derive), memoized per instance. Subclasses only implement
+ * `loadSnapshot()` — the sheets backend normalizes raw tabs, the Supabase
+ * backend assembles the snapshot from the `charging` schema. This is what
+ * makes the two backends produce identical shapes (the derived logic —
+ * stationRollups/evaluateAlerts/filters — lives here, once).
  */
-export class SheetSnapshotRepository implements Repository {
-  private snapshotPromise: Promise<LoadedSnapshot> | null = null;
+export abstract class SnapshotRepository implements Repository {
+  protected snapshotPromise: Promise<LoadedSnapshot> | null = null;
 
-  constructor(
-    private readonly loadRaw: () => Promise<RawTabs>,
-    private readonly clock: () => Date = () => new Date(),
-  ) {}
+  constructor(protected readonly clock: () => Date = () => new Date()) {}
+
+  /** Load + assemble the snapshot; the base memoizes it per instance. */
+  protected abstract loadSnapshot(): Promise<LoadedSnapshot>;
 
   getSnapshot(): Promise<LoadedSnapshot> {
     if (this.snapshotPromise === null) {
-      this.snapshotPromise = (async () => {
-        const raw = await this.loadRaw();
-        const snapshot = normalizeSnapshot(raw);
-        return { ...snapshot, fetchedAt: this.clock().toISOString() };
-      })();
+      this.snapshotPromise = this.loadSnapshot();
       // A failed load must not poison the memo forever.
       this.snapshotPromise.catch(() => {
         this.snapshotPromise = null;
@@ -323,5 +321,26 @@ export class SheetSnapshotRepository implements Repository {
       byProvider: { enel: minMax(enel), edp: minMax(edp) },
       fetchedAt: snapshot.fetchedAt,
     };
+  }
+}
+
+/**
+ * Phase 1 implementation over a raw-tabs loader (live Sheets or xlsx
+ * fixtures — injected). Normalization/derivation run once per instance and
+ * are memoized; instance lifetime/caching is the caller's concern
+ * (repository.server.ts holds the Next.js wiring).
+ */
+export class SheetSnapshotRepository extends SnapshotRepository {
+  constructor(
+    private readonly loadRaw: () => Promise<RawTabs>,
+    clock: () => Date = () => new Date(),
+  ) {
+    super(clock);
+  }
+
+  protected async loadSnapshot(): Promise<LoadedSnapshot> {
+    const raw = await this.loadRaw();
+    const snapshot = normalizeSnapshot(raw);
+    return { ...snapshot, fetchedAt: this.clock().toISOString() };
   }
 }

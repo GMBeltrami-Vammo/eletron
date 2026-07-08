@@ -56,6 +56,7 @@ export const CHARGE_STATUS_UI: Record<ChargeStatus, LabelBadge> = {
   pago: { label: "Pago", color: "green" },
   pendente: { label: "Pendente", color: "yellow" },
   boleto_recebido: { label: "Boleto recebido", color: "blue" },
+  conciliado: { label: "Conciliado", color: "blue" },
   atrasado: { label: "Atrasado", color: "red" },
   antecipado: { label: "Antecipado", color: "dark-green" },
   em_compensacao: { label: "Em compensação", color: "grey" },

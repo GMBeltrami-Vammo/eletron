@@ -41,6 +41,9 @@ const SOURCE_LABEL: Record<IngestSource, string> = {
   drive_poll: "Drive",
   manual: "manual",
   metabase_sync: "Metabase",
+  gerar_mes: "gerar mês",
+  auto_match: "conciliação",
+  app_upload: "upload",
 };
 
 const PAID_STATUSES: ChargeStatus[] = ["pago", "antecipado"];

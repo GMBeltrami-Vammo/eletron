@@ -84,7 +84,13 @@ export function digitsOnly(v: string): string | null {
   return d.length > 0 ? d : null;
 }
 
-function slug(v: string): string {
+/**
+ * Slugifies a name for deterministic entity ids ('Mc Donalds' → 'mc-donalds').
+ * Exported so the Supabase read-repository reconstructs the SAME counterparty /
+ * third-party account ids from DB columns (one canonical definition — the
+ * parsing/derivation logic is otherwise reused verbatim).
+ */
+export function slug(v: string): string {
   return deaccent(v.toLowerCase())
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");

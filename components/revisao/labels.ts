@@ -12,6 +12,9 @@ export const INGEST_SOURCE_LABEL: Record<IngestSource, string> = {
   manual: "Manual",
   metabase_sync: "Metabase",
   sheet_backfill: "Planilha",
+  gerar_mes: "Gerar mês",
+  auto_match: "Conciliação (auto)",
+  app_upload: "Upload no app",
 };
 
 /** Display mask for normalized digits-only CNPJ/CPF (never an identity key). */

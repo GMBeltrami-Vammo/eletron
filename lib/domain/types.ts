@@ -31,6 +31,9 @@ import type {
   CompetenciaSource,
   ContractType,
   CounterpartyKind,
+  DocProcessingStatus,
+  DocumentKind,
+  DriveFolderKind,
   IngestSource,
   MatchStatus,
   PaymentMethod,
@@ -220,7 +223,20 @@ export interface Charge {
   expectedAmount: number | null;
   dueDate: string | null;
   status: ChargeStatus;
+  /**
+   * status_source — 'sync' (pipeline-derived) vs 'rpc' (human/RPC-set, sticky
+   * against re-sync; H2/decision #20). Optional in the domain type: the sheets
+   * backend (normalize.ts) leaves it undefined ≙ 'sync'; the Supabase backend
+   * always sets it from the column.
+   */
+  statusSource?: "sync" | "rpc";
   matchStatus: MatchStatus;
+  /**
+   * flags — gerar_mes / pipeline flags (`boxes_mismatch`, `no_metabase_data`,
+   * `pro_rata`, `new_station`, …) replacing the sheet's cell colors. Optional:
+   * undefined ≙ [] on the sheets backend; the Supabase backend reads the column.
+   */
+  flags?: string[];
   paymentMethod: PaymentMethod | null;
   banco: string | null;
   agencia: string | null;
@@ -332,15 +348,53 @@ export interface MeterReading {
   id: string;
   stationId: number;
   billingAccountId: string | null;
+  /** name — editable label, default '{swap_station_id} - {address}' (C3). */
+  name: string;
   readingDate: string;
   competencia: string;
   readingKwh: number;
   /** photo_document_id — MANDATORY photo (NOT NULL FK in Phase 2). */
   photoDocumentId: string;
+  /** photo_taken_at — EXIF capture time, copied off documents.exif. */
+  photoTakenAt: string | null;
+  /** photo_gps — raw EXIF GPS object (jsonb), null when absent. */
+  photoGps: unknown | null;
+  /** photo_warnings — EXIF sanity warnings (stale/far-from-station, …). */
+  photoWarnings: string[];
   readByEmail: string;
   notes: string | null;
   replacesReadingId: string | null;
   isSuperseded: boolean;
+}
+
+/**
+ * charging.documents — Drive-backed file store (decision #17); no Supabase
+ * Storage. One row per ingested file; `content_hash` (sha256) is the dedupe key.
+ * Read directly via `supabaseForUser` in server components — outside the
+ * Repository interface (H3).
+ */
+export interface Document {
+  id: string;
+  kind: DocumentKind;
+  source: IngestSource;
+  /** drive_file_id — the Drive object id (the store). */
+  driveFileId: string;
+  /** drive_folder_kind — which configured Drive folder it lives in. */
+  driveFolderKind: DriveFolderKind;
+  /** web_view_link — Drive preview URL (served via the session-checked proxy). */
+  webViewLink: string | null;
+  originalFilename: string | null;
+  /** content_hash — sha256, unique; THE dedupe key. */
+  contentHash: string;
+  mimeType: string | null;
+  byteSize: number | null;
+  pageCount: number | null;
+  /** exif — raw EXIF jsonb (meter columns are copied off it). */
+  exif: unknown | null;
+  processingStatus: DocProcessingStatus;
+  processingError: string | null;
+  processedAt: string | null;
+  uploadedByEmail: string | null;
 }
 
 /** eletron.rent_adjustments — 3_Reajustes. */

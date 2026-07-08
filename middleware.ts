@@ -8,6 +8,12 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth?.user;
   const { pathname } = req.nextUrl;
 
+  // Cron endpoints are machine-called (n8n / Vercel Cron) with a CRON_SECRET
+  // bearer, never a session — let the route's own constant-time check gate them.
+  if (pathname.startsWith("/api/cron")) {
+    return NextResponse.next();
+  }
+
   // Auth.js API routes and the login page are always public.
   if (pathname === "/login" || pathname.startsWith("/api/auth")) {
     if (isLoggedIn && pathname === "/login") {
