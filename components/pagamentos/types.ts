@@ -11,6 +11,7 @@ import type {
   MatchStatus,
   PaymentMethod,
 } from "@/lib/domain";
+import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 
 export interface PagamentoRow {
   chargeId: string;
@@ -41,4 +42,6 @@ export interface PagamentoRow {
   /** Last write actor + timestamp for the AuditByline (rpc-touched rows only). */
   lastActorEmail: string | null;
   lastActorAt: string | null;
+  /** Linked charging.payments coverage (R1) — null when none / sheets mode. */
+  payment: PaymentLinkSummary | null;
 }

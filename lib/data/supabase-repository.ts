@@ -190,6 +190,8 @@ interface StationRow {
   longitude: number | null;
   status: StationStatus;
   source_created_at: string | null;
+  active_boxes: number | null;
+  boxes_synced_at: string | null;
   raw: Record<string, string> | null;
 }
 interface CounterpartyRow {
@@ -454,6 +456,8 @@ export async function loadChargingWorld(
     longitude: num(r.longitude),
     status: r.status,
     sourceCreatedAt: r.source_created_at,
+    activeBoxes: r.active_boxes,
+    boxesSyncedAt: r.boxes_synced_at,
     raw: r.raw ?? {},
   }));
 

@@ -71,12 +71,15 @@ export function ComprovanteDetail({
   documentId,
   initialData,
   viewer,
+  initialPage = 1,
 }: {
   documentId: string;
   initialData: DeepDiveData;
   viewer: ViewerContext;
+  /** ?page=N deep-link from ledger comprovante chips (R1). */
+  initialPage?: number;
 }) {
-  const [page, setPage] = React.useState(1);
+  const [page, setPage] = React.useState(initialPage);
 
   const detailKey = React.useMemo(
     () => ["comprovante-detail", documentId] as const,

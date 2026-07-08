@@ -10,6 +10,7 @@ import type {
   MatchStatus,
   UtilityBillStatus,
 } from "@/lib/domain";
+import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 
 /** Energy-provider subset of AccountType. */
 export type EnergyProvider = "energy_enel" | "energy_edp";
@@ -92,9 +93,14 @@ export interface FaturaRow {
   /** ENEL C1–C6 joined, or EDP classificação · modalidade. */
   tariffClass: string | null;
   fiscalExported: boolean;
+  /** Débito automático of the installation (R1 — from utility state). */
+  autoDebit: AutoDebitStatus;
+  autoDebitRegistration: string | null;
   /** Installation-level last receipt (state.ultimoComprovante presence). */
   hasComprovante: boolean;
   /** Parsed registration date of that receipt, when available. */
   comprovanteDate: string | null;
+  /** Linked charging.payments coverage (R1) — null when none / sheets mode. */
+  payment: PaymentLinkSummary | null;
   faturaDriveUrl: string | null;
 }

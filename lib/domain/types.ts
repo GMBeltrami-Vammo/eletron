@@ -55,6 +55,13 @@ export interface Station {
   status: StationStatus | null;
   /** source_created_at — created_at from backoffice, full ISO with offset. */
   sourceCreatedAt: string | null;
+  /**
+   * Installed boxes per Metabase card 28556 (R1 — metabase-sync). Optional:
+   * only the Supabase backend carries it; sheets/fixtures leave it undefined.
+   */
+  activeBoxes?: number | null;
+  /** When active_boxes was last refreshed from Metabase. */
+  boxesSyncedAt?: string | null;
   /** Raw source row, header-name keyed (excess-of-info principle). */
   raw: Record<string, string>;
 }

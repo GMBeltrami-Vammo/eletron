@@ -2,24 +2,37 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 
+import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { CHARGE_KIND_UI, CHARGE_STATUS_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import type { Station360 } from "@/lib/data/repository";
+import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 import type { Charge, ChargeLine } from "@/lib/domain";
 
 import { CHARGE_LINE_KIND_LABEL } from "./helpers";
 
-type PaymentRow = { charge: Charge; lines: ChargeLine[] };
+type PaymentRow = {
+  charge: Charge;
+  lines: ChargeLine[];
+  payment: PaymentLinkSummary | null;
+};
 
 /**
  * Station rent/third-party ledger. Energy-only charges live in the Energia
  * tab; this table carries aluguel and aluguel+energia rows with their
  * structured sub-values (expected amount + charge_lines split — never the
- * raw text blob).
+ * raw text blob). R1: each row links its comprovante when a charging payment
+ * exists (keyed by dedupeKey; empty in sheets mode).
  */
-export function PaymentsTab({ data }: { data: Station360 }) {
+export function PaymentsTab({
+  data,
+  payments = {},
+}: {
+  data: Station360;
+  payments?: Record<string, PaymentLinkSummary | null>;
+}) {
   const rentishAccountIds = new Set(
     data.accounts
       .filter(
@@ -44,7 +57,11 @@ export function PaymentsTab({ data }: { data: Station360 }) {
         c.kind === "aluguel" ||
         c.kind === "aluguel_energia",
     )
-    .map((charge) => ({ charge, lines: linesByCharge.get(charge.id) ?? [] }));
+    .map((charge) => ({
+      charge,
+      lines: linesByCharge.get(charge.id) ?? [],
+      payment: payments[charge.dedupeKey] ?? null,
+    }));
 
   return (
     <DataTable<PaymentRow>
@@ -122,6 +139,18 @@ const paymentColumns: ColumnDef<PaymentRow, unknown>[] = [
       const ui = CHARGE_STATUS_UI[row.original.charge.status];
       return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
     },
+  },
+  {
+    id: "comprovante",
+    header: "Comprovante",
+    accessorFn: (r) => (r.payment ? "Vinculado" : ""),
+    cell: ({ row }) =>
+      row.original.payment ? (
+        <ComprovanteChip summary={row.original.payment} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    meta: { csvValue: (r: PaymentRow) => (r.payment ? "vinculado" : "") },
   },
   {
     id: "documento",

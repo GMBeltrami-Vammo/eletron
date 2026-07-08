@@ -25,6 +25,7 @@ import {
   type RentChargeRow,
 } from "@/components/alugueis/rent-charges-table";
 import { getRepository } from "@/lib/data/repository.server";
+import { readPaymentLinks, summarizeLinks } from "@/lib/data/payment-links";
 import { formatBRL, formatDate } from "@/lib/format";
 import {
   ALERT_TYPE_UI,
@@ -45,7 +46,10 @@ export default async function ContractDetailPage({
   if (!Number.isInteger(id)) notFound();
 
   const repo = getRepository();
-  const snapshot = await repo.getSnapshot();
+  const [snapshot, links] = await Promise.all([
+    repo.getSnapshot(),
+    readPaymentLinks(),
+  ]);
   const contract = snapshot.contracts.find((c) => c.cadastroId === id);
   if (!contract) notFound();
 
@@ -73,6 +77,11 @@ export default async function ContractDetailPage({
       competencia: c.competencia,
       amount: c.amount,
       status: c.status,
+      source: c.source,
+      matchStatus: c.matchStatus,
+      payment: summarizeLinks(
+        links.byDedupeKey.get(c.dedupeKey) ?? links.byChargeUuid.get(c.id),
+      ),
     }));
 
   const endInfo = contractEndInfo(contract.endsOn, new Date());

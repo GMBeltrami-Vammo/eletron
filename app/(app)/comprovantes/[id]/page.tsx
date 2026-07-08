@@ -15,10 +15,16 @@ export const metadata: Metadata = { title: "Comprovante" };
 
 export default async function ComprovanteDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
-  const { id } = await params;
+  const [{ id }, { page }] = await Promise.all([params, searchParams]);
+  // ?page=N deep-link (R1 — ledger comprovante chips land on the receipt's page)
+  const parsedPage = Number(page);
+  const initialPage =
+    Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   return (
     <div>
       <Link
@@ -29,13 +35,19 @@ export default async function ComprovanteDetailPage({
         Comprovantes
       </Link>
       <Suspense fallback={<DetailSkeleton />}>
-        <DetailContent documentId={id} />
+        <DetailContent documentId={id} initialPage={initialPage} />
       </Suspense>
     </div>
   );
 }
 
-async function DetailContent({ documentId }: { documentId: string }) {
+async function DetailContent({
+  documentId,
+  initialPage,
+}: {
+  documentId: string;
+  initialPage: number;
+}) {
   const [data, viewer] = await Promise.all([
     getDeepDiveData(documentId),
     getViewerContext(),
@@ -49,6 +61,7 @@ async function DetailContent({ documentId }: { documentId: string }) {
       documentId={documentId}
       initialData={data}
       viewer={viewer}
+      initialPage={initialPage}
     />
   );
 }

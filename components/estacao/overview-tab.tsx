@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Bar,
   BarChart,
@@ -17,9 +18,16 @@ import {
   ACCOUNT_TYPE_UI,
   ALERT_TYPE_UI,
   CHARGE_STATUS_UI,
+  STATION_STATUS_UI,
   UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
-import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
+import {
+  formatBRL,
+  formatCompetencia,
+  formatDate,
+  formatDateTime,
+  formatNumber,
+} from "@/lib/format";
 import type { Station360 } from "@/lib/data/repository";
 import type { Charge } from "@/lib/domain";
 
@@ -178,6 +186,9 @@ export function OverviewTab({
           );
         })}
       </div>
+
+      {/* (a2) Metabase consistency card (Phase 2.5 R1 — request 1) */}
+      <MetabaseCard data={data} />
 
       {/* (b) 12-month stacked cost chart */}
       <Card size="sm">
@@ -344,5 +355,94 @@ export function OverviewTab({
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * Metabase consistency (R1 — "is it up to date with our Metabase?"):
+ * active_boxes (card 28556 via metabase-sync) vs contract box_count, station
+ * status vs contract status, and the boxes_synced_at freshness. Degrades to
+ * "Sem dados do Metabase" when the sync hasn't populated the station yet
+ * (sheets/dev backend or pre-clone).
+ */
+function MetabaseCard({ data }: { data: Station360 }) {
+  const { station } = data;
+  const rentContract =
+    data.accounts.find((a) => a.account.accountType === "rent")?.contract ??
+    data.contracts[0] ??
+    null;
+
+  const activeBoxes = station.activeBoxes ?? null;
+  const contractBoxes = rentContract?.boxCount ?? null;
+  const boxesMismatch =
+    activeBoxes !== null && contractBoxes !== null && activeBoxes !== contractBoxes;
+  const statusMismatch =
+    station.status !== null &&
+    rentContract?.status != null &&
+    station.status !== rentContract.status;
+  const consistent = activeBoxes !== null && !boxesMismatch && !statusMismatch;
+
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          Metabase
+          {activeBoxes === null ? (
+            <StatusBadge color="grey" outline>
+              Sem dados do Metabase
+            </StatusBadge>
+          ) : consistent ? (
+            <StatusBadge color="green">Consistente</StatusBadge>
+          ) : (
+            <StatusBadge color="orange">Divergente</StatusBadge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Boxes ativos (Metabase)</p>
+            <p className="font-medium tabular-nums">
+              {activeBoxes !== null ? formatNumber(activeBoxes) : "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Boxes no contrato</p>
+            <p className="flex items-center gap-1.5 font-medium tabular-nums">
+              {contractBoxes !== null ? formatNumber(contractBoxes) : "—"}
+              {boxesMismatch ? (
+                <StatusBadge color="orange">Boxes ≠ contrato</StatusBadge>
+              ) : null}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Status estação × locação</p>
+            <p className="flex items-center gap-1.5 font-medium">
+              {station.status ? STATION_STATUS_UI[station.status].label : "—"}
+              {" × "}
+              {rentContract?.status
+                ? STATION_STATUS_UI[rentContract.status].label
+                : "—"}
+              {statusMismatch ? (
+                <StatusBadge color="orange">Divergem</StatusBadge>
+              ) : null}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2 text-xs text-muted-foreground">
+          <span>
+            {station.boxesSyncedAt
+              ? `Sincronizado do Metabase em ${formatDateTime(station.boxesSyncedAt)}`
+              : "Aguardando a primeira sincronização do Metabase"}
+          </span>
+          <Link
+            href="/revisao/irregularidades"
+            className="font-medium text-info-emphasis underline-offset-2 hover:underline"
+          >
+            Ver irregularidades →
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

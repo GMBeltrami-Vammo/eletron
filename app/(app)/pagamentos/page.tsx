@@ -9,6 +9,11 @@ import { PageHeader } from "@/components/vammo/page-header";
 import { PagamentosView } from "@/components/pagamentos/pagamentos-view";
 import type { PagamentoRow } from "@/components/pagamentos/types";
 import { getRepository } from "@/lib/data/repository.server";
+import {
+  readPaymentLinks,
+  summarizeLinks,
+  type PaymentLinkIndex,
+} from "@/lib/data/payment-links";
 import { INGEST_SOURCE } from "@/lib/domain";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
@@ -23,6 +28,7 @@ export const metadata: Metadata = { title: "Pagamentos — Eletron" };
 function buildRows(
   snapshot: LoadedSnapshot,
   refs: Map<string, ChargeRef>,
+  links: PaymentLinkIndex,
 ): PagamentoRow[] {
   const accountById = new Map(snapshot.billingAccounts.map((a) => [a.id, a]));
   const contractById = new Map(snapshot.contracts.map((c) => [c.id, c]));
@@ -79,6 +85,10 @@ function buildRows(
         statusSource: charge.statusSource ?? null,
         lastActorEmail: ref?.lastActorEmail ?? null,
         lastActorAt: ref?.lastActorAt ?? null,
+        payment: summarizeLinks(
+          links.byDedupeKey.get(charge.dedupeKey) ??
+            links.byChargeUuid.get(charge.id),
+        ),
       };
     });
 }
@@ -107,11 +117,11 @@ async function PagamentosContent() {
     );
   }
 
-  const refs = await readChargeRefs();
+  const [refs, links] = await Promise.all([readChargeRefs(), readPaymentLinks()]);
 
   return (
     <PagamentosView
-      rows={buildRows(snapshot, refs)}
+      rows={buildRows(snapshot, refs, links)}
       canWrite={viewer.role !== null}
       isAdmin={viewer.role === "admin"}
     />

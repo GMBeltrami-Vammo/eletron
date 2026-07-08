@@ -2,6 +2,7 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Station360 } from "@/lib/data/repository";
+import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 
 import { DocumentsTab } from "./documents-tab";
 import { EnergyTab } from "./energy-tab";
@@ -24,9 +25,12 @@ const TABS = [
 export function StationTabs({
   data,
   fetchedAt,
+  payments = {},
 }: {
   data: Station360;
   fetchedAt: string;
+  /** Charge dedupeKey → linked-payment summary (R1; empty in sheets mode). */
+  payments?: Record<string, PaymentLinkSummary | null>;
 }) {
   return (
     <Tabs defaultValue="visao-geral">
@@ -49,7 +53,7 @@ export function StationTabs({
         <RentTab data={data} fetchedAt={fetchedAt} />
       </TabsContent>
       <TabsContent value="pagamentos">
-        <PaymentsTab data={data} />
+        <PaymentsTab data={data} payments={payments} />
       </TabsContent>
       <TabsContent value="leituras">
         <ReadingsTab stationId={data.station.id} />

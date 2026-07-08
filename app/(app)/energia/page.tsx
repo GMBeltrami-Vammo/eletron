@@ -16,6 +16,11 @@ import type {
 } from "@/components/energia/types";
 import { getRepository } from "@/lib/data/repository.server";
 import {
+  readPaymentLinks,
+  summarizeLinks,
+  type PaymentLinkIndex,
+} from "@/lib/data/payment-links";
+import {
   getSessionEmail,
   isOperatorEmail,
   userClientFor,
@@ -78,7 +83,10 @@ function tariffClass(d: ChargeEnergyDetails): string | null {
   return cs.length > 0 ? cs.join(" · ") : null;
 }
 
-function buildRows(snapshot: LoadedSnapshot): {
+function buildRows(
+  snapshot: LoadedSnapshot,
+  links: PaymentLinkIndex,
+): {
   instalacoes: InstalacaoRow[];
   faturas: FaturaRow[];
 } {
@@ -170,8 +178,16 @@ function buildRows(snapshot: LoadedSnapshot): {
       leituraAtual: details.leituraAtual,
       tariffClass: tariffClass(details),
       fiscalExported: details.fiscalExported,
+      autoDebit: state?.autoDebit ?? "desconhecido",
+      autoDebitRegistration:
+        state?.autoDebitRegistration ?? account.autoDebitRegistration,
       hasComprovante: Boolean(state?.ultimoComprovante),
       comprovanteDate: state?.ultimoComprovanteDate ?? null,
+      // dedupe_key join works on both backends; uuid join when id IS the uuid
+      payment: summarizeLinks(
+        links.byDedupeKey.get(charge.dedupeKey) ??
+          links.byChargeUuid.get(charge.id),
+      ),
       faturaDriveUrl: details.faturaDriveUrl,
     });
   }
@@ -219,11 +235,12 @@ async function EnergiaContent() {
     );
   }
 
-  const { instalacoes, faturas } = buildRows(snapshot);
-  const [accounts, canWrite] = await Promise.all([
+  const [accounts, canWrite, paymentLinks] = await Promise.all([
     readEnergyAccounts(),
     currentIsOperator(),
+    readPaymentLinks(),
   ]);
+  const { instalacoes, faturas } = buildRows(snapshot, paymentLinks);
 
   return (
     <>

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { Camera, Handshake, Home, Receipt, Zap } from "lucide-react";
 
 import { getRepository } from "@/lib/data/repository.server";
+import { readPaymentLinks, summarizeLinks } from "@/lib/data/payment-links";
+import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/vammo/page-header";
 import { StatusBadge } from "@/components/vammo/status-badge";
@@ -41,11 +43,21 @@ export default async function StationPage({
 
 async function StationContent({ stationId }: { stationId: number }) {
   const repo = getRepository();
-  const [data, freshness] = await Promise.all([
+  const [data, freshness, links] = await Promise.all([
     repo.getStation(stationId),
     repo.getFreshness(),
+    readPaymentLinks(),
   ]);
   if (data === null) notFound();
+
+  // R1: charge dedupeKey → linked-payment summary for this station's charges.
+  const payments: Record<string, PaymentLinkSummary | null> = {};
+  for (const charge of data.charges) {
+    const summary = summarizeLinks(
+      links.byDedupeKey.get(charge.dedupeKey) ?? links.byChargeUuid.get(charge.id),
+    );
+    if (summary) payments[charge.dedupeKey] = summary;
+  }
 
   const { station, rollup } = data;
   const statusUi = station.status ? STATION_STATUS_UI[station.status] : null;
@@ -99,7 +111,11 @@ async function StationContent({ stationId }: { stationId: number }) {
           <IdentityCard data={data} />
         </div>
         <div className="min-w-0 flex-1">
-          <StationTabs data={data} fetchedAt={freshness.fetchedAt} />
+          <StationTabs
+            data={data}
+            fetchedAt={freshness.fetchedAt}
+            payments={payments}
+          />
         </div>
       </div>
     </div>

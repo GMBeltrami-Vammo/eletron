@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AuditByline } from "@/components/vammo/audit-byline";
+import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { DataTable } from "@/components/vammo/data-table";
 import { PageHeader } from "@/components/vammo/page-header";
 import { StatCard } from "@/components/vammo/stat-card";
@@ -215,6 +216,18 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
           : "—"}
       </span>
     ),
+  },
+  {
+    id: "comprovante",
+    header: "Comprovante",
+    accessorFn: (r) => (r.payment ? "Vinculado" : ""),
+    cell: ({ row }) =>
+      row.original.payment ? (
+        <ComprovanteChip summary={row.original.payment} />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    meta: csvMeta((r) => (r.payment ? "vinculado" : "")),
   },
   {
     id: "notaFiscal",

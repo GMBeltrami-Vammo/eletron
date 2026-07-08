@@ -4,6 +4,7 @@ import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Check, ExternalLink, ListChecks, Minus, Paperclip } from "lucide-react";
 
+import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCOUNT_TYPE_UI, FISCAL_EXPORT_UI } from "@/lib/labels";
+import { ACCOUNT_TYPE_UI, AUTO_DEBIT_UI, FISCAL_EXPORT_UI } from "@/lib/labels";
 import {
   formatBRL,
   formatCompetencia,
@@ -236,18 +237,46 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     ),
   },
   {
+    id: "debitoAutomatico",
+    header: "Débito automático",
+    accessorFn: (r) => AUTO_DEBIT_UI[r.autoDebit].label,
+    cell: ({ row }) => {
+      const ui = AUTO_DEBIT_UI[row.original.autoDebit];
+      return (
+        <span title={row.original.autoDebitRegistration ?? undefined}>
+          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+        </span>
+      );
+    },
+    meta: csvMeta((r) =>
+      r.autoDebitRegistration
+        ? `${AUTO_DEBIT_UI[r.autoDebit].label} (${r.autoDebitRegistration})`
+        : AUTO_DEBIT_UI[r.autoDebit].label,
+    ),
+  },
+  {
     id: "comprovante",
     header: "Comprovante",
-    accessorFn: (r) => (r.hasComprovante ? "Sim" : "Não"),
+    accessorFn: (r) =>
+      r.payment ? "Vinculado" : r.hasComprovante ? "Planilha" : "Não",
     cell: ({ row }) => {
-      const { hasComprovante, comprovanteDate } = row.original;
+      const { payment, hasComprovante, comprovanteDate } = row.original;
+      // R1: linked charging payment wins — deep-links the deep-dive page
+      if (payment) {
+        return (
+          <span className="flex justify-center">
+            <ComprovanteChip summary={payment} />
+          </span>
+        );
+      }
       if (!hasComprovante) {
         return <span className="block text-center text-muted-foreground">—</span>;
       }
+      // sheet-era installation-level receipt — historical fallback
       return (
         <span
           className="flex items-center justify-center gap-1 text-muted-foreground"
-          title="Último comprovante registrado na instalação"
+          title="Último comprovante registrado na instalação (era da planilha)"
         >
           <Paperclip className="size-3.5" strokeWidth={2} />
           {comprovanteDate ? (
@@ -310,7 +339,7 @@ export function FaturasTable({
         if (month !== "all" && r.competencia?.slice(0, 7) !== month) {
           return false;
         }
-        if (missingOnly && r.hasComprovante) return false;
+        if (missingOnly && (r.hasComprovante || r.payment !== null)) return false;
         return true;
       }),
     [rows, provider, month, missingOnly],
