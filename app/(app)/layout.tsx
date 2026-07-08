@@ -10,6 +10,16 @@ import { Toaster } from "@/components/ui/sonner";
 
 import { signOutAction } from "./actions";
 
+/**
+ * Render the entire authenticated app per-request. Every route here reads the
+ * live Google Sheets snapshot and the session cookie, so none can be statically
+ * prerendered — forcing dynamic keeps `next build` from executing (and timing
+ * out on) Sheets calls during static generation. Cross-request caching still
+ * comes from the repository's `unstable_cache` (15-min TTL); this only disables
+ * build-time prerendering, not the data cache. Cascades to all child segments.
+ */
+export const dynamic = "force-dynamic";
+
 /** Badge counts must never break the shell — snapshot load failures show 0. */
 async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
   try {
