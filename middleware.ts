@@ -34,6 +34,9 @@ export default auth((req) => {
 });
 
 export const config = {
+  // Node.js runtime (not Edge): next-auth v5 pulls @auth/core code that the
+  // Next 15.5 Edge bundler can't run (__dirname ReferenceError). See next.config.ts.
+  runtime: "nodejs",
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
