@@ -82,6 +82,7 @@ function buildRows(
         notes: charge.notes,
         chargeUuid: ref?.uuid ?? null,
         flags: charge.flags ?? [],
+        fiscalExported: charge.fiscalExported ?? false,
         statusSource: charge.statusSource ?? null,
         lastActorEmail: ref?.lastActorEmail ?? null,
         lastActorAt: ref?.lastActorAt ?? null,

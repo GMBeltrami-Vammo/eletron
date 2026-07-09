@@ -291,6 +291,7 @@ interface ChargeRow {
   status_source: "sync" | "rpc";
   match_status: MatchStatus;
   flags: string[] | null;
+  fiscal_exported: boolean;
   payment_method: PaymentMethod | null;
   banco: string | null;
   agencia: string | null;
@@ -580,6 +581,7 @@ export async function loadChargingWorld(
     statusSource: r.status_source,
     matchStatus: r.match_status,
     flags: r.flags ?? [],
+    fiscalExported: r.fiscal_exported ?? false,
     paymentMethod: r.payment_method,
     banco: r.banco,
     agencia: r.agencia,

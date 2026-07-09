@@ -37,6 +37,8 @@ export interface PagamentoRow {
   chargeUuid: string | null;
   /** gerar_mes / pipeline flags (empty on sheet-backfill rows). */
   flags: string[];
+  /** "Enviado ao fiscal" (2_Pagamentos "No Fiscal" col) — exported, NOT paid. */
+  fiscalExported: boolean;
   /** 'rpc' = human-set (sticky); 'sync' = pipeline; null when unknown. */
   statusSource: "sync" | "rpc" | null;
   /** Last write actor + timestamp for the AuditByline (rpc-touched rows only). */

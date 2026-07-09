@@ -233,6 +233,8 @@ describe("charges from Faturas_ENEL / Faturas_EDP", () => {
     expect(charge?.status).toBe("pago"); // has a Comprovante link (not from the fiscal flag)
     expect(charge?.competencia).toBe("2026-07-01");
     expect(charge?.competenciaSource).toBe("inferred_due_date");
+    // Charge-level fiscal flag mirrors the "Financeiro Check" detail (Q8).
+    expect(charge?.fiscalExported).toBe(true);
 
     const details = snapshot.chargeEnergyDetails.find(
       (d) => d.chargeId === charge?.id,
@@ -278,6 +280,18 @@ describe("charges from 2_Pagamentos", () => {
     );
     expect(pagCharges.filter((c) => c.status === "pago")).toHaveLength(175);
     expect(pagCharges.filter((c) => c.status === "pendente")).toHaveLength(191);
+  });
+
+  it("maps the 'No Fiscal' boolean to charge.fiscalExported (Q8)", () => {
+    const pagCharges = snapshot.charges.filter(
+      (c) => c.source === "sheet_backfill",
+    );
+    // Fixture 2_Pagamentos "No Fiscal" (col R): 342 TRUE, 10 FALSE, 14 blank.
+    // Boolean-aware parse (like energy's "Financeiro Check"): TRUE ⇒ true;
+    // FALSE and blank ⇒ false. A naive non-empty check would wrongly flag the
+    // 10 explicit FALSE rows as sent (352), so this pins the parse.
+    expect(pagCharges.filter((c) => c.fiscalExported === true)).toHaveLength(342);
+    expect(pagCharges.filter((c) => c.fiscalExported === false)).toHaveLength(24);
   });
 
   it("parses the polluted Documento/Planilha/Energia Valor cells into splits", () => {

@@ -95,6 +95,12 @@ describe("toChargeRow", () => {
     const row = toChargeRow(charge(), anyStation, { includeStatus: true });
     expect(row.status).toBe("pendente");
     expect(row.status_source).toBe("sync");
+    expect(row.fiscal_exported).toBe(false); // default when unset
+    expect(
+      toChargeRow(charge({ fiscalExported: true }), anyStation, {
+        includeStatus: true,
+      }).fiscal_exported,
+    ).toBe(true);
   });
 
   it("includeStatus=false omits status + all human-owned columns (stickiness)", () => {
@@ -107,6 +113,7 @@ describe("toChargeRow", () => {
       "station_id",
       "match_status",
       "flags",
+      "fiscal_exported",
     ]) {
       expect(col in row, `rpc row must omit ${col}`).toBe(false);
     }

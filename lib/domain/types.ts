@@ -243,6 +243,15 @@ export interface Charge {
    * always sets it from the column.
    */
   statusSource?: "sync" | "rpc";
+  /**
+   * fiscal_exported — canonical charge-level "enviado ao fiscal" flag (Q8):
+   * energy from the Faturas "Financeiro Check" cell, rent from 2_Pagamentos
+   * "No Fiscal" (col R). Means "exported to the FISCAL spreadsheet", NEVER
+   * "paid" (decision #21) — never drives charge.status. Optional like
+   * statusSource/flags: the sheets backend (normalize.ts) sets it; the Supabase
+   * backend reads charges.fiscal_exported; undefined ≙ false.
+   */
+  fiscalExported?: boolean;
   matchStatus: MatchStatus;
   /**
    * flags — gerar_mes / pipeline flags (`boxes_mismatch`, `no_metabase_data`,

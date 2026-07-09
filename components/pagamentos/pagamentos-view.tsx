@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
+import { Check, Minus } from "lucide-react";
 
 import {
   Select,
@@ -20,6 +21,7 @@ import { StatusBadge } from "@/components/vammo/status-badge";
 import {
   CHARGE_KIND_UI,
   CHARGE_STATUS_UI,
+  FISCAL_EXPORT_UI,
   MATCH_STATUS_UI,
   PAYMENT_METHOD_LABEL,
 } from "@/lib/labels";
@@ -225,6 +227,30 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
         <span className="text-muted-foreground">—</span>
       ),
     meta: csvMeta((r) => (r.payment ? "vinculado" : "")),
+  },
+  {
+    id: "fiscal",
+    // "Enviado ao fiscal" = exported to the FISCAL sheet, NOT paid (#21/Q8).
+    header: FISCAL_EXPORT_UI.header,
+    accessorFn: (r) => (r.fiscalExported ? "Sim" : "Não"),
+    cell: ({ row }) => (
+      <span className="flex justify-center" title={FISCAL_EXPORT_UI.tooltip}>
+        {row.original.fiscalExported ? (
+          <Check
+            className="size-4 text-success-emphasis"
+            strokeWidth={2}
+            aria-label={FISCAL_EXPORT_UI.yes}
+          />
+        ) : (
+          <Minus
+            className="size-4 text-muted-foreground"
+            strokeWidth={2}
+            aria-label={FISCAL_EXPORT_UI.no}
+          />
+        )}
+      </span>
+    ),
+    meta: csvMeta((r) => (r.fiscalExported ? "sim" : "não")),
   },
   {
     id: "notaFiscal",

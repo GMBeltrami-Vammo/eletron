@@ -258,6 +258,9 @@ export function toChargeRow(
       station_id: validStation(c.stationId),
       match_status: c.matchStatus,
       flags: c.flags ?? [],
+      // Sync-owned like flags/status: for rpc rows this is OMITTED so a re-sync
+      // never clobbers a future "send to fiscal" RPC that set fiscal_exported.
+      fiscal_exported: c.fiscalExported ?? false,
       status: c.status,
       status_source: "sync",
     };

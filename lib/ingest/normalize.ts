@@ -1350,6 +1350,9 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       dedupeKey,
       legacyRef: { tab, rowNumber: rowNo },
       notes: null,
+      // Charge-level canonical fiscal flag (Q8): reuse the "Financeiro Check"
+      // value already parsed above. Means "enviado ao fiscal", never "pago".
+      fiscalExported,
       raw: stripRowKey(row),
     };
     charges.push(charge);
@@ -1570,6 +1573,10 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
         valor.kind === "labeled" || valor.kind === "unparseable"
           ? `Valor original: ${valor.raw}`
           : null,
+      // Charge-level canonical fiscal flag (Q8): 2_Pagamentos "No Fiscal"
+      // column (col R) — a TRUE/FALSE boolean like energy's "Financeiro Check"
+      // (blank ⇒ not sent). Means "enviado ao fiscal", never "pago".
+      fiscalExported: parseBoolean(row["No Fiscal"] ?? "") ?? false,
       raw: stripRowKey(row),
     };
     charges.push(charge);
