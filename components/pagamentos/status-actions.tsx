@@ -241,7 +241,7 @@ export function StatusActions({
           ) : null}
           {canPay ? (
             <DropdownMenuItem onClick={() => setMode({ kind: "pago" })}>
-              Marcar como pago…
+              Registrar pagamento…
             </DropdownMenuItem>
           ) : null}
           {canAdjust ? (
@@ -289,14 +289,18 @@ export function StatusActions({
         </DialogContent>
       </Dialog>
 
-      {/* Marcar como pago (record_payment, sem comprovante) */}
+      {/* Registrar pagamento (record_payment). Sem comprovante vinculado NÃO
+          marca como pago — apenas registra o pagamento; a baixa (Pago) exige
+          um comprovante vinculado em /comprovantes. */}
       <Dialog open={mode?.kind === "pago"} onOpenChange={(o) => (o ? null : close())}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Registrar pagamento</DialogTitle>
             <DialogDescription>
               Registra um pagamento de {formatBRL(row.amount)} para esta
-              cobrança. O vínculo com comprovante é feito em /comprovantes.
+              cobrança. Ela só é marcada como <strong>Pago</strong> quando há um
+              comprovante vinculado (em /comprovantes) — este registro sozinho
+              não dá baixa.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
