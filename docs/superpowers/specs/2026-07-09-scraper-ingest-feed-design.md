@@ -17,6 +17,23 @@ Natural keys: account by `enel_id` / `uc`; fatura by `(enel_id, due_date)` / `(u
 PDFs go to Drive folder `1AB8ok…` (`Fatura-{Enel|EDP}-{id}-{YYYY-MM}.pdf`, anyone-with-link), and the fatura row carries `link_fatura` = `=HYPERLINK("<webViewLink>";"Ver Fatura")`.
 "Detected but no PDF" is implicit: an account row with `status`/`last_billing`/`due_date` but **no** fatura row + no Drive PDF.
 
+### Verified field contract (read directly from the scraper code)
+
+Account row — `enel_data` `STATIC_HEADERS` (enel_helpers.py:19-24) / `edp_data` (edp_helpers.py):
+`enel_id`|`uc`, `swap_station_id` (external — NOT scraper-written), `station_status`, `address`, (`neighborhood`,`city` EDP), `auto_debit` ("Cadastrado"/"Não cadastrado"; EDP "Nao Cadastrado" no accent), `auto_debit_registration` (ENEL only at account level), `email`, `status`, `last_billing`, `due_date`, `negotiated_invoices`, `invoice_history`, `shutdown_date`, `first_seen_time`, `scraping_time`, `lat`/`lon` (external), + dynamic month consumption columns (`F_MMMYY`/`R_MMMYY` ENEL, `mmmyy` EDP). Write-guards: `address`/`first_seen_time` write-once; `auto_debit` never regresses from Cadastrado; `email` never overwritten once `energia@vammo.com`.
+
+Fatura row — `Faturas_ENEL` `FATURAS_HEADERS` (enel_helpers.py:36-42): `enel_id, value, due_date, auto_debit(""), auto_debit_registration, NF, link_fatura(=HYPERLINK), Financeiro Check("FALSE"), Comprovante, C1..C6, TUSD (kWh), TUSD (R$), TE (kWh), TE (R$), CIP, Sub_Faturamento, Total, Leitura Anterior, Leitura Atual`. EDP (`Faturas_EDP`): same minus C1..C6/Sub_Faturamento, plus `classificacao, modalidade, tipo_fornecimento`; keyed by `uc`; `Total` = `value` (EDP doesn't parse a PDF total). Built only from a parsed PDF (`build_fatura_row`/`build_fatura_edp_row` take `pdf_info`).
+
+### The three states (verified — scraperEnel.scrape_station:967-1006 / scraperEDP_refactored.scrape_station:1048-1085)
+
+| State | Scraper condition | What's written | App result |
+|---|---|---|---|
+| **0 · Sem conta** | ENEL `status=="Sem contas"` · EDP `status=="N/A"` (`save_basic_no_account`) | account row only, no due/value/fatura | billStatus sem_contas, no dueDate → Ciclo **—** |
+| **1 · Detectada** | real status + `value` + `due_date` from the portal list, but `download_bill` returns `pdf_info={}` / `pdf_path is None` → **no fatura row** | account row with status/last_billing/due_date | utility_account_state (billStatus + dueDate + lastBilling), **no charge** → Ciclo **Detectada** (rare, as expected) |
+| **2+ · Analisada→** | PDF downloaded + parsed → `Faturas_*` row | account row + fatura row (+ PDF in Drive) | charge + energy_details → Ciclo **Analisada** → fiscal → paga |
+
+The ingestion payload therefore carries `account` **always** and `faturas` only in state 2+; state 1 = `account` populated + `faturas: []`. The app's Q11 derivation already distinguishes state 0 (no dueDate) from state 1 (dueDate set + no charge for it), so no extra flag is needed — the "detected, PDF pending" case surfaces as Ciclo Detectada automatically.
+
 ## Endpoint
 
 `POST /api/ingest/scraper`, `Authorization: Bearer SCRAPER_INGEST_SECRET` (mirrors the n8n cobranças/contratos webhooks; new Vercel env var).
