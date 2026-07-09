@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditByline } from "@/components/vammo/audit-byline";
 import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { DataTable } from "@/components/vammo/data-table";
@@ -19,6 +20,7 @@ import { PageHeader } from "@/components/vammo/page-header";
 import { StatCard } from "@/components/vammo/stat-card";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import {
+  ACCOUNT_TYPE_UI,
   CHARGE_KIND_UI,
   CHARGE_STATUS_UI,
   FISCAL_EXPORT_UI,
@@ -66,6 +68,23 @@ function hasMismatch(row: PagamentoRow): boolean {
     row.expectedAmount !== null &&
     Math.abs(row.amount - row.expectedAmount) > 0.01
   );
+}
+
+/**
+ * Parceiro display: the resolved counterparty name, else — for Enel/EDP energy
+ * charges that have no counterparty (the concessionária isn't a partner) — the
+ * provider label ("Enel"/"EDP"). Null when neither applies.
+ */
+function partnerLabel(row: PagamentoRow): string | null {
+  if (row.parceiro) return row.parceiro;
+  // Enel/EDP energy charges have no counterparty (the concessionária isn't a
+  // partner) — show the provider label instead. Rent/third-party charges with
+  // an unresolved counterparty fall through to "—" (the account-type label
+  // like "Aluguel" is not a partner name).
+  if (row.accountType === "energy_enel" || row.accountType === "energy_edp") {
+    return ACCOUNT_TYPE_UI[row.accountType].label;
+  }
+  return null;
 }
 
 const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
@@ -126,15 +145,15 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
   {
     id: "parceiro",
     header: "Parceiro",
-    accessorFn: (r) => r.parceiro ?? "",
-    cell: ({ row }) => (
-      <span
-        className="block max-w-[220px] truncate"
-        title={row.original.parceiro ?? undefined}
-      >
-        {row.original.parceiro ?? "—"}
-      </span>
-    ),
+    accessorFn: (r) => partnerLabel(r) ?? "",
+    cell: ({ row }) => {
+      const label = partnerLabel(row.original);
+      return (
+        <span className="block max-w-[220px] truncate" title={label ?? undefined}>
+          {label ?? "—"}
+        </span>
+      );
+    },
   },
   {
     id: "valor",
@@ -254,7 +273,7 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
   },
   {
     id: "notaFiscal",
-    header: "No Fiscal",
+    header: "Nota fiscal",
     accessorFn: (r) => r.notaFiscal ?? "",
     cell: ({ row }) => (
       <span className="tabular-nums text-muted-foreground">
@@ -297,6 +316,92 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
   },
 ];
 
+interface LedgerSummary {
+  previstoSum: number;
+  pagoCount: number;
+  pagoSum: number;
+  pendenteCount: number;
+  pendenteSum: number;
+}
+
+/** Totals over a row set: previsto (amount∥expected), pago, pendente. */
+function summarize(rows: PagamentoRow[]): LedgerSummary {
+  let previstoSum = 0;
+  let pagoCount = 0;
+  let pagoSum = 0;
+  let pendenteCount = 0;
+  let pendenteSum = 0;
+  for (const r of rows) {
+    previstoSum += r.amount ?? r.expectedAmount ?? 0;
+    if (PAID_STATUSES.includes(r.status)) {
+      pagoCount += 1;
+      pagoSum += r.amount ?? 0;
+    } else if (r.status !== "cancelada" && r.status !== "nao_aplicavel") {
+      pendenteCount += 1;
+      pendenteSum += r.amount ?? r.expectedAmount ?? 0;
+    }
+  }
+  return { previstoSum, pagoCount, pagoSum, pendenteCount, pendenteSum };
+}
+
+/** Columns that get a spreadsheet-style header funnel on the ledger tables. */
+const LEDGER_FILTER_COLUMNS = [
+  "tipo",
+  "status",
+  "parceiro",
+  "pagamento",
+  "origem",
+  "fiscal",
+];
+
+/** One tab body: summary StatCards over its rows + the ledger DataTable. */
+function LedgerPanel({
+  rows,
+  columns,
+  monthLabel,
+  csvFilename,
+}: {
+  rows: PagamentoRow[];
+  columns: ColumnDef<PagamentoRow, unknown>[];
+  monthLabel: string;
+  csvFilename: string;
+}) {
+  const summary = summarize(rows);
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard
+          label={`Total previsto (${monthLabel})`}
+          value={formatBRL(summary.previstoSum)}
+          sub={`${rows.length} cobranças`}
+        />
+        <StatCard
+          label="Pago"
+          value={formatBRL(summary.pagoSum)}
+          sub={`${summary.pagoCount} de ${rows.length} cobranças`}
+          tone="success"
+        />
+        <StatCard
+          label="Pendente"
+          value={formatBRL(summary.pendenteSum)}
+          sub={`${summary.pendenteCount} de ${rows.length} cobranças`}
+          tone={summary.pendenteCount > 0 ? "warning" : "default"}
+        />
+      </div>
+      <DataTable
+        columns={columns}
+        data={rows}
+        searchPlaceholder="Buscar estação, parceiro…"
+        csvFilename={csvFilename}
+        initialSorting={[{ id: "estacao", desc: false }]}
+        initialColumnVisibility={{ dedupe: false }}
+        filterableColumnIds={LEDGER_FILTER_COLUMNS}
+        emptyMessage="Nenhuma cobrança encontrada para o período."
+      />
+    </>
+  );
+}
+
 export function PagamentosView({
   rows,
   canWrite,
@@ -320,7 +425,11 @@ export function PagamentosView({
     [rows],
   );
 
-  const [month, setMonth] = React.useState<string>(months[0] ?? "all");
+  // Default to all months: energy competências are frozen (decision #25) while
+  // rent keeps advancing, so the latest month is usually rent-only — defaulting
+  // to it would open the Enel/EDP tab empty. "Todos os meses" shows both tabs
+  // populated; the picker narrows.
+  const [month, setMonth] = React.useState<string>("all");
 
   const filtered = React.useMemo(() => {
     if (month === "all") return rows;
@@ -328,24 +437,16 @@ export function PagamentosView({
     return rows.filter((r) => r.competencia?.slice(0, 7) === month);
   }, [rows, month]);
 
-  const summary = React.useMemo(() => {
-    let previstoSum = 0;
-    let pagoCount = 0;
-    let pagoSum = 0;
-    let pendenteCount = 0;
-    let pendenteSum = 0;
-    for (const r of filtered) {
-      previstoSum += r.amount ?? r.expectedAmount ?? 0;
-      if (PAID_STATUSES.includes(r.status)) {
-        pagoCount += 1;
-        pagoSum += r.amount ?? 0;
-      } else if (r.status !== "cancelada" && r.status !== "nao_aplicavel") {
-        pendenteCount += 1;
-        pendenteSum += r.amount ?? r.expectedAmount ?? 0;
-      }
-    }
-    return { previstoSum, pagoCount, pagoSum, pendenteCount, pendenteSum };
-  }, [filtered]);
+  const isEnelEdp = (r: PagamentoRow) =>
+    r.accountType === "energy_enel" || r.accountType === "energy_edp";
+  const enelEdpRows = React.useMemo(
+    () => filtered.filter(isEnelEdp),
+    [filtered],
+  );
+  const outrosRows = React.useMemo(
+    () => filtered.filter((r) => !isEnelEdp(r)),
+    [filtered],
+  );
 
   const columns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
     () => [
@@ -401,35 +502,38 @@ export function PagamentosView({
         }
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard
-          label={`Total previsto (${monthLabel})`}
-          value={formatBRL(summary.previstoSum)}
-          sub={`${filtered.length} cobranças`}
-        />
-        <StatCard
-          label="Pago"
-          value={formatBRL(summary.pagoSum)}
-          sub={`${summary.pagoCount} de ${filtered.length} cobranças`}
-          tone="success"
-        />
-        <StatCard
-          label="Pendente"
-          value={formatBRL(summary.pendenteSum)}
-          sub={`${summary.pendenteCount} de ${filtered.length} cobranças`}
-          tone={summary.pendenteCount > 0 ? "warning" : "default"}
-        />
-      </div>
-
-      <DataTable
-        columns={columns}
-        data={filtered}
-        searchPlaceholder="Buscar estação, parceiro…"
-        csvFilename="pagamentos"
-        initialSorting={[{ id: "estacao", desc: false }]}
-        initialColumnVisibility={{ dedupe: false }}
-        emptyMessage="Nenhuma cobrança encontrada para o período."
-      />
+      <Tabs defaultValue="enel_edp">
+        <TabsList>
+          <TabsTrigger value="enel_edp">
+            Enel/EDP
+            <span className="rounded bg-muted px-1 text-xs tabular-nums">
+              {enelEdpRows.length}
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="outros">
+            Aluguel e outros
+            <span className="rounded bg-muted px-1 text-xs tabular-nums">
+              {outrosRows.length}
+            </span>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="enel_edp">
+          <LedgerPanel
+            rows={enelEdpRows}
+            columns={columns}
+            monthLabel={monthLabel}
+            csvFilename="pagamentos-enel-edp"
+          />
+        </TabsContent>
+        <TabsContent value="outros">
+          <LedgerPanel
+            rows={outrosRows}
+            columns={columns}
+            monthLabel={monthLabel}
+            csvFilename="pagamentos-aluguel-outros"
+          />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

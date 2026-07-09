@@ -5,6 +5,7 @@
  */
 
 import type {
+  AccountType,
   ChargeKind,
   ChargeStatus,
   IngestSource,
@@ -23,6 +24,12 @@ export interface PagamentoRow {
   kind: ChargeKind;
   /** Counterparty resolved via billing account → contract/counterparty. */
   parceiro: string | null;
+  /**
+   * Billing-account type (energy_enel/energy_edp/rent/third_party) — drives the
+   * Enel/EDP vs "Aluguel e outros" tab split and the provider-label fallback
+   * when `parceiro` is null. Null when the charge has no billing account.
+   */
+  accountType: AccountType | null;
   /** Documento/Boleto value. */
   amount: number | null;
   /** Planilha/contract expectation (mismatch highlight when they differ). */

@@ -14,7 +14,6 @@ import {
   summarizeLinks,
   type PaymentLinkIndex,
 } from "@/lib/data/payment-links";
-import { INGEST_SOURCE } from "@/lib/domain";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
 import { readChargeRefs, type ChargeRef } from "./charge-refs";
@@ -22,8 +21,11 @@ import { readChargeRefs, type ChargeRef } from "./charge-refs";
 export const metadata: Metadata = { title: "Pagamentos — Eletron" };
 
 /**
- * Phase 1 ledger rows = the 2_Pagamentos backfill (source 'sheet_backfill').
- * Energy invoices from the scraper live in /energia › Faturas.
+ * Unified ledger rows = ALL charges (decision "unify all payments here").
+ * Rent + third-party (sheet_backfill / gerar_mes) AND Enel/EDP energy invoices
+ * (scraper_enel / scraper_edp) — the view splits them into two tabs by
+ * account type. Energy rows carry no counterparty (concessionária isn't a
+ * partner), so `accountType` lets the view show a provider label instead.
  */
 function buildRows(
   snapshot: LoadedSnapshot,
@@ -38,11 +40,6 @@ function buildRows(
   const stationById = new Map(snapshot.stations.map((s) => [s.id, s]));
 
   return snapshot.charges
-    .filter(
-      (charge) =>
-        charge.source === INGEST_SOURCE.sheetBackfill ||
-        charge.source === INGEST_SOURCE.gerarMes,
-    )
     .map((charge) => {
       const ref = refs.get(charge.dedupeKey);
       const account =
@@ -72,6 +69,7 @@ function buildRows(
         competencia: charge.competencia,
         kind: charge.kind,
         parceiro,
+        accountType: account?.accountType ?? null,
         amount: charge.amount,
         expectedAmount: charge.expectedAmount,
         status: charge.status,
