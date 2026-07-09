@@ -85,6 +85,24 @@ export function digitsOnly(v: string): string | null {
 }
 
 /**
+ * Canonical CPF/CNPJ for `counterparties.cnpj_cpf` (CHECK = exactly 11 or 14
+ * digits). Sheets/Metabase store these as NUMBERS, so leading zeros are stripped
+ * — a 13-digit value is a CNPJ that lost one zero (e.g. `1116871000138` →
+ * `01116871000138`), a 10-digit value a CPF that lost one. Restore the zeros by
+ * left-padding to the nearest valid width; only genuinely off-length garbage
+ * (≤8 or 15+ digits) becomes null. Never fabricates a distinct key — padding is
+ * deterministic, so the same real document always maps to the same id.
+ */
+export function normalizeCnpjCpf(raw: string): string | null {
+  const d = digitsOnly(raw);
+  if (d === null) return null;
+  if (d.length === 11 || d.length === 14) return d;
+  if (d.length === 12 || d.length === 13) return d.padStart(14, "0"); // CNPJ, zeros stripped
+  if (d.length === 9 || d.length === 10) return d.padStart(11, "0"); // CPF, zeros stripped
+  return null; // genuinely malformed
+}
+
+/**
  * Slugifies a name for deterministic entity ids ('Mc Donalds' → 'mc-donalds').
  * Exported so the Supabase read-repository reconstructs the SAME counterparty /
  * third-party account ids from DB columns (one canonical definition — the
@@ -733,7 +751,11 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
     kind: Counterparty["kind"],
   ): string | null {
     const cleanName = cleanCell(name);
-    const cnpj = digitsOnly(cnpjRaw);
+    // Restore stripped leading zeros so a real CNPJ/CPF passes the DB CHECK
+    // (a 13-digit sheet value is a CNPJ missing a zero, not garbage); truly
+    // off-length values fall back to a name key. Fixes the clone-aborting
+    // "counterparties_cnpj_cpf_check" violation.
+    const cnpj = normalizeCnpjCpf(cnpjRaw);
     if (!cleanName && !cnpj) return null;
     const id = cnpj ? `cp:${cnpj}` : `cp:name:${slug(cleanName)}`;
     const existing = counterparties.get(id);
@@ -1435,7 +1457,10 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       );
     }
 
-    const cnpj = digitsOnly(row["CNPJ"] ?? "");
+    // normalizeCnpjCpf (not raw digitsOnly) so the third_party account key
+    // matches the counterparty id upsertCounterparty derives — leading-zero
+    // variants of one CNPJ map to ONE account.
+    const cnpj = normalizeCnpjCpf(row["CNPJ"] ?? "");
     const parceiro = cleanCell(row["Parceiro"] ?? "");
     const isEnergyBearing =
       kind === CHARGE_KIND.energia || kind === CHARGE_KIND.aluguelEnergia;

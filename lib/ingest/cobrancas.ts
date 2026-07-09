@@ -47,6 +47,7 @@ import {
   cleanCell,
   deaccent,
   digitsOnly,
+  normalizeCnpjCpf,
   parseCompetenciaFromMesAno,
   parseValorCell,
   type ParsedValorCell,
@@ -206,14 +207,10 @@ export function normalizeCobranca(raw: RawCobranca): NormalizedCobranca {
   const pixDigits = digitsOnly(pixOrBoleto) ?? "";
   const isLinha = pixDigits.length >= 30;
 
-  // Only a valid 11/14-digit CNPJ/CPF may become a counterparty key — the
-  // counterparties.cnpj_cpf CHECK enforces that. A mis-extracted value (e.g. a
-  // truncated 12-digit string) is dropped to null so the counterparty is keyed
-  // by name instead of crashing the whole webhook (audit review fix; mirrors
-  // reclassify_charge's guard). The raw value survives in `raw`/the audit event.
-  const cnpjDigits = digitsOnly(str(raw.CNPJ));
-  const cnpj =
-    cnpjDigits && /^(\d{11}|\d{14})$/.test(cnpjDigits) ? cnpjDigits : null;
+  // Canonical CPF/CNPJ (restores stripped leading zeros, nulls real garbage) so
+  // it passes the counterparties.cnpj_cpf CHECK instead of crashing the webhook.
+  // The raw value survives in `raw`/the audit event.
+  const cnpj = normalizeCnpjCpf(str(raw.CNPJ));
 
   return {
     status,

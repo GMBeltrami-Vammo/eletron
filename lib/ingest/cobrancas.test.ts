@@ -79,10 +79,12 @@ describe("normalizeCobranca", () => {
     );
   });
 
-  it("drops a malformed CNPJ to null (would violate the CHECK) — audit fix", () => {
-    // 12 digits — neither 11 (CPF) nor 14 (CNPJ) → must not reach the counterparty insert
-    expect(normalizeCobranca({ CNPJ: "12.345.678/0001" } as RawCobranca).cnpj).toBeNull();
-    // valid 14-digit CNPJ is kept (digits only)
+  it("restores stripped leading zeros in CNPJ/CPF; nulls only real garbage", () => {
+    // 13-digit CNPJ (Sheets stripped the leading zero) → padded back to 14
+    expect(normalizeCobranca({ CNPJ: "1116871000138" } as RawCobranca).cnpj).toBe(
+      "01116871000138",
+    );
+    // valid 14-digit CNPJ kept (digits only)
     expect(normalizeCobranca({ CNPJ: "12.345.678/0001-99" } as RawCobranca).cnpj).toBe(
       "12345678000199",
     );
@@ -90,6 +92,8 @@ describe("normalizeCobranca", () => {
     expect(normalizeCobranca({ CNPJ: "123.456.789-09" } as RawCobranca).cnpj).toBe(
       "12345678909",
     );
+    // genuinely off-length (5 digits) → null (keyed by name instead)
+    expect(normalizeCobranca({ CNPJ: "12345" } as RawCobranca).cnpj).toBeNull();
   });
 });
 
