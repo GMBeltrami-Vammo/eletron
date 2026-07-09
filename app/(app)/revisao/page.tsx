@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/vammo/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getRepository } from "@/lib/data/repository.server";
 import { formatCompetencia, formatDate } from "@/lib/format";
+import { countPendingContractIntakes } from "./contratos/queries";
 
 export const metadata: Metadata = { title: "Revisão" };
 
@@ -22,10 +23,11 @@ export default function RevisaoPage() {
 
 async function RevisaoContent() {
   const repo = getRepository();
-  const [irregularities, snapshot, freshness] = await Promise.all([
+  const [irregularities, snapshot, freshness, pendingContratos] = await Promise.all([
     repo.getIrregularities(),
     repo.getSnapshot(),
     repo.getFreshness(),
+    countPendingContractIntakes(),
   ]);
 
   const stateByAccount = new Map(
@@ -62,6 +64,13 @@ async function RevisaoContent() {
         }
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QueueCard
+          title="Contratos novos"
+          description="Contratos de aluguel extraídos pela IA aguardando confirmação"
+          count={pendingContratos}
+          hint={pendingContratos === 0 ? "Tudo em dia" : "Aguardando revisão"}
+          href="/revisao/contratos"
+        />
         <QueueCard
           title="Comprovantes não conciliados"
           description="Conciliação de comprovantes chega na fase 2, com o upload no app"

@@ -614,7 +614,8 @@ export function pagamentosChargeDedupeKey(
 // Enum literal maps for the rent sheet
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CONTRACT_TYPE_MAP: Record<string, ContractType> = {
+/** Deaccented/lowercased "Tipo de Contrato" → enum (shared with contratos.ts). */
+export const CONTRACT_TYPE_MAP: Record<string, ContractType> = {
   "por box": CONTRACT_TYPE.porBox,
   fixo: CONTRACT_TYPE.fixo,
   "por box c/ minimo": CONTRACT_TYPE.porBoxMinimo,

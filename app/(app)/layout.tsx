@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { getRepository } from "@/lib/data/repository.server";
+import { countPendingContractIntakes } from "./revisao/contratos/queries";
 import { Providers } from "@/components/providers";
 import { AppSidebar } from "@/components/vammo/sidebar";
 import { MobileNav } from "@/components/vammo/mobile-nav";
@@ -24,16 +25,18 @@ export const dynamic = "force-dynamic";
 async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
   try {
     const repo = getRepository();
-    const [alerts, irregularities] = await Promise.all([
+    const [alerts, irregularities, pendingContratos] = await Promise.all([
       repo.getAlerts(),
       repo.getIrregularities(),
+      countPendingContractIntakes(),
     ]);
     return {
       alertas: alerts.filter((a) => a.status === "open").length,
       revisao:
         irregularities.joinAlerts.length +
         irregularities.unmatchedAccounts.length +
-        irregularities.unmatchedCharges.length,
+        irregularities.unmatchedCharges.length +
+        pendingContratos,
     };
   } catch {
     return undefined;
