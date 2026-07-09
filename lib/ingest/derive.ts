@@ -140,8 +140,11 @@ export interface StationRollup {
   lastBillingTotal: number | null;
   /** cadastrado | nao_cadastrado | parcial | desconhecido across accounts. */
   autoDebitAggregate: AutoDebitStatus | "parcial";
-  /** Status of the current-month rent charge(s), null when none. */
+  /** Status of the current-month rent charge(s), or the latest month's when
+   *  the current month has none yet; null when the station has no rent charge. */
   rentStatusCurrentMonth: ChargeStatus | null;
+  /** 'YYYY-MM' the rent status above refers to (may be a past month). */
+  rentStatusMonth: string | null;
   /** min(scrapedAt) across the station's utility accounts. */
   freshness: string | null;
   /** Any state row carrying a stale 'Sem contas' status forward. */
@@ -249,8 +252,11 @@ export function stationRollups(
             ? AUTO_DEBIT_STATUS.naoCadastrado
             : AUTO_DEBIT_STATUS.desconhecido;
 
-    // Rent status of the current month (worst wins: pendente over pago).
-    let rentStatusCurrentMonth: ChargeStatus | null = null;
+    // Rent status: the current month when it has a charge, otherwise the LATEST
+    // month with rent charges (labeled in the UI) so the column isn't blank
+    // before that month's gerar_mes has run. Worst-wins per month (a non-pago
+    // beats a pago).
+    const rentByMonth = new Map<string, ChargeStatus>();
     for (const account of accounts) {
       if (
         account.accountType !== ACCOUNT_TYPE.rent &&
@@ -265,17 +271,22 @@ export function stationRollups(
         ) {
           continue;
         }
-        if (!charge.competencia?.startsWith(currentMonth)) continue;
-        if (rentStatusCurrentMonth === null) {
-          rentStatusCurrentMonth = charge.status;
-        } else if (
-          rentStatusCurrentMonth === CHARGE_STATUS.pago &&
-          charge.status !== CHARGE_STATUS.pago
+        if (!charge.competencia) continue;
+        const month = charge.competencia.slice(0, 7);
+        const prev = rentByMonth.get(month);
+        if (
+          prev === undefined ||
+          (prev === CHARGE_STATUS.pago && charge.status !== CHARGE_STATUS.pago)
         ) {
-          rentStatusCurrentMonth = charge.status;
+          rentByMonth.set(month, charge.status);
         }
       }
     }
+    const rentStatusMonth = rentByMonth.has(currentMonth)
+      ? currentMonth
+      : ([...rentByMonth.keys()].sort().at(-1) ?? null);
+    const rentStatusCurrentMonth =
+      rentStatusMonth !== null ? (rentByMonth.get(rentStatusMonth) ?? null) : null;
 
     // Freshness: min scrapedAt (the stalest account defines the station).
     const scrapes = states
@@ -327,6 +338,7 @@ export function stationRollups(
       lastBillingTotal,
       autoDebitAggregate,
       rentStatusCurrentMonth,
+      rentStatusMonth,
       freshness,
       hasCarriedForwardStatus: states.some((s) => s.isStatusCarriedForward),
       frDivergencePct,

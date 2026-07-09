@@ -164,6 +164,7 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
       lastBillingTotal: rollup.lastBillingTotal,
       autoDebitAggregate: rollup.autoDebitAggregate,
       rentStatusCurrentMonth: rollup.rentStatusCurrentMonth,
+      rentStatusMonth: rollup.rentStatusMonth,
       contractType: contract?.contractType ?? null,
       valorMensal: contract?.valorMensal ?? null,
       boxCount: contract?.boxCount ?? null,

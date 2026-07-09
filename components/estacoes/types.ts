@@ -30,6 +30,8 @@ export interface EstacaoRow {
   lastBillingTotal: number | null;
   autoDebitAggregate: AutoDebitStatus | "parcial";
   rentStatusCurrentMonth: ChargeStatus | null;
+  /** 'YYYY-MM' the rent status refers to (a past month when current has none). */
+  rentStatusMonth: string | null;
   contractType: ContractType | null;
   valorMensal: number | null;
   boxCount: number | null;

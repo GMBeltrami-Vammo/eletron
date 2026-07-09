@@ -12,7 +12,7 @@ import { Eye, EyeOff, Handshake, Home, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import { CHARGE_STATUS, type ChargeStatus } from "@/lib/domain";
 import {
   AUTO_DEBIT_UI,
@@ -292,12 +292,26 @@ export function buildColumns(
           return <span className="text-xs text-muted-foreground">—</span>;
         }
         const ui = CHARGE_STATUS_UI[status];
-        return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+        const month = row.original.rentStatusMonth;
+        const pastMonth = month !== null && month !== today.slice(0, 7);
+        return (
+          <span className="inline-flex items-center gap-1">
+            <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+            {pastMonth ? (
+              <span
+                className="text-[11px] tabular-nums text-muted-foreground"
+                title="Sem cobrança no mês atual — status do último mês com aluguel"
+              >
+                {formatCompetencia(`${month}-01`)}
+              </span>
+            ) : null}
+          </span>
+        );
       },
       meta: {
         csvValue: (row: EstacaoRow) =>
           row.rentStatusCurrentMonth
-            ? CHARGE_STATUS_UI[row.rentStatusCurrentMonth].label
+            ? `${CHARGE_STATUS_UI[row.rentStatusCurrentMonth].label}${row.rentStatusMonth && row.rentStatusMonth !== today.slice(0, 7) ? ` (${row.rentStatusMonth})` : ""}`
             : "",
       },
     },
