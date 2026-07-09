@@ -2,10 +2,11 @@
 
 /**
  * Vínculos (payments) table for the deep-dive: one row per `charging.payments`
- * row of the document. Confirmar runs `confirm_charge` (the human gate over an
- * auto-matched `conciliado` charge); Remover runs `unmatch_payment` behind a
- * confirm dialog (the charge walks back to open). Footer reconciles allocated
- * vs. receipts total.
+ * row of the document. A linked comprovante is paid — auto-matches land the
+ * charge on 'pago' directly, so the row shows "Pago". Confirmar still runs
+ * `confirm_charge` for any legacy 'conciliado' charge; Remover runs
+ * `unmatch_payment` behind a confirm dialog (the charge walks back to open).
+ * Footer reconciles allocated vs. receipts total.
  */
 
 import * as React from "react";
@@ -134,7 +135,12 @@ export function BindingsTable({
                   <TableCell className="py-2 align-top text-sm">
                     {p.confirmed ? (
                       <div className="flex flex-col gap-0.5">
-                        <StatusBadge color="green">Confirmado</StatusBadge>
+                        <StatusBadge color="green">Pago</StatusBadge>
+                        <span className="text-xs text-muted-foreground">
+                          {p.source === "auto_match"
+                            ? "vínculo automático"
+                            : "vínculo manual"}
+                        </span>
                         <AuditByline
                           actorEmail={p.createdByEmail}
                           at={p.paidAt ?? p.createdAt}
@@ -146,7 +152,7 @@ export function BindingsTable({
                           Aguardando confirmação
                         </StatusBadge>
                         <span className="text-xs text-muted-foreground">
-                          {p.source === "auto_match" ? "conciliação automática" : "manual"}
+                          conciliado (linha antiga)
                         </span>
                       </div>
                     )}

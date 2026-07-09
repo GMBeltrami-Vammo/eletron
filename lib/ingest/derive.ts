@@ -90,6 +90,13 @@ const OPEN_BILL_STATUSES: ReadonlySet<UtilityBillStatus> = new Set([
   UTILITY_BILL_STATUS.faturaNegociada,
 ]);
 
+/** Charge statuses that count as "paid" (a bound comprovante / settled). */
+const SETTLED_CHARGE_STATUSES: ReadonlySet<string> = new Set([
+  "pago",
+  "conciliado",
+  "antecipado",
+]);
+
 const OPEN_CHARGE_STATUSES: ReadonlySet<ChargeStatus> = new Set([
   CHARGE_STATUS.pendente,
   CHARGE_STATUS.boletoRecebido,
@@ -350,6 +357,23 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
   const currentMonth = monthOf(now);
   const previousMonth = monthOf(now, -1);
 
+  // "Paid ⟺ comprovante" (Gabriel 2026-07-09): a settled charge (pago/conciliado/
+  // antecipado = a bound comprovante) is NOT a worry. Energy accounts with a
+  // settled energy charge for the current competência are cleared of overdue/
+  // due-soon worries below.
+  const settledEnergyAccounts = new Set<string>();
+  for (const c of snapshot.charges) {
+    if (
+      (c.kind === "energia" || c.kind === "aluguel_energia") &&
+      c.billingAccountId !== null &&
+      c.competencia !== null &&
+      c.competencia.slice(0, 7) === currentMonth &&
+      SETTLED_CHARGE_STATUSES.has(c.status)
+    ) {
+      settledEnergyAccounts.add(c.billingAccountId);
+    }
+  }
+
   for (const state of snapshot.utilityAccountStates) {
     const account = accountById.get(state.billingAccountId);
     const stationId = account?.stationId ?? null;
@@ -377,7 +401,8 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
     if (
       scrapeFresh &&
       (state.billStatus === UTILITY_BILL_STATUS.vencida || historyOverdue) &&
-      !receipted
+      !receipted &&
+      !settledEnergyAccounts.has(state.billingAccountId)
     ) {
       push(
         makeAlert(
@@ -396,12 +421,14 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
     }
 
     // 2. due_soon_no_auto_debit — bill due in 0..7 days without auto-debit.
+    // (Bills WITH DA are only a worry after the due date → they fall to rule 1.)
     if (
       scrapeFresh &&
       state.dueDate !== null &&
       state.autoDebit !== AUTO_DEBIT_STATUS.cadastrado &&
       state.billStatus !== null &&
-      OPEN_BILL_STATUSES.has(state.billStatus)
+      OPEN_BILL_STATUSES.has(state.billStatus) &&
+      !settledEnergyAccounts.has(state.billingAccountId)
     ) {
       const days = daysUntil(state.dueDate, now);
       if (days >= 0 && days <= 7) {
@@ -573,6 +600,57 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
         },
       ),
     );
+  }
+
+  // rent_payment_due (Phase 2.5, Gabriel 2026-07-09): a pix/transferência rent
+  // charge for the current month that is generated but NOT paid (no bound
+  // comprovante → not settled) becomes a worry after the 5th of the month.
+  // Manual-rent contracts (Ipiranga / Smart Kitchens) are covered by
+  // manual_rent_reminder above and skipped here.
+  const settledRentMonths = new Set<string>();
+  for (const c of snapshot.charges) {
+    if (
+      (c.kind === "aluguel" || c.kind === "aluguel_energia") &&
+      c.competencia !== null &&
+      SETTLED_CHARGE_STATUSES.has(c.status)
+    ) {
+      const key = c.billingAccountId ?? `station:${c.stationId ?? "na"}`;
+      settledRentMonths.add(`${key}:${c.competencia.slice(0, 7)}`);
+    }
+  }
+  if (now.getUTCDate() > 5) {
+    for (const contract of snapshot.contracts) {
+      if (contract.status !== STATION_STATUS.ACTIVE) continue;
+      if (contract.rentManual === true) continue;
+      if (
+        contract.paymentMethod !== "pix" &&
+        contract.paymentMethod !== "transferencia"
+      ) {
+        continue;
+      }
+      const rentAccountId = rentAccountByContract.get(contract.id);
+      const key = rentAccountId ?? `station:${contract.stationId ?? "na"}`;
+      const monthKey = `${key}:${currentMonth}`;
+      if (!rentChargeMonths.has(monthKey)) continue; // not generated → not a payment worry
+      if (settledRentMonths.has(monthKey)) continue; // already paid (comprovante bound)
+      push(
+        makeAlert(
+          ALERT_TYPE.rentPaymentDue,
+          ALERT_SEVERITY.warning,
+          `rent_payment_due:${contract.id}:${currentMonth}`,
+          {
+            stationId: contract.stationId,
+            billingAccountId: rentAccountId ?? null,
+          },
+          {
+            contractId: contract.id,
+            cadastroId: contract.cadastroId,
+            competencia: currentMonth,
+            paymentMethod: contract.paymentMethod,
+          },
+        ),
+      );
+    }
   }
 
   return Array.from(alerts.values());

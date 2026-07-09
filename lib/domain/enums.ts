@@ -201,6 +201,8 @@ export const ALERT_TYPE = {
   sheetSyncStale: "sheet_sync_stale",
   /** Phase 2.5 (R4): rent_manual contract without the month's rent charge. */
   manualRentReminder: "manual_rent_reminder",
+  /** Phase 2.5: pix/transferência rent generated but unpaid after the 5th. */
+  rentPaymentDue: "rent_payment_due",
 } as const;
 export type AlertType = (typeof ALERT_TYPE)[keyof typeof ALERT_TYPE];
 

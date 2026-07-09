@@ -30,6 +30,7 @@ export const CORE_ALERT_TYPES = [
   "due_soon_no_auto_debit",
   "no_auto_debit",
   "manual_rent_reminder",
+  "rent_payment_due",
   "new_installation",
   "negotiated_invoice",
   "scheduled_shutdown",
@@ -157,6 +158,18 @@ export function alertDetail(row: AlertRow): string {
       const competencia = str(p.competencia);
       if (competencia) parts.push(`competência ${formatCompetencia(`${competencia}-01`)}`);
       parts.push("cobrança manual pendente");
+      return parts.join(" · ");
+    }
+    case "rent_payment_due": {
+      const parts: string[] = [];
+      const cadastro = num(p.cadastroId);
+      if (cadastro !== null) parts.push(`Cadastro ${cadastro}`);
+      const competencia = str(p.competencia);
+      if (competencia) parts.push(formatCompetencia(`${competencia}-01`));
+      const method = str(p.paymentMethod);
+      parts.push(
+        `aluguel ${method === "transferencia" ? "por transferência" : "por pix"} não pago (após dia 5)`,
+      );
       return parts.join(" · ");
     }
     case "station_without_contract":

@@ -585,6 +585,89 @@ describe("evaluateAlerts", () => {
     expect(reminders[0].payload.competencia).toBe("2026-07");
   });
 
+  it("rent_payment_due: fires for unpaid pix/transf rent after the 5th; not before, not when paid/manual", () => {
+    const snapshot = emptySnapshot();
+    snapshot.stations = [station(1), station(2), station(3)];
+    const contract = (
+      id: string,
+      cadastroId: number,
+      stationId: number,
+      paymentMethod: "pix" | "transferencia",
+      rentManual: boolean,
+    ) => ({
+      id, cadastroId, stationId, counterpartyId: null, status: "ACTIVE" as const,
+      address: null, contactName: null, phone: null, email: null,
+      enelConnectionNumber: null, contractType: "fixo" as const, boxCount: null,
+      minBox: null, valorPorBox: null, valorMensal: 500, dueDay: 5, paymentMethod,
+      banco: null, agencia: null, conta: null, chavePix: null, startsOn: null,
+      endsOn: null, observations: null, rentManual, raw: {},
+    });
+    const charge = (
+      id: string,
+      ba: string,
+      stationId: number,
+      status: "pendente" | "pago",
+    ) => ({
+      id, billingAccountId: ba, stationId, kind: "aluguel" as const,
+      competencia: "2026-07-01", competenciaSource: "explicit" as const, amount: 500,
+      expectedAmount: 500, dueDate: "2026-07-05", status, matchStatus: "manually_matched" as const,
+      paymentMethod: "pix" as const, banco: null, agencia: null, conta: null, chavePix: null,
+      linhaDigitavel: null, notaFiscal: null, documentoNumero: null, issuerCnpj: null,
+      source: "gerar_mes" as const, dedupeKey: id, legacyRef: null, notes: null, raw: {},
+    });
+    snapshot.contracts = [
+      contract("contract:1", 1, 1, "pix", false), // generated + unpaid → fires
+      contract("contract:2", 2, 2, "transferencia", false), // paid → no
+      contract("contract:3", 3, 3, "pix", true), // manual → handled by reminder, not here
+    ];
+    snapshot.billingAccounts = [
+      { ...account("r1", 1, "rent"), contractId: "contract:1" },
+      { ...account("r2", 2, "rent"), contractId: "contract:2" },
+      { ...account("r3", 3, "rent"), contractId: "contract:3" },
+    ];
+    snapshot.charges = [
+      charge("pag:1:2026-07:aluguel", "r1", 1, "pendente"),
+      charge("pag:2:2026-07:aluguel", "r2", 2, "pago"),
+      charge("pag:3:2026-07:aluguel", "r3", 3, "pendente"),
+    ];
+    // NOW = 2026-07-07 (UTC day 7 > 5)
+    const due = evaluateAlerts(snapshot, NOW).filter((a) => a.alertType === "rent_payment_due");
+    expect(due).toHaveLength(1);
+    expect(due[0].dedupeKey).toBe("rent_payment_due:contract:1:2026-07");
+
+    // before the 5th → no worry yet
+    const early = evaluateAlerts(snapshot, new Date("2026-07-03T12:00:00-03:00")).filter(
+      (a) => a.alertType === "rent_payment_due",
+    );
+    expect(early).toHaveLength(0);
+  });
+
+  it("suppresses overdue_bill when the energy account is already paid this month", () => {
+    const snapshot = emptySnapshot();
+    snapshot.stations = [station(1)];
+    snapshot.billingAccounts = [account("enel:1", 1, "energy_enel")];
+    snapshot.utilityAccountStates = [
+      state("enel:1", {
+        billStatus: "vencida",
+        dueDate: "2026-07-03",
+        scrapedAt: "2026-07-06T03:00:00",
+      }),
+    ];
+    snapshot.charges = [
+      {
+        id: "enel:1:2026-07-03", billingAccountId: "enel:1", stationId: 1,
+        kind: "energia", competencia: "2026-07-01", competenciaSource: "explicit",
+        amount: 200, expectedAmount: 200, dueDate: "2026-07-03", status: "conciliado",
+        matchStatus: "manually_matched", paymentMethod: null, banco: null, agencia: null,
+        conta: null, chavePix: null, linhaDigitavel: null, notaFiscal: null,
+        documentoNumero: null, issuerCnpj: null, source: "scraper_enel",
+        dedupeKey: "enel:1:2026-07-03", legacyRef: null, notes: null, raw: {},
+      },
+    ];
+    const overdue = evaluateAlerts(snapshot, NOW).filter((a) => a.alertType === "overdue_bill");
+    expect(overdue).toHaveLength(0); // paid (conciliado) → not a worry
+  });
+
   it("emits unique deterministic dedupe keys", () => {
     const snapshot = emptySnapshot();
     snapshot.stations = [station(1)];

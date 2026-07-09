@@ -48,6 +48,7 @@ export const EVAL_ALERT_TYPES: ReadonlySet<string> = new Set([
   "station_without_contract",
   "contract_without_station",
   "manual_rent_reminder",
+  "rent_payment_due",
 ]);
 
 type Row = Record<string, unknown>;

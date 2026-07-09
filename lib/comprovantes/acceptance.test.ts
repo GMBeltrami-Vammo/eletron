@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import type { ParsedReceipt } from "./types";
 import { extractPdfText, hasNoExtractableText } from "./extract";
 import { parseComprovantePages } from "./parse";
 
@@ -20,8 +21,30 @@ const FIXTURES = {
   mixed: "Comprovantes - 01 à 16 - Junho (1).pdf",
 };
 
+/**
+ * Bundle comprovantes that may contain Format-C ("Comprovante de Operação -
+ * Concessionárias / 0048 - ELETROPAULO") pages — the format the in-app parser
+ * previously fell through to the PIX/TED branch (amount=null).
+ */
+const FORMAT_C_CANDIDATES = [
+  "Comprovantes - 01 à 16 - Junho (1).pdf",
+  "Comprovantes - 17 à 24 Junho (1).pdf",
+  "Comprovante - 07.07.pdf",
+  "Comprovante - 07.07 pt 2.pdf",
+  "Comprovante - 07.07 pt 3.pdf",
+  "Comprovante - 07.07 pt 4.pdf",
+  "Comprovante - 07.07 pt 5.pdf",
+  "Comprovante - 07.07 pt 6.pdf",
+];
+
 const present = existsSync(DIR);
 const suite = present ? describe : describe.skip;
+
+async function parseFixture(name: string): Promise<ParsedReceipt[]> {
+  const buf = readFileSync(join(DIR, name));
+  const { pages } = await extractPdfText(buf);
+  return parseComprovantePages(pages);
+}
 
 suite("comprovante parser — real PDFs", () => {
   it("débito-automático PDF: extracts text and parses DA receipts", async () => {
@@ -70,5 +93,55 @@ suite("comprovante parser — real PDFs", () => {
     expect(receipts.length).toBeGreaterThan(0);
     // majority should have a parsed amount (some pages may be cover/summary sheets)
     expect(withAmount.length).toBeGreaterThan(receipts.length / 2);
+  });
+
+  it("Format C (concessionária / ELETROPAULO): every recognized receipt has an amount + barcode", async () => {
+    let formatCTotal = 0;
+    let fixturesWithFormatC = 0;
+    const perType: Record<string, number> = {};
+
+    for (const name of FORMAT_C_CANDIDATES) {
+      if (!existsSync(join(DIR, name))) continue;
+      const receipts = await parseFixture(name);
+      const formatC = receipts.filter((r) => r.receiptType === "boleto_barcode");
+      for (const r of receipts) perType[r.receiptType] = (perType[r.receiptType] ?? 0) + 1;
+      if (formatC.length > 0) fixturesWithFormatC += 1;
+      formatCTotal += formatC.length;
+
+      console.log(
+        `[format-c] ${name}: receipts=${receipts.length} formatC=${formatC.length}`,
+        formatC.slice(0, 6).map((r) => ({
+          p: `${r.pageNumber}.${r.segmentIndex}`,
+          amount: r.amount,
+          paidAt: r.paidAt,
+          barcodeLen: r.codigoBarras?.length ?? 0,
+          ctrl: r.ctrl,
+        })),
+      );
+
+      // Every Format-C receipt the parser now recognizes must carry the fields
+      // the matcher links on — a non-null amount AND a barcode. This is the
+      // regression this change fixes (these pages used to yield amount=null).
+      for (const r of formatC) {
+        expect(
+          r.amount,
+          `${name} receipt ${r.pageNumber}.${r.segmentIndex} amount`,
+        ).not.toBeNull();
+        expect(
+          r.codigoBarras,
+          `${name} receipt ${r.pageNumber}.${r.segmentIndex} barcode`,
+        ).not.toBeNull();
+        expect(r.utility).toBe("enel");
+      }
+    }
+
+    console.log(
+      `[format-c] TOTAL formatC receipts=${formatCTotal} across ${fixturesWithFormatC} fixture(s); per-type across candidates=`,
+      perType,
+    );
+
+    // The fixtures Gabriel supplied are expected to contain ≥1 Format-C page;
+    // if this ever hits 0, the header regex or the extraction stopped matching.
+    expect(formatCTotal).toBeGreaterThan(0);
   });
 });

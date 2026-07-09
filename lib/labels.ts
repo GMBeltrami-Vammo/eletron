@@ -164,6 +164,12 @@ export const ALERT_TYPE_UI: Record<string, LabelBadge & { description: string }>
     description:
       "Contrato com cobrança manual de aluguel sem cobrança gerada na competência",
   },
+  rent_payment_due: {
+    label: "Aluguel a pagar",
+    color: "orange",
+    description:
+      "Aluguel pix/transferência gerado e não pago (sem comprovante) após o dia 5",
+  },
 };
 
 /**

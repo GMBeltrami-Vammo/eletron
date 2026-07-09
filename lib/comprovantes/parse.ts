@@ -2,13 +2,15 @@
  * Comprovante text parser — faithful port of the n8n `PDF_Comprovante_Processor`
  * workflow (context/PDF_Comprovante_Processor.json). Pure + test-importable
  * (no `server-only`, no I/O): takes per-page text (from unpdf, extract.ts) and
- * returns one `ParsedReceipt` per PIX/TED page and one per débito-automático
- * segment.
+ * returns one `ParsedReceipt` per PIX/TED page, one per débito-automático
+ * segment, and one per "Comprovante de Operação - Concessionárias / 0048 -
+ * ELETROPAULO" segment (Format C — bank-generated bill-payment receipts).
  *
  * The regexes are copied verbatim from the n8n code nodes so the DB pipeline
  * agrees with the legacy sheet flow on real receipts (D1 acceptance gate).
  * Branch dispatch (review-resolutions / drive-comprovantes §4.2): a page whose
- * text matches the débito-automático header → branch 2, else branch 1.
+ * text matches the débito-automático header → branch 2; the concessionária /
+ * ELETROPAULO header → branch 3; else branch 1 (PIX/TED).
  */
 
 import { RECEIPT_TYPE, type ReceiptType } from "@/lib/domain";
@@ -18,6 +20,17 @@ import type { ParsedReceipt, ReceiptUtility } from "./types";
 // ── débito-automático header / footer (branch-2 dispatch + segmentation) ────
 const DA_HEADER_RE = /comprovante de pagamento de d[eé]bito autom[aá]tico/i;
 const DA_FOOTER_RE = /Em caso de d[uú]vidas/i;
+
+// ── concessionária / ELETROPAULO header (branch-3 dispatch + segmentation) ───
+// Faithful port of the n8n "Split PDF into Pages2" node: a bank-generated
+// "Comprovante de Operação - Concessionárias / 0048 - ELETROPAULO" bill-payment
+// receipt, which the PIX/TED branch reads as amount=null. The header both
+// selects the branch and splits a bundle page; a receipt body may be cut at
+// "cortar aqui". No `g` flag (unlike n8n's exec-loop) so `.test()` stays
+// stateless — `.split()` behaves the same with or without it.
+const CONCESSIONARIA_HEADER_RE =
+  /Comprovante de Opera[çc][aã]o\s*-\s*Concession[áa]rias\s*\n?\s*0048\s*-\s*ELETROPAULO/i;
+const CONCESSIONARIA_CUT_RE = /cortar aqui/i;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // pt-BR money / date helpers (ported from n8n parseValorBR + date logic)
@@ -263,12 +276,78 @@ function parseDebitoAutomaticoPage(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Branch 3 — concessionária / ELETROPAULO (one receipt per segment on a page)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Port of n8n "Split PDF into Pages2". A page carrying one or more concessionária
+ * receipts is split on the header (segment_index), each body cut at "cortar
+ * aqui". Modeled as a `boleto_barcode` receipt: it links off the barcode / linha
+ * digitável (the matcher's rank-1 key), utility is always Enel (0048 =
+ * ELETROPAULO). The barcode is stored digits-only so the ranked matcher's
+ * `codigo_barras` rank compares it against `charges.linha_digitavel`.
+ */
+function parseConcessionariaPage(
+  pageText: string,
+  pageNumber: number,
+): ParsedReceipt[] {
+  const segments = pageText
+    .split(CONCESSIONARIA_HEADER_RE)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const out: ParsedReceipt[] = [];
+  segments.forEach((segment, segIndex) => {
+    const body = segment.split(CONCESSIONARIA_CUT_RE)[0].trim();
+    if (!body) return;
+
+    const valor = body.match(/Valor pago[:\s]*R\$\s*([\d.,]+)/i)?.[1] ?? null;
+    const codigoBarras =
+      digits(body.match(/c[oó]digo de barras[:\s]*([\d\s]+)/i)?.[1] ?? null);
+    const ctrl = body.match(/CTRL\s+(\d+)/i)?.[1] ?? null;
+    const dataRaw =
+      body.match(/Pagamento efetuado em\s+([\d.]+)\s+[àa]s\s+([\d:]+)/i)?.[1] ??
+      null;
+    const autenticacao =
+      body.match(/Autentica[çc][aã]o[:\s]*\n?\s*([A-F0-9]{32,})/i)?.[1]?.trim() ??
+      null;
+
+    const amount = parseBrMoney(valor);
+
+    // n8n drops fragments that carry neither a value nor a barcode.
+    if (amount === null && codigoBarras === null) return;
+
+    out.push({
+      pageNumber,
+      segmentIndex: segIndex,
+      receiptType: RECEIPT_TYPE.boletoBarcode,
+      amount,
+      paidAt: parseBrDate(dataRaw),
+      chavePix: null,
+      chavePixNormalized: null,
+      cnpjCpf: null,
+      banco: null,
+      agencia: null,
+      conta: null,
+      identificacao: null,
+      autenticacao,
+      codigoBarras,
+      ctrl,
+      utility: "enel",
+      rawText: body,
+    });
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Public entry point
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Parses per-page comprovante text into receipts. Débito-automático pages yield
- * one receipt per segment; every other page yields exactly one PIX/TED receipt.
+ * Parses per-page comprovante text into receipts. Débito-automático and
+ * concessionária / ELETROPAULO pages yield one receipt per segment; every other
+ * non-empty page yields exactly one PIX/TED receipt.
  */
 export function parseComprovantePages(pages: string[]): ParsedReceipt[] {
   const receipts: ParsedReceipt[] = [];
@@ -277,6 +356,8 @@ export function parseComprovantePages(pages: string[]): ParsedReceipt[] {
     const pageText = raw ?? "";
     if (DA_HEADER_RE.test(pageText)) {
       receipts.push(...parseDebitoAutomaticoPage(pageText, pageNumber));
+    } else if (CONCESSIONARIA_HEADER_RE.test(pageText)) {
+      receipts.push(...parseConcessionariaPage(pageText, pageNumber));
     } else if (pageText.trim().length > 0) {
       receipts.push(parsePixTedPage(pageText, pageNumber));
     }

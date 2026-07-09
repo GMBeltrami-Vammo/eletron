@@ -176,15 +176,12 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
     cell: ({ row }) => {
       const r = row.original;
       const ui = CHARGE_STATUS_UI[r.status];
+      // A linked comprovante is paid: auto-matches land on 'pago' (→ green
+      // "Pago"). 'conciliado' is now a legacy state — render it with the one
+      // canonical badge; its confirm action still lives in StatusActions.
       return (
         <div className="space-y-0.5">
-          {r.status === "conciliado" ? (
-            <StatusBadge color="orange">
-              Conciliado (aguardando confirmação)
-            </StatusBadge>
-          ) : (
-            <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
-          )}
+          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
           {r.statusSource === "rpc" && r.lastActorAt ? (
             <AuditByline
               actorEmail={r.lastActorEmail}

@@ -109,6 +109,60 @@ describe("parseComprovantePages — débito automático (multi-segment)", () => 
   });
 });
 
+const CONCESSIONARIA_BARCODE_1 = "8366 0000 0012 3456 0000";
+const CONCESSIONARIA_PAGE = `Comprovante de Operação - Concessionárias
+0048 - ELETROPAULO
+Valor pago: R$ 1.234,56
+código de barras: ${CONCESSIONARIA_BARCODE_1}
+CTRL 987654321
+Pagamento efetuado em 07.07.2025 às 14:30
+Autenticação
+A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4
+cortar aqui
+Comprovante de Operação - Concessionárias
+0048 - ELETROPAULO
+Valor pago: R$ 90,00
+código de barras: 83660000009000000001
+CTRL 111222333
+Pagamento efetuado em 08.07.2025 às 15:00
+Autenticação
+ffeeddccbbaa99887766554433221100
+cortar aqui`;
+
+describe("parseComprovantePages — concessionária / ELETROPAULO (Format C, multi-segment)", () => {
+  const receipts = parseComprovantePages([CONCESSIONARIA_PAGE]);
+  it("splits one page into one receipt per concessionária segment", () => {
+    expect(receipts).toHaveLength(2);
+  });
+  it("parses the first receipt as a barcode-linked Enel receipt", () => {
+    const [first] = receipts;
+    expect(first.receiptType).toBe("boleto_barcode");
+    expect(first.utility).toBe("enel");
+    expect(first.amount).toBeCloseTo(1234.56);
+    expect(first.paidAt).toBe("2025-07-07");
+    // barcode stored digits-only (spaces stripped) for the barcode-rank matcher
+    expect(first.codigoBarras).toBe(CONCESSIONARIA_BARCODE_1.replace(/\s+/g, ""));
+    expect(first.ctrl).toBe("987654321");
+    expect(first.autenticacao).toBe("A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4");
+    expect(first.chavePix).toBeNull();
+    expect(first.segmentIndex).toBe(0);
+  });
+  it("parses the second segment (lowercase auth hash included)", () => {
+    const second = receipts[1];
+    expect(second.amount).toBeCloseTo(90);
+    expect(second.paidAt).toBe("2025-07-08");
+    expect(second.codigoBarras).toBe("83660000009000000001");
+    expect(second.autenticacao).toBe("ffeeddccbbaa99887766554433221100");
+    expect(second.segmentIndex).toBe(1);
+  });
+  it("does NOT fall through to the PIX/TED branch (amount is not null)", () => {
+    for (const r of receipts) {
+      expect(r.amount).not.toBeNull();
+      expect(r.codigoBarras).not.toBeNull();
+    }
+  });
+});
+
 /**
  * Real-PDF acceptance gate (D1 / drive-comprovantes §4.2) — DEFERRED until
  * Gabriel provides redacted fixtures. Drop ≥1 PDF per branch under

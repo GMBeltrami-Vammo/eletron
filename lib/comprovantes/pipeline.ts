@@ -5,11 +5,14 @@ import "server-only";
  *   download (Drive) → encrypted/empty guards → extract (unpdf) → parse →
  *   upsert receipts on (document_id, page_number, segment_index) → match each
  *   against OPEN charges → on `auto`: insert payment(source='auto_match') + flip
- *   the charge OPEN→'conciliado' (status_source='rpc', H2) + audit; on
+ *   the charge OPEN→'pago' (status_source='rpc', H2) + audit; on
  *   `ambiguous`/`none`: mark the receipt needs_review.
  *
- * NOTHING here ever reaches 'pago' (decision #8/#24) — only the human
- * `confirm_charge` RPC does. Re-running is safe: receipts are upserted, payments
+ * A linked comprovante (auto-match here, or manual via `record_payment`) is
+ * treated as PAID — deterministic no-AI matching is trusted, so an auto-match
+ * flips the charge straight to 'pago' (amends decisions #8/#24's "auto-match →
+ * conciliado, await human confirm"). `confirm_charge` remains the path for any
+ * legacy 'conciliado' rows. Re-running is safe: receipts are upserted, payments
  * are UNIQUE (charge_id, receipt_id), and the flip only fires from an OPEN
  * status. Never throws for expected failures — sets `documents.processing_status`
  * and returns a summary.
@@ -332,10 +335,11 @@ export async function processComprovanteDocument(
 
       if (match.outcome === "auto" && match.chargeId) {
         const chargeId = match.chargeId;
-        // OPEN → conciliado (H2 sticky); only if still open
+        // OPEN → pago (H2 sticky); only if still open. A linked comprovante is
+        // trusted as paid — no human confirm step (amends #8/#24).
         const { data: flip } = await admin
           .from("charges")
-          .update({ status: "conciliado", status_source: "rpc" })
+          .update({ status: "pago", status_source: "rpc" })
           .eq("id", chargeId)
           .in("status", OPEN_STATUSES as unknown as string[])
           .select("id");
@@ -374,7 +378,7 @@ export async function processComprovanteDocument(
             rule: match.rule,
             amount: r.amount,
             paid_at: r.paidAt,
-            flipped_to_conciliado: flipped,
+            flipped_to_pago: flipped,
             reasons: match.reasons,
           },
         });
