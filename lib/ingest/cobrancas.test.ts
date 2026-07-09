@@ -324,6 +324,7 @@ describe("ingestCobrancasPayload", () => {
           id: "chg-1",
           dedupe_key: "pag:44:2026-07:aluguel",
           status: "pago",
+          match_status: "manually_matched",
           amount: 1400,
           expected_amount: 1400,
           flags: [],
@@ -348,6 +349,36 @@ describe("ingestCobrancasPayload", () => {
     expect(stats.statusAdvanced).toBe(0);
     expect(store.charges[0].status).toBe("pago"); // untouched
     expect(store.charges[0].source_document_id).not.toBeNull(); // still attached
+    // review fix: a paid charge is NOT dragged back into the review queue
+    expect(store.charges[0].match_status).toBe("manually_matched");
+  });
+
+  it("redelivery does not re-open an already-reviewed charge (idempotency fix)", async () => {
+    const store: Record<string, Row[]> = {
+      stations: [{ id: 553 }],
+      contracts: [{ id: "c1", cadastro_id: 44, station_id: 553 }],
+      billing_accounts: [
+        { id: "ba1", contract_id: "c1", account_type: "rent", station_id: 553 },
+      ],
+      charges: [],
+      documents: [],
+      charge_lines: [],
+      audit_events: [],
+    };
+    // 1st delivery → charge created, lands needs_review
+    await ingestCobrancasPayload(fakeClient(store), parsePayload(payloadMatchedRent()), DOWNLOAD);
+    expect(store.charges[0].match_status).toBe("needs_review");
+    // human reviews it (leaves the queue)
+    store.charges[0].match_status = "manually_matched";
+    // identical redelivery (n8n retry) → same document reused, must NOT re-open
+    const r2 = await ingestCobrancasPayload(
+      fakeClient(store),
+      parsePayload(payloadMatchedRent()),
+      DOWNLOAD,
+    );
+    expect(r2.documentReused).toBe(true);
+    expect(store.charges).toHaveLength(1);
+    expect(store.charges[0].match_status).toBe("manually_matched");
   });
 
   it("dedupes the document by content_hash across redeliveries (M5)", async () => {

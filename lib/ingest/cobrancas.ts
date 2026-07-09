@@ -555,8 +555,20 @@ export async function ingestCobrancasPayload(
         chave_pix: existing.chave_pix ?? c.chavePix,
         linha_digitavel: existing.linha_digitavel ?? c.linhaDigitavel,
         payment_method: existing.payment_method ?? c.paymentMethod,
-        match_status: "needs_review", // requirement 4.1 — human must check
       };
+      // H4 idempotency (review fix): only flag needs_review on the FIRST/new
+      // document attach to a non-terminal charge. A redelivery of the SAME
+      // document, or a terminal (pago/cancelada/nao_aplicavel) charge, is left
+      // untouched — so reviewed or paid work never gets dragged back into the
+      // /revisao/cobrancas queue. requirement 4.1 is still met on first attach.
+      const sameDocument = existing.source_document_id === documentId;
+      const terminal =
+        existing.status === "pago" ||
+        existing.status === "cancelada" ||
+        existing.status === "nao_aplicavel";
+      if (!sameDocument && !terminal) {
+        patch.match_status = "needs_review";
+      }
       // H4: only a still-`pendente` charge is mutable by the webhook. Advance
       // it to boleto_recebido and, if its amount is still the auto-set
       // gerar_mes value (not human-adjusted), fill in the boleto's Documento
