@@ -1,19 +1,11 @@
 "use client";
 
-import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { TriangleAlert } from "lucide-react";
 
 import { DataTable } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   ACCOUNT_TYPE_UI,
   AUTO_DEBIT_UI,
@@ -266,107 +258,24 @@ const HIDDEN_BY_DEFAULT = {
   latLon: false,
 };
 
-const BILL_STATUS_OPTIONS = Object.entries(UTILITY_BILL_STATUS_UI) as [
-  keyof typeof UTILITY_BILL_STATUS_UI,
-  { label: string },
-][];
-
-const DA_OPTIONS = [
-  ["cadastrado", AUTO_DEBIT_UI.cadastrado.label],
-  ["nao_cadastrado", AUTO_DEBIT_UI.nao_cadastrado.label],
-  ["desconhecido", AUTO_DEBIT_UI.desconhecido.label],
-] as const;
-
 export function InstalacoesTable({ rows }: { rows: InstalacaoRow[] }) {
-  const [provider, setProvider] = React.useState("all");
-  const [billStatus, setBillStatus] = React.useState("all");
-  const [autoDebit, setAutoDebit] = React.useState("all");
-
-  const filtered = React.useMemo(
-    () =>
-      rows.filter((r) => {
-        if (provider !== "all" && r.provider !== provider) return false;
-        if (billStatus !== "all" && r.billStatus !== billStatus) return false;
-        if (autoDebit !== "all" && r.autoDebit !== autoDebit) return false;
-        return true;
-      }),
-    [rows, provider, billStatus, autoDebit],
-  );
-
   return (
     <DataTable
       columns={columns}
-      data={filtered}
+      data={rows}
       searchPlaceholder="Buscar instalação, endereço…"
       csvFilename="instalacoes-energia"
       initialSorting={[{ id: "estacao", desc: false }]}
       initialColumnVisibility={HIDDEN_BY_DEFAULT}
+      // Spreadsheet-style header funnels (multi-select checklists).
+      filterableColumnIds={[
+        "provedor",
+        "statusFatura",
+        "debitoAutomatico",
+        "cidade",
+        "bairro",
+      ]}
       emptyMessage="Nenhuma instalação encontrada."
-      toolbarLeft={
-        <>
-          <Select
-            value={provider}
-            onValueChange={(v) => setProvider(v as string)}
-          >
-            <SelectTrigger size="sm" className="bg-card">
-              <SelectValue>
-                {provider === "all"
-                  ? "Provedor: todos"
-                  : ACCOUNT_TYPE_UI[provider as "energy_enel" | "energy_edp"]
-                      .label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Provedor: todos</SelectItem>
-              <SelectItem value="energy_enel">Enel</SelectItem>
-              <SelectItem value="energy_edp">EDP</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={billStatus}
-            onValueChange={(v) => setBillStatus(v as string)}
-          >
-            <SelectTrigger size="sm" className="bg-card">
-              <SelectValue>
-                {billStatus === "all"
-                  ? "Status: todos"
-                  : UTILITY_BILL_STATUS_UI[
-                      billStatus as keyof typeof UTILITY_BILL_STATUS_UI
-                    ].label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Status: todos</SelectItem>
-              {BILL_STATUS_OPTIONS.map(([value, ui]) => (
-                <SelectItem key={value} value={value}>
-                  {ui.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={autoDebit}
-            onValueChange={(v) => setAutoDebit(v as string)}
-          >
-            <SelectTrigger size="sm" className="bg-card">
-              <SelectValue>
-                {autoDebit === "all"
-                  ? "DA: todos"
-                  : AUTO_DEBIT_UI[autoDebit as keyof typeof AUTO_DEBIT_UI]
-                      .label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">DA: todos</SelectItem>
-              {DA_OPTIONS.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </>
-      }
     />
   );
 }

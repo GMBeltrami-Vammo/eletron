@@ -1,6 +1,5 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -17,7 +16,6 @@ import {
 import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 
 import { type ContractEndInfo } from "./contract-utils";
-import { FacetFilter } from "./facet-filter";
 
 /** Plain-JSON row precomputed on the server (page.tsx). */
 export interface ContractRow {
@@ -42,8 +40,6 @@ export interface ContractRow {
   /** Masked on the server — full document never reaches the list. */
   cnpjCpfMasked: string | null;
 }
-
-const NO_STATUS = "sem_status";
 
 const columns: ColumnDef<ContractRow, unknown>[] = [
   {
@@ -212,48 +208,13 @@ const columns: ColumnDef<ContractRow, unknown>[] = [
   },
 ];
 
-const TIPO_OPTIONS = Object.entries(CONTRACT_TYPE_UI).map(([value, ui]) => ({
-  value,
-  label: ui.label,
-}));
-
-const STATUS_OPTIONS = [
-  ...Object.entries(STATION_STATUS_UI).map(([value, ui]) => ({
-    value,
-    label: ui.label,
-  })),
-  { value: NO_STATUS, label: "Sem status" },
-];
-
 export function ContractsTable({ rows }: { rows: ContractRow[] }) {
   const router = useRouter();
-  const [tipoFilter, setTipoFilter] = React.useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
-
-  const filtered = React.useMemo(
-    () =>
-      rows.filter((r) => {
-        if (
-          tipoFilter.length > 0 &&
-          (r.contractType === null || !tipoFilter.includes(r.contractType))
-        ) {
-          return false;
-        }
-        if (
-          statusFilter.length > 0 &&
-          !statusFilter.includes(r.status ?? NO_STATUS)
-        ) {
-          return false;
-        }
-        return true;
-      }),
-    [rows, tipoFilter, statusFilter],
-  );
 
   return (
     <DataTable
       columns={columns}
-      data={filtered}
+      data={rows}
       searchPlaceholder="Buscar parceiro, estação, contato…"
       csvFilename="alugueis-contratos"
       initialSorting={[{ id: "cadastroId", desc: false }]}
@@ -263,26 +224,12 @@ export function ContractsTable({ rows }: { rows: ContractRow[] }) {
         email: false,
         cnpjCpf: false,
       }}
+      // Spreadsheet-style header funnels (multi-select checklists).
+      filterableColumnIds={["tipo", "status", "pagamento"]}
       onRowClick={(row) => {
         if (row.cadastroId !== null) router.push(`/alugueis/${row.cadastroId}`);
       }}
       emptyMessage="Nenhum contrato encontrado."
-      toolbarLeft={
-        <>
-          <FacetFilter
-            label="Tipo de contrato"
-            options={TIPO_OPTIONS}
-            selected={tipoFilter}
-            onChange={setTipoFilter}
-          />
-          <FacetFilter
-            label="Status"
-            options={STATUS_OPTIONS}
-            selected={statusFilter}
-            onChange={setStatusFilter}
-          />
-        </>
-      }
     />
   );
 }

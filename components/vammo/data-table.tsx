@@ -4,12 +4,16 @@ import * as React from "react";
 import {
   flexRender,
   getCoreRowModel,
+  getFacetedRowModel,
+  getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type ColumnFiltersState,
+  type FilterFn,
+  type Row,
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -43,7 +47,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ColumnFilter } from "@/components/vammo/column-filter";
 import { cn } from "@/lib/utils";
+
+/**
+ * Shared "spreadsheet AutoFilter" fn for `filterableColumnIds` columns: keeps a
+ * row when its (stringified, trimmed) accessor value is one of the selected
+ * values. Empty/absent selection = pass-through. Matches ColumnFilter's option
+ * derivation so the checklist and the filter agree.
+ */
+function multiSelectFilter<TData>(
+  row: Row<TData>,
+  columnId: string,
+  value: unknown,
+): boolean {
+  if (!Array.isArray(value) || value.length === 0) return true;
+  const cell = row.getValue(columnId);
+  return value.includes(String(cell ?? "").trim());
+}
 
 /**
  * TableControls + paginated-table lockup (mirrors vammo-ui's table shell:
@@ -66,6 +87,7 @@ export function DataTable<TData>({
   emptyMessage = "Nenhum resultado.",
   columnFilters,
   onColumnFiltersChange,
+  filterableColumnIds,
 }: {
   columns: ColumnDef<TData, unknown>[];
   data: TData[];
@@ -84,7 +106,35 @@ export function DataTable<TData>({
   /** Controlled column filters (for external facet bars). */
   columnFilters?: ColumnFiltersState;
   onColumnFiltersChange?: (filters: ColumnFiltersState) => void;
+  /**
+   * Column ids that get a spreadsheet-style header funnel (multi-select
+   * checklist of distinct values). The shared `multiSelect` filter fn is wired
+   * onto them automatically unless the column already declares its own.
+   */
+  filterableColumnIds?: string[];
 }) {
+  const filterableSet = React.useMemo(
+    () => new Set(filterableColumnIds ?? []),
+    [filterableColumnIds],
+  );
+
+  // Inject the shared multi-select filter fn onto filterable columns that don't
+  // bring their own, so the header funnel just works from the caller's ids.
+  const resolvedColumns = React.useMemo<ColumnDef<TData, unknown>[]>(() => {
+    if (filterableSet.size === 0) return columns;
+    return columns.map((c) => {
+      const id =
+        c.id ?? ("accessorKey" in c ? String(c.accessorKey) : undefined);
+      if (id && filterableSet.has(id) && !c.filterFn) {
+        return {
+          ...c,
+          enableColumnFilter: true,
+          filterFn: multiSelectFilter as FilterFn<TData>,
+        };
+      }
+      return c;
+    });
+  }, [columns, filterableSet]);
   const [sorting, setSorting] = React.useState<SortingState>(
     initialSorting ?? [],
   );
@@ -98,7 +148,7 @@ export function DataTable<TData>({
 
   const table = useReactTable({
     data,
-    columns,
+    columns: resolvedColumns,
     state: { sorting, globalFilter, columnVisibility, columnFilters: filters },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -113,6 +163,8 @@ export function DataTable<TData>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getFacetedRowModel: getFacetedRowModel(),
+    getFacetedUniqueValues: getFacetedUniqueValues(),
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
   });
@@ -211,6 +263,13 @@ export function DataTable<TData>({
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
+                  const filterable =
+                    filterableSet.has(header.column.id) &&
+                    header.column.getCanFilter();
+                  const headerLabel =
+                    typeof header.column.columnDef.header === "string"
+                      ? header.column.columnDef.header
+                      : header.column.id;
                   return (
                     <TableHead
                       key={header.id}
@@ -237,6 +296,12 @@ export function DataTable<TData>({
                           ) : (
                             <ArrowUpDown className="size-3 opacity-40" />
                           ))}
+                        {filterable ? (
+                          <ColumnFilter
+                            column={header.column}
+                            title={headerLabel}
+                          />
+                        ) : null}
                       </span>
                     </TableHead>
                   );
