@@ -133,7 +133,7 @@ export function ChargePicker({
           paidAt: receipt.paidAt,
           method: paymentMethodForReceipt(receipt.receiptType),
         }),
-      { success: "Comprovante conciliado", invalidate },
+      { success: "Comprovante vinculado", invalidate },
     );
     if (ok) onOpenChange(false);
   }
@@ -149,8 +149,8 @@ export function ChargePicker({
         <DialogHeader>
           <DialogTitle>Conciliar comprovante</DialogTitle>
           <DialogDescription>
-            Selecione a cobrança para vincular este recibo. O vínculo manual já
-            entra confirmado.
+            Selecione a cobrança para vincular este recibo. Ao vincular, a
+            cobrança é marcada como paga quando o valor é coberto.
           </DialogDescription>
         </DialogHeader>
 

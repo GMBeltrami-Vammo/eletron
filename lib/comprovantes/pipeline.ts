@@ -335,16 +335,10 @@ export async function processComprovanteDocument(
 
       if (match.outcome === "auto" && match.chargeId) {
         const chargeId = match.chargeId;
-        // OPEN → pago (H2 sticky); only if still open. A linked comprovante is
-        // trusted as paid — no human confirm step (amends #8/#24).
-        const { data: flip } = await admin
-          .from("charges")
-          .update({ status: "pago", status_source: "rpc" })
-          .eq("id", chargeId)
-          .in("status", OPEN_STATUSES as unknown as string[])
-          .select("id");
-        const flipped = (flip?.length ?? 0) === 1;
-
+        // Bind the comprovante FIRST, flip to pago LAST — so the invariant
+        // "pago ⟹ a bound comprovante exists" holds even if a step fails
+        // mid-way (review finding). A linked comprovante is trusted as paid —
+        // no human confirm step (amends #8/#24).
         await admin.from("payments").upsert(
           {
             charge_id: chargeId,
@@ -366,6 +360,16 @@ export async function processComprovanteDocument(
             match_notes: notes,
           })
           .eq("id", receiptId);
+
+        // OPEN → pago (H2 sticky); only if still open, and only now that the
+        // payment + receipt are bound.
+        const { data: flip } = await admin
+          .from("charges")
+          .update({ status: "pago", status_source: "rpc" })
+          .eq("id", chargeId)
+          .in("status", OPEN_STATUSES as unknown as string[])
+          .select("id");
+        const flipped = (flip?.length ?? 0) === 1;
 
         await admin.from("audit_events").insert({
           entity_table: "charges",
