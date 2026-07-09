@@ -11,12 +11,7 @@ import { Handshake, Home, Zap } from "lucide-react";
 
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import {
-  formatBRL,
-  formatCompetencia,
-  formatDate,
-  formatNumber,
-} from "@/lib/format";
+import { formatBRL, formatDate } from "@/lib/format";
 import { CHARGE_STATUS, type ChargeStatus } from "@/lib/domain";
 import {
   AUTO_DEBIT_UI,
@@ -43,7 +38,6 @@ export const INITIAL_COLUMN_VISIBILITY: VisibilityState = {
   parceiro: false,
   cadastroId: false,
   boxes: false,
-  frDivergencia: false,
   criadaEm: false,
   latLong: false,
 };
@@ -397,33 +391,6 @@ export function buildColumns(today: string): ColumnDef<EstacaoRow, unknown>[] {
         </div>
       ),
       meta: { csvValue: (row: EstacaoRow) => row.boxCount ?? "" },
-    },
-    {
-      id: "frDivergencia",
-      header: "F/R divergência %",
-      accessorFn: (row) => row.frDivergencePct ?? -Infinity,
-      cell: ({ row }) => {
-        const { frDivergencePct, frDivergenceMonth } = row.original;
-        if (frDivergencePct === null) {
-          return <span className="text-xs text-muted-foreground">—</span>;
-        }
-        const diverges = Math.abs(frDivergencePct) > 15;
-        return (
-          <div className="text-right">
-            <span
-              className={`tabular-nums ${diverges ? "font-semibold text-error" : ""}`}
-              title={
-                frDivergenceMonth
-                  ? `Competência ${formatCompetencia(`${frDivergenceMonth}-01`)}`
-                  : undefined
-              }
-            >
-              {formatNumber(frDivergencePct)}%
-            </span>
-          </div>
-        );
-      },
-      meta: { csvValue: (row: EstacaoRow) => row.frDivergencePct ?? "" },
     },
     {
       id: "criadaEm",

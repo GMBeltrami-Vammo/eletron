@@ -7,7 +7,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL } from "@/lib/format";
 import {
   ALERT_TYPE_UI,
   CONTRACT_TYPE_UI,
@@ -16,7 +16,7 @@ import {
 } from "@/lib/labels";
 import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 
-import { EndsChip, type ContractEndInfo } from "./contract-utils";
+import { type ContractEndInfo } from "./contract-utils";
 import { FacetFilter } from "./facet-filter";
 
 /** Plain-JSON row precomputed on the server (page.tsx). */
@@ -170,26 +170,6 @@ const columns: ColumnDef<ContractRow, unknown>[] = [
       if (!status) return <span className="text-muted-foreground">—</span>;
       const ui = STATION_STATUS_UI[status];
       return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
-    },
-  },
-  {
-    id: "vigencia",
-    header: "Vigência",
-    accessorFn: (r) => r.endsOn ?? "",
-    cell: ({ row }) => {
-      const r = row.original;
-      return (
-        <div className="flex flex-col gap-0.5">
-          <span className="tabular-nums text-sm">
-            {formatDate(r.startsOn)} → {formatDate(r.endsOn)}
-          </span>
-          <EndsChip info={r.endInfo} />
-        </div>
-      );
-    },
-    meta: {
-      csvValue: (r: ContractRow) =>
-        `${formatDate(r.startsOn)} → ${formatDate(r.endsOn)}`,
     },
   },
   {

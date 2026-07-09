@@ -57,11 +57,16 @@ function DropdownMenuLabel({
   className,
   inset,
   ...props
-}: MenuPrimitive.GroupLabel.Props & {
+}: React.ComponentProps<"div"> & {
   inset?: boolean
 }) {
+  // Plain div — NOT MenuPrimitive.GroupLabel, which in Base UI throws
+  // "MenuGroupContext is missing" unless wrapped in a <Menu.Group>. Our labels
+  // are standalone section headers (Colunas, facet filters, action menus), so a
+  // styled div is the correct primitive (mirrors Radix shadcn's DropdownMenuLabel).
   return (
-    <MenuPrimitive.GroupLabel
+    <div
+      role="presentation"
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(

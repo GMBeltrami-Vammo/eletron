@@ -19,12 +19,7 @@ import {
   AUTO_DEBIT_UI,
   UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
-import {
-  formatBRL,
-  formatCompetencia,
-  formatDate,
-  formatNumber,
-} from "@/lib/format";
+import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import { StationCell } from "./station-cell";
@@ -193,34 +188,6 @@ const columns: ColumnDef<InstalacaoRow, unknown>[] = [
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
-  },
-  {
-    id: "divergenciaFr",
-    header: "Divergência F/R",
-    accessorFn: (r) => r.frDivergencePct ?? Number.MIN_SAFE_INTEGER,
-    cell: ({ row }) => {
-      const { frDivergencePct, frDivergenceMonth } = row.original;
-      if (frDivergencePct === null) {
-        return <span className="block text-right text-muted-foreground">—</span>;
-      }
-      const high = Math.abs(frDivergencePct) > 15;
-      return (
-        <span
-          className={cn(
-            "block rounded px-1 text-right tabular-nums",
-            high && "bg-error-subtle font-medium text-error-emphasis",
-          )}
-          title={
-            frDivergenceMonth
-              ? `kWh faturado vs registrado em ${formatCompetencia(frDivergenceMonth)}`
-              : undefined
-          }
-        >
-          {formatNumber(frDivergencePct)}%
-        </span>
-      );
-    },
-    meta: csvMeta((r) => r.frDivergencePct ?? ""),
   },
   {
     id: "primeiraColeta",
