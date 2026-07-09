@@ -511,7 +511,7 @@ export function PagamentosView({
             </span>
           </TabsTrigger>
           <TabsTrigger value="outros">
-            Aluguel e outros
+            Locação
             <span className="rounded bg-muted px-1 text-xs tabular-nums">
               {outrosRows.length}
             </span>
