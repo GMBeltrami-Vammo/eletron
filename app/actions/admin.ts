@@ -17,9 +17,11 @@ import { revalidatePath } from "next/cache";
 import { revalidateSnapshot } from "@/lib/data/repository.server";
 import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
 import { getSessionEmail } from "@/lib/http/guards";
+import { loadRawTabs } from "@/lib/ingest/load-raw";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { runAlertsEval } from "@/lib/sync/alerts-eval";
 import { runMetabaseSync } from "@/lib/sync/metabase-sync";
+import { runSheetSync, type SheetSyncResult } from "@/lib/sync/sheet-sync";
 
 /** Grant/change/remove a user's role. `role: null` removes it (last-admin guarded). */
 export async function setUserRole(input: {
@@ -103,5 +105,28 @@ export async function runJobNow(
       await runAlertsEval({ admin, trigger });
     }
     revalidatePath("/admin");
+  });
+}
+
+/**
+ * ONE-TIME cutover clone (decision #25). Reads the Google Sheets one final time
+ * and populates the `charging` schema. Runs on the DEPLOYED app so it uses
+ * Vercel's env (sheets SA key + Supabase service role) — no local credentials
+ * needed; this is the deployed equivalent of `scripts/backfill.ts`, for when
+ * the operator can't run the local script. Idempotent (upserts) — safe to
+ * re-run. AFTER it succeeds, set `REPOSITORY_BACKEND=supabase` in Vercel so the
+ * app serves from Supabase instead of the sheets. Session-gated (@vammo.com);
+ * this is the ONLY remaining sheet READ in the app (the sever otherwise holds).
+ */
+export async function runFinalClone(): Promise<ActionResult<SheetSyncResult>> {
+  return withAdmin(async (email) => {
+    const result = await runSheetSync({
+      admin: supabaseAdmin(),
+      loadRaw: loadRawTabs,
+      trigger: `clone-final:${email}`,
+    });
+    revalidatePath("/admin");
+    await revalidateSnapshot();
+    return result;
   });
 }

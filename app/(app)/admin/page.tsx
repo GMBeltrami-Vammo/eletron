@@ -20,6 +20,7 @@ import { IngestIssues } from "@/components/admin/ingest-issues";
 import { getViewer } from "@/components/admin/viewer";
 import { readJobRuns } from "@/components/admin/admin-data";
 import { JobRunsCard } from "@/components/admin/job-runs-card";
+import { CloneCutoverCard } from "@/components/admin/clone-cutover-card";
 import { getRepository } from "@/lib/data/repository.server";
 import { formatDateTime } from "@/lib/format";
 
@@ -121,6 +122,7 @@ async function AdminManagementCards() {
   const jobRuns = await readJobRuns(50);
   return (
     <div className="space-y-4">
+      {viewer.supabaseConfigured ? <CloneCutoverCard /> : null}
       <JobRunsCard initial={jobRuns} isAdmin={isAdmin} />
     </div>
   );

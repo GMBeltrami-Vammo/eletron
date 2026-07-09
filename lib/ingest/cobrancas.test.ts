@@ -78,6 +78,19 @@ describe("normalizeCobranca", () => {
       "UNIDENTIFIED",
     );
   });
+
+  it("drops a malformed CNPJ to null (would violate the CHECK) — audit fix", () => {
+    // 12 digits — neither 11 (CPF) nor 14 (CNPJ) → must not reach the counterparty insert
+    expect(normalizeCobranca({ CNPJ: "12.345.678/0001" } as RawCobranca).cnpj).toBeNull();
+    // valid 14-digit CNPJ is kept (digits only)
+    expect(normalizeCobranca({ CNPJ: "12.345.678/0001-99" } as RawCobranca).cnpj).toBe(
+      "12345678000199",
+    );
+    // valid 11-digit CPF kept
+    expect(normalizeCobranca({ CNPJ: "123.456.789-09" } as RawCobranca).cnpj).toBe(
+      "12345678909",
+    );
+  });
 });
 
 describe("cobrancaDedupeKey (C1)", () => {
