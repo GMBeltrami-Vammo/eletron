@@ -3,14 +3,19 @@
  * workflow (context/PDF_Comprovante_Processor.json). Pure + test-importable
  * (no `server-only`, no I/O): takes per-page text (from unpdf, extract.ts) and
  * returns one `ParsedReceipt` per PIX/TED page, one per débito-automático
- * segment, and one per "Comprovante de Operação - Concessionárias / 0048 -
- * ELETROPAULO" segment (Format C — bank-generated bill-payment receipts).
+ * segment, one per "Comprovante de Operação - Concessionárias / 0048 -
+ * ELETROPAULO" segment (Format C — bank-generated bill-payment receipts), and
+ * one per "Comprovante de pagamento de boleto" segment (branch 4 — the payer's
+ * proof of paying a boleto; derived from the 07.07 fixtures, not from n8n).
  *
- * The regexes are copied verbatim from the n8n code nodes so the DB pipeline
- * agrees with the legacy sheet flow on real receipts (D1 acceptance gate).
+ * The PIX/TED, débito-automático and concessionária regexes are copied verbatim
+ * from the n8n code nodes so the DB pipeline agrees with the legacy sheet flow
+ * on real receipts (D1 acceptance gate). The boleto-payment branch has no n8n
+ * reference — its regexes were derived from the fixtures.
  * Branch dispatch (review-resolutions / drive-comprovantes §4.2): a page whose
  * text matches the débito-automático header → branch 2; the concessionária /
- * ELETROPAULO header → branch 3; else branch 1 (PIX/TED).
+ * ELETROPAULO header → branch 3; the boleto-payment header → branch 4; else
+ * branch 1 (PIX/TED).
  */
 
 import { RECEIPT_TYPE, type ReceiptType } from "@/lib/domain";
@@ -31,6 +36,18 @@ const DA_FOOTER_RE = /Em caso de d[uú]vidas/i;
 const CONCESSIONARIA_HEADER_RE =
   /Comprovante de Opera[çc][aã]o\s*-\s*Concession[áa]rias\s*\n?\s*0048\s*-\s*ELETROPAULO/i;
 const CONCESSIONARIA_CUT_RE = /cortar aqui/i;
+
+// ── boleto-payment header (branch-4 dispatch + segmentation) ─────────────────
+// A bank-generated "Comprovante de pagamento de boleto" — the payer's proof of
+// paying a boleto (Itaú Sispag layout in the 07.07 fixtures). The legacy n8n
+// flow does NOT parse it; the PIX/TED branch reads its "Valor" layout as
+// amount=null. Distinct from the débito-automático header ("…de débito
+// automático") and the concessionária header, so it is dispatched AFTER both —
+// the shared "Comprovante de pagamento de …" prefix never collides. The body is
+// cut at the shared "Em caso de dúvidas" footer (DA_FOOTER_RE).
+const BOLETO_PAYMENT_HEADER_RE = /Comprovante de pagamento de boleto/i;
+const BR_MONEY_RE = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
+const BR_DATE_RE = /\d{2}[/.]\d{2}[/.]\d{4}/g;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // pt-BR money / date helpers (ported from n8n parseValorBR + date logic)
@@ -341,13 +358,124 @@ function parseConcessionariaPage(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Branch 4 — boleto payment (one receipt per segment on a page)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Last full match of a `/g` regex (null when none). */
+function lastOf(matches: RegExpMatchArray | null): string | null {
+  return matches && matches.length > 0 ? matches[matches.length - 1] : null;
+}
+
+/**
+ * Longest space-separated digit run on a line, returned digits-only. The
+ * "Identificação no meu comprovante" line reads `<bank name> <47-digit linha
+ * digitável, grouped 5 5 5 6 5 6 1 14>`; the bank-name letters break the run, so
+ * the linha digitável is the longest run. Stored digits-only so the matcher's
+ * rank-1 `codigo_barras` key compares it against `charges.linha_digitavel`.
+ */
+function longestDigitRun(line: string): string | null {
+  const runs = line.match(/\d[\d ]*\d/g);
+  if (!runs) return null;
+  let best = "";
+  for (const r of runs) {
+    const d = r.replace(/\D/g, "");
+    if (d.length > best.length) best = d;
+  }
+  return best.length > 0 ? best : null;
+}
+
+/**
+ * Port-less parser for "Comprovante de pagamento de boleto" pages (branch 4).
+ * A page carrying one or more boleto-payment receipts is split on the header
+ * (segment_index), each body cut at the "Em caso de dúvidas" footer. Modeled as
+ * a `boleto_barcode` receipt: it links off the linha digitável (the matcher's
+ * rank-1 key). `utility` is null — the beneficiário is an arbitrary supplier,
+ * not necessarily Enel/EDP (that is what separates it from the concessionária
+ * branch, which is always Enel). Fields (all derived from the 07.07 fixtures):
+ *   - amount   → "(=) Valor do pagamento (R$):", the last money token on the
+ *                next line (`<pagador> <CNPJ> <valor>`); fallback "Valor do
+ *                boleto (R$);".
+ *   - paidAt   → "Data de pagamento:", the last date on the next line (the
+ *                "Beneficiário Final" variant prefixes a name + CNPJ).
+ *   - barcode  → longest digit run on the "Identificação no meu comprovante" line.
+ *   - cnpjCpf  → beneficiário CNPJ on the "Razão Social:" line (issuer key).
+ */
+function parseBoletoPaymentPage(
+  pageText: string,
+  pageNumber: number,
+): ParsedReceipt[] {
+  const segments = pageText
+    .split(BOLETO_PAYMENT_HEADER_RE)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const out: ParsedReceipt[] = [];
+  segments.forEach((segment, segIndex) => {
+    const body = segment.split(DA_FOOTER_RE)[0].trim();
+    if (!body) return;
+
+    const valorLine =
+      body.match(/Valor do pagamento \(R\$\):[^\n]*\n([^\n]+)/i)?.[1] ?? "";
+    const boletoLine =
+      body.match(/Valor do boleto \(R\$\)[;:][^\n]*\n([^\n]+)/i)?.[1] ?? "";
+    const valorTok =
+      lastOf(valorLine.match(BR_MONEY_RE)) ?? lastOf(boletoLine.match(BR_MONEY_RE));
+    const amount = parseBrMoney(valorTok);
+
+    const idLine =
+      body.match(/Identifica[çc][aã]o no meu comprovante:[^\n]*\n([^\n]+)/i)?.[1] ??
+      "";
+    const codigoBarras = longestDigitRun(idLine);
+
+    const dataLine = body.match(/Data de pagamento:[^\n]*\n([^\n]+)/i)?.[1] ?? "";
+    const paidAt = parseBrDate(lastOf(dataLine.match(BR_DATE_RE)));
+
+    const cnpjCpf = digits(
+      body.match(/Raz[aã]o Social:[^\n]*?(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/i)?.[1] ??
+        null,
+    );
+
+    const autenticacao =
+      body.match(/Autentica[çc][aã]o mec[aâ]nica[^\n]*\n\s*([A-F0-9]{20,})/i)?.[1] ??
+      null;
+    const ctrl = body.match(/CTRL\s+(\d+)/i)?.[1] ?? null;
+
+    // Drop split fragments that carry neither a value nor a barcode (branch 2/3 parity).
+    if (amount === null && codigoBarras === null) return;
+
+    out.push({
+      pageNumber,
+      segmentIndex: segIndex,
+      receiptType: RECEIPT_TYPE.boletoBarcode,
+      amount,
+      paidAt,
+      chavePix: null,
+      chavePixNormalized: null,
+      cnpjCpf,
+      banco: null,
+      agencia: null,
+      conta: null,
+      identificacao: null,
+      autenticacao,
+      codigoBarras,
+      ctrl,
+      utility: null,
+      rawText: body,
+    });
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Public entry point
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Parses per-page comprovante text into receipts. Débito-automático and
- * concessionária / ELETROPAULO pages yield one receipt per segment; every other
- * non-empty page yields exactly one PIX/TED receipt.
+ * Parses per-page comprovante text into receipts. Débito-automático,
+ * concessionária / ELETROPAULO and boleto-payment pages yield one receipt per
+ * segment; every other non-empty page yields exactly one PIX/TED receipt. The
+ * boleto-payment header is checked after DA/concessionária so the shared
+ * "Comprovante de pagamento de …" prefix never mis-routes.
  */
 export function parseComprovantePages(pages: string[]): ParsedReceipt[] {
   const receipts: ParsedReceipt[] = [];
@@ -358,6 +486,8 @@ export function parseComprovantePages(pages: string[]): ParsedReceipt[] {
       receipts.push(...parseDebitoAutomaticoPage(pageText, pageNumber));
     } else if (CONCESSIONARIA_HEADER_RE.test(pageText)) {
       receipts.push(...parseConcessionariaPage(pageText, pageNumber));
+    } else if (BOLETO_PAYMENT_HEADER_RE.test(pageText)) {
+      receipts.push(...parseBoletoPaymentPage(pageText, pageNumber));
     } else if (pageText.trim().length > 0) {
       receipts.push(parsePixTedPage(pageText, pageNumber));
     }

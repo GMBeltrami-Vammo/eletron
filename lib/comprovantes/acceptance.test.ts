@@ -23,12 +23,29 @@ const FIXTURES = {
 
 /**
  * Bundle comprovantes that may contain Format-C ("Comprovante de Operação -
- * Concessionárias / 0048 - ELETROPAULO") pages — the format the in-app parser
+ * Concessionárias / 0048 - ELETROPAULO") pages — a bank-generated Enel
+ * bill-payment receipt (`boleto_barcode`, utility 'enel') the in-app parser
  * previously fell through to the PIX/TED branch (amount=null).
  */
 const FORMAT_C_CANDIDATES = [
   "Comprovantes - 01 à 16 - Junho (1).pdf",
   "Comprovantes - 17 à 24 Junho (1).pdf",
+  "Comprovante - 07.07.pdf",
+  "Comprovante - 07.07 pt 2.pdf",
+  "Comprovante - 07.07 pt 3.pdf",
+  "Comprovante - 07.07 pt 4.pdf",
+  "Comprovante - 07.07 pt 5.pdf",
+  "Comprovante - 07.07 pt 6.pdf",
+];
+
+/**
+ * The 07.07 bundles carry the "Comprovante de pagamento de boleto" format (the
+ * payer's proof of paying a boleto — an Itaú Sispag layout). Like Format C it
+ * previously fell through to PIX/TED as amount=null; the branch-4 parser now
+ * yields a `boleto_barcode` receipt with utility=null (arbitrary beneficiário,
+ * not a concessionária) carrying the paid amount + the 47-digit linha digitável.
+ */
+const BOLETO_PAYMENT_CANDIDATES = [
   "Comprovante - 07.07.pdf",
   "Comprovante - 07.07 pt 2.pdf",
   "Comprovante - 07.07 pt 3.pdf",
@@ -103,7 +120,12 @@ suite("comprovante parser — real PDFs", () => {
     for (const name of FORMAT_C_CANDIDATES) {
       if (!existsSync(join(DIR, name))) continue;
       const receipts = await parseFixture(name);
-      const formatC = receipts.filter((r) => r.receiptType === "boleto_barcode");
+      // Concessionária receipts are `boleto_barcode` with utility 'enel' (0048 =
+      // ELETROPAULO); the boleto-payment format shares the type but has utility
+      // null — asserted separately below.
+      const formatC = receipts.filter(
+        (r) => r.receiptType === "boleto_barcode" && r.utility === "enel",
+      );
       for (const r of receipts) perType[r.receiptType] = (perType[r.receiptType] ?? 0) + 1;
       if (formatC.length > 0) fixturesWithFormatC += 1;
       formatCTotal += formatC.length;
@@ -143,5 +165,65 @@ suite("comprovante parser — real PDFs", () => {
     // The fixtures Gabriel supplied are expected to contain ≥1 Format-C page;
     // if this ever hits 0, the header regex or the extraction stopped matching.
     expect(formatCTotal).toBeGreaterThan(0);
+  });
+
+  it("boleto payment (Comprovante de pagamento de boleto): 07.07 fixtures parse with amount + linha digitável", async () => {
+    let boletoTotal = 0;
+    let nullAmount = 0;
+    let nullBarcode = 0;
+    const nullPages: string[] = [];
+
+    for (const name of BOLETO_PAYMENT_CANDIDATES) {
+      if (!existsSync(join(DIR, name))) continue;
+      const receipts = await parseFixture(name);
+      // boleto-payment receipts: `boleto_barcode` with utility null.
+      const boleto = receipts.filter(
+        (r) => r.receiptType === "boleto_barcode" && r.utility === null,
+      );
+      boletoTotal += boleto.length;
+
+      console.log(
+        `[boleto-pay] ${name}: receipts=${receipts.length} boletoPay=${boleto.length}`,
+        boleto.slice(0, 6).map((r) => ({
+          p: `${r.pageNumber}.${r.segmentIndex}`,
+          amount: r.amount,
+          paidAt: r.paidAt,
+          barcodeLen: r.codigoBarras?.length ?? 0,
+          cnpj: r.cnpjCpf,
+        })),
+      );
+
+      // The regression this change fixes: these pages used to fall through to
+      // PIX/TED as amount=null. Each recognized receipt must now carry a
+      // non-null amount AND a linha digitável (digits-only, so the matcher's
+      // rank-1 barcode key can link it to charges.linha_digitavel).
+      for (const r of boleto) {
+        if (r.amount === null) {
+          nullAmount += 1;
+          nullPages.push(`${name} ${r.pageNumber}.${r.segmentIndex} amount`);
+        }
+        if (r.codigoBarras === null) {
+          nullBarcode += 1;
+          nullPages.push(`${name} ${r.pageNumber}.${r.segmentIndex} barcode`);
+        }
+        expect(
+          r.amount,
+          `${name} receipt ${r.pageNumber}.${r.segmentIndex} amount`,
+        ).not.toBeNull();
+        expect(
+          r.codigoBarras,
+          `${name} receipt ${r.pageNumber}.${r.segmentIndex} barcode`,
+        ).not.toBeNull();
+        expect(r.utility).toBeNull();
+      }
+    }
+
+    console.log(
+      `[boleto-pay] TOTAL boleto-payment receipts=${boletoTotal} (null amount=${nullAmount}, null barcode=${nullBarcode})`,
+      nullPages,
+    );
+
+    // The 07.07 bundles are expected to contain ≥1 boleto-payment page.
+    expect(boletoTotal).toBeGreaterThan(0);
   });
 });
