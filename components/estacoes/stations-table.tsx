@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ColumnFiltersState } from "@tanstack/react-table";
-import { X } from "lucide-react";
+import { Clock, Eye, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,8 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { DataTable } from "@/components/vammo/data-table";
+import { useRunAction } from "@/components/comprovantes/write-helpers";
+import { setStationHidden } from "@/app/actions/stations";
 import { cn } from "@/lib/utils";
 import {
   ALERT_TYPE_UI,
@@ -79,6 +81,22 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Freshness filter (B): hide stations whose last scraper collection is older than this. */
+const FRESHNESS_STALE_DAYS = 7;
+
+/**
+ * Whole days between an ISO timestamp and now. Client-safe (no server-only
+ * import): a station's `freshness` is min(scrapedAt) across its utility
+ * accounts. Returns null when there is no collection to age (rent-only rows),
+ * so the freshness filter leaves those visible.
+ */
+function daysSinceCollection(iso: string | null, now: number): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.floor((now - then) / 86_400_000);
+}
+
 interface FacetOption {
   value: string;
   label: string;
@@ -133,12 +151,28 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const filtro = searchParams.get("filtro");
+  const { run } = useRunAction();
 
   const [activeChips, setActiveChips] = React.useState<Set<string>>(() =>
     chipsFor(filtro),
   );
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     () => filtersFor(filtro),
+  );
+  // Declutter toggles (request #5): (A) reveal manually-hidden stations,
+  // (B) hide stations whose scraper collection is stale.
+  const [showHidden, setShowHidden] = React.useState(false);
+  const [hideStale, setHideStale] = React.useState(false);
+
+  const handleToggleHidden = React.useCallback(
+    (row: EstacaoRow) => {
+      void run(
+        () =>
+          setStationHidden({ stationId: row.stationId, hidden: !row.hidden }),
+        { success: row.hidden ? "Estação exibida novamente" : "Estação ocultada" },
+      );
+    },
+    [run],
   );
 
   // KPI clicks while mounted change ?filtro= without remounting — re-apply.
@@ -151,24 +185,57 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
   }, [filtro]);
 
   const today = React.useMemo(localToday, []);
-  const columns = React.useMemo(() => buildColumns(today), [today]);
+  const columns = React.useMemo(
+    () => buildColumns(today, handleToggleHidden),
+    [today, handleToggleHidden],
+  );
+
+  const hiddenCount = React.useMemo(
+    () => rows.filter((r) => r.hidden).length,
+    [rows],
+  );
+  const staleCount = React.useMemo(() => {
+    const now = Date.now();
+    return rows.filter((r) => {
+      const days = daysSinceCollection(r.freshness, now);
+      return days !== null && days > FRESHNESS_STALE_DAYS;
+    }).length;
+  }, [rows]);
+
+  /**
+   * Base set after the two declutter filters (manual hide + freshness) but
+   * BEFORE the alert chips. Chip badge counts AND the table both derive from
+   * this, so the counts always match what the table shows — one canonical count
+   * per concept, no chip-vs-table divergence (decision #16).
+   */
+  const baseRows = React.useMemo(() => {
+    const now = Date.now();
+    return rows.filter((r) => {
+      if (!showHidden && r.hidden) return false;
+      if (hideStale) {
+        const days = daysSinceCollection(r.freshness, now);
+        if (days !== null && days > FRESHNESS_STALE_DAYS) return false;
+      }
+      return true;
+    });
+  }, [rows, showHidden, hideStale]);
 
   const chipCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
     for (const type of CHIP_TYPES) {
       counts.set(
         type,
-        rows.filter((r) => r.alertTypes.includes(type)).length,
+        baseRows.filter((r) => r.alertTypes.includes(type)).length,
       );
     }
     return counts;
-  }, [rows]);
+  }, [baseRows]);
 
-  /** Chips pre-filter the data (station has ANY selected alert type). */
+  /** Alert-chip filter over the decluttered base set. */
   const filteredRows = React.useMemo(() => {
-    if (activeChips.size === 0) return rows;
-    return rows.filter((r) => r.alertTypes.some((t) => activeChips.has(t)));
-  }, [rows, activeChips]);
+    if (activeChips.size === 0) return baseRows;
+    return baseRows.filter((r) => r.alertTypes.some((t) => activeChips.has(t)));
+  }, [baseRows, activeChips]);
 
   function toggleChip(type: string) {
     setActiveChips((prev) => {
@@ -238,6 +305,50 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
             </button>
           );
         })}
+      </div>
+
+      {/* Declutter toggles (request #5): manual hide list + freshness filter */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {hiddenCount > 0 ? (
+          <button
+            type="button"
+            aria-pressed={showHidden}
+            onClick={() => setShowHidden((v) => !v)}
+            title="Revela as estações marcadas como ocultas"
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+              showHidden
+                ? "border-ring bg-muted text-foreground"
+                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <Eye className="size-3.5" strokeWidth={2} />
+            Mostrar ocultas
+            <span className="tabular-nums">{hiddenCount}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-pressed={hideStale}
+          onClick={() => setHideStale((v) => !v)}
+          title={
+            "Oculta estações cuja última coleta do scraper é anterior a 7 dias. " +
+            "Atenção: os dados do scraper estão congelados desde a clonagem para o " +
+            "Supabase (decisão #25), então com o tempo isso oculta quase todas as estações."
+          }
+          className={cn(
+            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+            hideStale
+              ? "border-ring bg-muted text-foreground"
+              : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Clock className="size-3.5" strokeWidth={2} />
+          Ocultar coleta &gt; 7 dias
+          {staleCount > 0 ? (
+            <span className="tabular-nums">{staleCount}</span>
+          ) : null}
+        </button>
       </div>
 
       <DataTable<EstacaoRow>

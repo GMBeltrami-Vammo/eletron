@@ -48,6 +48,7 @@ function station(id: number, activeBoxes: number | null = null): Station {
     sourceCreatedAt: null,
     activeBoxes,
     boxesSyncedAt: null,
+    hidden: false,
     raw: {},
   };
 }

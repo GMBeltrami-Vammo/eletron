@@ -152,6 +152,7 @@ describe("toStationRow", () => {
     longitude: null,
     status,
     sourceCreatedAt: null,
+    hidden: false,
     raw: {},
   });
 

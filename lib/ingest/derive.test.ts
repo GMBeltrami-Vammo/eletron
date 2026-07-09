@@ -25,6 +25,7 @@ function station(id: number, status: Station["status"] = "ACTIVE"): Station {
     longitude: null,
     status,
     sourceCreatedAt: null,
+    hidden: false,
     raw: {},
   };
 }

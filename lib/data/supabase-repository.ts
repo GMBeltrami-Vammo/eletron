@@ -192,6 +192,7 @@ interface StationRow {
   source_created_at: string | null;
   active_boxes: number | null;
   boxes_synced_at: string | null;
+  hidden: boolean | null;
   raw: Record<string, string> | null;
 }
 interface CounterpartyRow {
@@ -460,6 +461,7 @@ export async function loadChargingWorld(
     sourceCreatedAt: r.source_created_at,
     activeBoxes: r.active_boxes,
     boxesSyncedAt: r.boxes_synced_at,
+    hidden: r.hidden ?? false,
     raw: r.raw ?? {},
   }));
 

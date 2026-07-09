@@ -7,8 +7,9 @@
 
 import Link from "next/link";
 import type { ColumnDef, Row, VisibilityState } from "@tanstack/react-table";
-import { Handshake, Home, Zap } from "lucide-react";
+import { Eye, EyeOff, Handshake, Home, Zap } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { formatBRL, formatDate } from "@/lib/format";
@@ -90,7 +91,10 @@ function isPastDue(iso: string, today: string): boolean {
   return iso.slice(0, 10) < today;
 }
 
-export function buildColumns(today: string): ColumnDef<EstacaoRow, unknown>[] {
+export function buildColumns(
+  today: string,
+  onToggleHidden: (row: EstacaoRow) => void,
+): ColumnDef<EstacaoRow, unknown>[] {
   return [
     {
       id: "id",
@@ -112,8 +116,18 @@ export function buildColumns(today: string): ColumnDef<EstacaoRow, unknown>[] {
       accessorFn: (row) => `${row.name ?? ""} ${row.address ?? ""}`.trim(),
       cell: ({ row }) => (
         <div className="max-w-64">
-          <div className="truncate font-medium" title={row.original.name ?? undefined}>
-            {row.original.name ?? "—"}
+          <div className="flex items-center gap-1.5">
+            <span
+              className="truncate font-medium"
+              title={row.original.name ?? undefined}
+            >
+              {row.original.name ?? "—"}
+            </span>
+            {row.original.hidden ? (
+              <StatusBadge color="grey" outline>
+                oculta
+              </StatusBadge>
+            ) : null}
           </div>
           <div
             className="truncate text-xs text-muted-foreground"
@@ -420,6 +434,41 @@ export function buildColumns(today: string): ColumnDef<EstacaoRow, unknown>[] {
           <span className="tabular-nums text-xs">
             {latitude.toFixed(5)}, {longitude.toFixed(5)}
           </span>
+        );
+      },
+    },
+    {
+      // No `header` → stays out of the "Colunas" menu (enableHiding: false) AND
+      // the CSV export (which only emits columns with a defined header).
+      id: "acoes",
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) => {
+        const hidden = row.original.hidden;
+        return (
+          <div className="text-right">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground"
+              aria-label={hidden ? "Mostrar estação" : "Ocultar estação"}
+              title={
+                hidden
+                  ? "Mostrar esta estação na lista"
+                  : "Ocultar esta estação da lista"
+              }
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleHidden(row.original);
+              }}
+            >
+              {hidden ? (
+                <Eye className="size-4" strokeWidth={2} />
+              ) : (
+                <EyeOff className="size-4" strokeWidth={2} />
+              )}
+            </Button>
+          </div>
         );
       },
     },

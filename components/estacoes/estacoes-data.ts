@@ -155,6 +155,7 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
       name: rollup.station.name,
       address: rollup.station.address,
       status: rollup.station.status,
+      hidden: rollup.station.hidden,
       sources: rollup.sources,
       worstBillStatus: rollup.worstBillStatus,
       billStatusDetail,
@@ -183,12 +184,23 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
   });
 
   // ── KPIs ─────────────────────────────────────────────────────────────────
+  // Manually-hidden stations are excluded from the station-level KPIs so the
+  // headline numbers stay equal to the quick-filter chips and the default table
+  // (which also drops hidden rows) — one canonical count per concept
+  // (decision #16). Unmatched signals (stationId null, irregularidades) are
+  // station-agnostic and unaffected.
+  const hiddenStationIds = new Set(
+    rows.filter((r) => r.hidden).map((r) => r.stationId),
+  );
+  const notHidden = (stationId: number | null): boolean =>
+    stationId === null || !hiddenStationIds.has(stationId);
+
   // Canonical overdue definition = the overdue_bill alert rule (raw
   // billStatus === 'vencida' would recount EDP bills that already have a
   // registered comprovante — n8n VencidasEnelWarning parity). Keeps this KPI
   // equal to the "Faturas vencidas" quick-filter chip and /alertas.
   const overdueAlerts = alerts.filter(
-    (a) => a.alertType === ALERT_TYPE.overdueBill,
+    (a) => a.alertType === ALERT_TYPE.overdueBill && notHidden(a.stationId),
   );
   const vencidasTotal =
     Math.round(
@@ -202,26 +214,34 @@ export async function loadEstacoesPageData(): Promise<EstacoesPageData> {
       ) * 100,
     ) / 100;
 
-  // Only installations attached to accounts count for the DA KPIs.
-  const semDaCount = snapshot.utilityAccountStates.filter(
-    (s) =>
+  // Only installations attached to (non-hidden) stations count for the DA KPIs.
+  const semDaCount = snapshot.utilityAccountStates.filter((s) => {
+    const account = accountById.get(s.billingAccountId);
+    return (
       s.autoDebit === AUTO_DEBIT_STATUS.naoCadastrado &&
-      accountById.has(s.billingAccountId),
-  ).length;
+      account !== undefined &&
+      notHidden(account.stationId)
+    );
+  }).length;
+
+  const visibleRentCharges = rentCharges.filter((c) => notHidden(c.stationId));
 
   const kpis: EstacoesKpis = {
-    ativas: rows.filter((r) => r.status === STATION_STATUS.ACTIVE).length,
-    totalEstacoes: rows.length,
+    ativas: rows.filter(
+      (r) => r.status === STATION_STATUS.ACTIVE && !r.hidden,
+    ).length,
+    totalEstacoes: rows.filter((r) => !r.hidden).length,
     vencidasCount: overdueAlerts.length,
     vencidasTotal,
     venceSemDaCount: alerts.filter(
-      (a) => a.alertType === ALERT_TYPE.dueSoonNoAutoDebit,
+      (a) =>
+        a.alertType === ALERT_TYPE.dueSoonNoAutoDebit && notHidden(a.stationId),
     ).length,
     semDaCount,
-    rentPendingCount: rentCharges.length,
+    rentPendingCount: visibleRentCharges.length,
     rentPendingTotal:
       Math.round(
-        rentCharges.reduce((sum, c) => sum + (c.amount ?? 0), 0) * 100,
+        visibleRentCharges.reduce((sum, c) => sum + (c.amount ?? 0), 0) * 100,
       ) / 100,
     enelMaxScrapedAt: freshness.byProvider.enel.maxScrapedAt,
     edpMaxScrapedAt: freshness.byProvider.edp.maxScrapedAt,

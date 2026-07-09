@@ -62,6 +62,13 @@ export interface Station {
   activeBoxes?: number | null;
   /** When active_boxes was last refreshed from Metabase. */
   boxesSyncedAt?: string | null;
+  /**
+   * hidden — human/RPC-owned "declutter" flag (charging.stations.hidden). Set
+   * only via set_station_hidden; the sync paths never write it. The /estacoes
+   * table hides these by default (a "Mostrar ocultas" toggle reveals them). Not
+   * a scraper signal — sheets/fixtures default it to false.
+   */
+  hidden: boolean;
   /** Raw source row, header-name keyed (excess-of-info principle). */
   raw: Record<string, string>;
 }

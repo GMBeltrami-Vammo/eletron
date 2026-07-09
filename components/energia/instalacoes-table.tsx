@@ -1,7 +1,8 @@
 "use client";
 
+import * as React from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { TriangleAlert } from "lucide-react";
+import { Clock, TriangleAlert } from "lucide-react";
 
 import { DataTable } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
@@ -28,6 +29,21 @@ function csvMeta(
 }
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+/** Freshness filter: hide installations whose last scraper collection is older than this. */
+const FRESHNESS_STALE_DAYS = 7;
+
+/**
+ * Whole days between an ISO timestamp and now (null-safe). Mirrors
+ * daysSinceCollection in components/estacoes/stations-table.tsx — kept inline
+ * here so this client component pulls in no server-only module.
+ */
+function daysSinceScrape(iso: string | null, now: number): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.floor((now - then) / 86_400_000);
+}
 
 const columns: ColumnDef<InstalacaoRow, unknown>[] = [
   {
@@ -259,23 +275,69 @@ const HIDDEN_BY_DEFAULT = {
 };
 
 export function InstalacoesTable({ rows }: { rows: InstalacaoRow[] }) {
+  const [hideStale, setHideStale] = React.useState(false);
+
+  const staleCount = React.useMemo(() => {
+    const now = Date.now();
+    return rows.filter((r) => {
+      const days = daysSinceScrape(r.scrapedAt, now);
+      return days !== null && days > FRESHNESS_STALE_DAYS;
+    }).length;
+  }, [rows]);
+
+  const filteredRows = React.useMemo(() => {
+    if (!hideStale) return rows;
+    const now = Date.now();
+    return rows.filter((r) => {
+      const days = daysSinceScrape(r.scrapedAt, now);
+      return days === null || days <= FRESHNESS_STALE_DAYS;
+    });
+  }, [rows, hideStale]);
+
   return (
-    <DataTable
-      columns={columns}
-      data={rows}
-      searchPlaceholder="Buscar instalação, endereço…"
-      csvFilename="instalacoes-energia"
-      initialSorting={[{ id: "estacao", desc: false }]}
-      initialColumnVisibility={HIDDEN_BY_DEFAULT}
-      // Spreadsheet-style header funnels (multi-select checklists).
-      filterableColumnIds={[
-        "provedor",
-        "statusFatura",
-        "debitoAutomatico",
-        "cidade",
-        "bairro",
-      ]}
-      emptyMessage="Nenhuma instalação encontrada."
-    />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          aria-pressed={hideStale}
+          onClick={() => setHideStale((v) => !v)}
+          title={
+            "Oculta instalações cuja última coleta do scraper é anterior a 7 dias. " +
+            "Atenção: os dados do scraper estão congelados desde a clonagem para o " +
+            "Supabase (decisão #25), então com o tempo isso oculta quase todas as instalações."
+          }
+          className={cn(
+            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+            hideStale
+              ? "border-ring bg-muted text-foreground"
+              : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Clock className="size-3.5" strokeWidth={2} />
+          Ocultar coleta &gt; 7 dias
+          {staleCount > 0 ? (
+            <span className="tabular-nums">{staleCount}</span>
+          ) : null}
+        </button>
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={filteredRows}
+        searchPlaceholder="Buscar instalação, endereço…"
+        csvFilename="instalacoes-energia"
+        initialSorting={[{ id: "estacao", desc: false }]}
+        initialColumnVisibility={HIDDEN_BY_DEFAULT}
+        // Spreadsheet-style header funnels (multi-select checklists).
+        filterableColumnIds={[
+          "provedor",
+          "statusFatura",
+          "debitoAutomatico",
+          "cidade",
+          "bairro",
+        ]}
+        emptyMessage="Nenhuma instalação encontrada."
+      />
+    </div>
   );
 }

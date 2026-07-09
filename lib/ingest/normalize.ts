@@ -741,6 +741,8 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       longitude: parseCoordinate(row["longitude"] ?? ""),
       status,
       sourceCreatedAt: parseTimestamp(row["created_at"] ?? ""),
+      // sheets have no hide column — the Supabase-only flag defaults false here.
+      hidden: false,
       raw: stripRowKey(row),
     });
   });

@@ -18,6 +18,8 @@ export interface EstacaoRow {
   name: string | null;
   address: string | null;
   status: StationStatus | null;
+  /** Manual "declutter" flag (charging.stations.hidden). Hidden by default in the table. */
+  hidden: boolean;
   sources: { enel: number; edp: number; rent: number; thirdParty: number };
   worstBillStatus: UtilityBillStatus | null;
   /** 'Enel 12345: Vencida' lines for the per-account title tooltip. */
