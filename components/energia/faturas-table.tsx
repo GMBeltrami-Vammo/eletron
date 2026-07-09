@@ -352,6 +352,7 @@ export function FaturasTable({
       searchPlaceholder="Buscar fatura, NF, instalação…"
       csvFilename="faturas-energia"
       initialSorting={[{ id: "vencimento", desc: true }]}
+      filterableColumnIds="all"
       emptyMessage="Nenhuma fatura encontrada."
       toolbarLeft={
         <>

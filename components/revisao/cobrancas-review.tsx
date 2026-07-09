@@ -206,6 +206,7 @@ export function CobrancasReview({
         searchPlaceholder="Buscar cobrança, parceiro, estação…"
         csvFilename="cobrancas-revisao"
         initialSorting={[{ id: "competencia", desc: true }]}
+        filterableColumnIds="all"
         emptyMessage={
           available
             ? "Nenhuma cobrança aguardando revisão."

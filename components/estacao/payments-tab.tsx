@@ -70,6 +70,7 @@ export function PaymentsTab({
       csvFilename={`pagamentos-estacao-${data.station.id}`}
       initialSorting={[{ id: "competencia", desc: true }]}
       searchPlaceholder="Buscar cobrança…"
+      filterableColumnIds="all"
       emptyMessage="Nenhuma cobrança de aluguel registrada."
     />
   );

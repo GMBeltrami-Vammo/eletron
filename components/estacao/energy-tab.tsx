@@ -304,6 +304,7 @@ function InstallationCard({
           csvFilename={`faturas-${keyLabel.replaceAll(" ", "-").toLowerCase()}`}
           pageSize={12}
           searchPlaceholder="Buscar fatura…"
+          filterableColumnIds="all"
           emptyMessage="Nenhuma fatura coletada ainda."
         />
 

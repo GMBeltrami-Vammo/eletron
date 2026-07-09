@@ -145,6 +145,7 @@ export function IngestIssues({
             searchPlaceholder="Buscar problema…"
             csvFilename="problemas-normalizacao"
             pageSize={10}
+            filterableColumnIds="all"
             emptyMessage="Nenhum problema encontrado."
           />
         </div>

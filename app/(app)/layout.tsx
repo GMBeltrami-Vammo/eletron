@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { getRepository } from "@/lib/data/repository.server";
+import { IRREGULARITY_ALERT_TYPES } from "@/lib/ingest/derive";
 import { countPendingContractIntakes } from "./revisao/contratos/queries";
 import { Providers } from "@/components/providers";
 import { AppSidebar } from "@/components/vammo/sidebar";
@@ -31,7 +32,10 @@ async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
       countPendingContractIntakes(),
     ]);
     return {
-      alertas: alerts.filter((a) => a.status === "open").length,
+      // Join irregularities live in /revisão, not the /alertas badge.
+      alertas: alerts.filter(
+        (a) => a.status === "open" && !IRREGULARITY_ALERT_TYPES.has(a.alertType),
+      ).length,
       revisao:
         irregularities.joinAlerts.length +
         irregularities.unmatchedAccounts.length +

@@ -115,6 +115,7 @@ export function RentChargesTable({
       csvFilename={csvFilename}
       initialSorting={[{ id: "competencia", desc: true }]}
       pageSize={12}
+      filterableColumnIds="all"
       emptyMessage="Nenhuma cobrança de aluguel encontrada para este contrato."
     />
   );

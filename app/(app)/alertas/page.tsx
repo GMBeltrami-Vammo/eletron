@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/vammo/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getViewer } from "@/components/admin/viewer";
 import { getRepository } from "@/lib/data/repository.server";
+import { IRREGULARITY_ALERT_TYPES } from "@/lib/ingest/derive";
 
 import { readPersistedAlerts } from "./persisted-alerts";
 
@@ -31,10 +32,13 @@ async function AlertsContent() {
   ]);
 
   // Post-cutover: persisted alerts carry the acknowledge/resolve/mute lifecycle.
+  // Join irregularities (station↔contract) live in /revisão, not here.
   if (persisted.configured && persisted.rows.length > 0) {
     return (
       <AlertsLifecyclePanel
-        rows={persisted.rows}
+        rows={persisted.rows.filter(
+          (r) => !IRREGULARITY_ALERT_TYPES.has(r.alertType),
+        )}
         lastScrapedAt={persisted.lastScrapedAt}
         canWrite={viewer.role !== null}
       />
@@ -55,6 +59,7 @@ async function AlertsContent() {
   );
 
   const rows: AlertRow[] = alerts
+    .filter((alert) => !IRREGULARITY_ALERT_TYPES.has(alert.alertType))
     .map((alert) => ({
       id: alert.id,
       alertType: alert.alertType,

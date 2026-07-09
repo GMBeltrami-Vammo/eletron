@@ -211,6 +211,7 @@ export function ContratosReview({
         searchPlaceholder="Buscar parceiro, endereço, estação…"
         csvFilename="contratos-revisao"
         initialSorting={[{ id: "parceiro", desc: false }]}
+        filterableColumnIds="all"
         emptyMessage={
           available
             ? "Nenhum contrato aguardando revisão."

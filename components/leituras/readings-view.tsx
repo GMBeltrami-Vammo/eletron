@@ -307,6 +307,7 @@ export function ReadingsView({
           searchPlaceholder="Buscar estação ou responsável…"
           initialSorting={[{ id: "diasDesde", desc: true }]}
           csvFilename="leituras-por-estacao"
+          filterableColumnIds="all"
           emptyMessage="Nenhuma leitura registrada ainda."
         />
       </div>

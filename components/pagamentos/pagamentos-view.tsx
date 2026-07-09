@@ -344,16 +344,6 @@ function summarize(rows: PagamentoRow[]): LedgerSummary {
   return { previstoSum, pagoCount, pagoSum, pendenteCount, pendenteSum };
 }
 
-/** Columns that get a spreadsheet-style header funnel on the ledger tables. */
-const LEDGER_FILTER_COLUMNS = [
-  "tipo",
-  "status",
-  "parceiro",
-  "pagamento",
-  "origem",
-  "fiscal",
-];
-
 /** One tab body: summary StatCards over its rows + the ledger DataTable. */
 function LedgerPanel({
   rows,
@@ -395,7 +385,7 @@ function LedgerPanel({
         csvFilename={csvFilename}
         initialSorting={[{ id: "estacao", desc: false }]}
         initialColumnVisibility={{ dedupe: false }}
-        filterableColumnIds={LEDGER_FILTER_COLUMNS}
+        filterableColumnIds="all"
         emptyMessage="Nenhuma cobrança encontrada para o período."
       />
     </>

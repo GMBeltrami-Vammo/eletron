@@ -83,6 +83,7 @@ export function LeiturasTable({ rows }: { rows: LeituraStationRow[] }) {
       searchPlaceholder="Buscar estação ou endereço…"
       initialSorting={[{ id: "estacao", desc: false }]}
       csvFilename="leituras-estacoes-candidatas"
+      filterableColumnIds="all"
       emptyMessage="Todas as estações ativas já têm leitura."
     />
   );

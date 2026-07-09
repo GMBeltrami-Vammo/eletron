@@ -150,6 +150,7 @@ export function UnmatchedAccountsTable({
       data={rows}
       searchPlaceholder="Buscar por instalação, endereço…"
       csvFilename="instalacoes-nao-vinculadas"
+      filterableColumnIds="all"
       emptyMessage="Tudo em dia — nenhuma instalação aguardando vínculo."
     />
   );

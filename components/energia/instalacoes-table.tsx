@@ -356,14 +356,7 @@ export function InstalacoesTable({ rows }: { rows: InstalacaoRow[] }) {
         initialSorting={[{ id: "estacao", desc: false }]}
         initialColumnVisibility={HIDDEN_BY_DEFAULT}
         // Spreadsheet-style header funnels (multi-select checklists).
-        filterableColumnIds={[
-          "provedor",
-          "statusFatura",
-          "ciclo",
-          "debitoAutomatico",
-          "cidade",
-          "bairro",
-        ]}
+        filterableColumnIds="all"
         onRowClick={(row) => {
           setSelected(row);
           setDrawerOpen(true);

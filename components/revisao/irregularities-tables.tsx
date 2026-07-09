@@ -200,6 +200,7 @@ export function StationsWithoutContractTable({
       searchPlaceholder="Buscar estação…"
       csvFilename="estacoes-sem-contrato"
       pageSize={25}
+      filterableColumnIds="all"
       emptyMessage="Tudo em dia — nenhuma estação sem contrato."
     />
   );
@@ -217,6 +218,7 @@ export function ContractsWithoutStationTable({
       searchPlaceholder="Buscar cadastro…"
       csvFilename="contratos-sem-estacao"
       pageSize={25}
+      filterableColumnIds="all"
       emptyMessage="Tudo em dia — nenhum contrato sem estação."
     />
   );

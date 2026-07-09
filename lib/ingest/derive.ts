@@ -101,6 +101,19 @@ export const SETTLED_CHARGE_STATUSES: ReadonlySet<string> = new Set([
   "antecipado",
 ]);
 
+/**
+ * Join irregularities (station↔contract mismatches) are surfaced ONLY in
+ * /revisão › Irregularidades — the Metabase-comparison review — NOT in the
+ * /alertas operational panel or its badge (Gabriel 2026-07-09: "estações sem
+ * contrato não deveriam estar em alerta, isso entra na parte de revisões").
+ * evaluateAlerts still emits them so getIrregularities() can re-derive the
+ * review lists; the alert surfaces filter them out with this set.
+ */
+export const IRREGULARITY_ALERT_TYPES: ReadonlySet<string> = new Set([
+  "station_without_contract",
+  "contract_without_station",
+]);
+
 const OPEN_CHARGE_STATUSES: ReadonlySet<ChargeStatus> = new Set([
   CHARGE_STATUS.pendente,
   CHARGE_STATUS.boletoRecebido,

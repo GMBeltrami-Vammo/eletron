@@ -190,6 +190,7 @@ export function UnmatchedChargesTable({
       csvFilename="cobrancas-nao-identificadas"
       initialSorting={[{ id: "competencia", desc: true }]}
       initialColumnVisibility={{ valorEsperado: false, documento: false }}
+      filterableColumnIds="all"
       emptyMessage="Tudo em dia — nenhuma cobrança não identificada."
     />
   );

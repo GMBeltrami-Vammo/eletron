@@ -274,6 +274,7 @@ export function ReviewQueue({
         data={data.rows}
         searchPlaceholder="Buscar documento, chave, identificação…"
         csvFilename="comprovantes-revisao"
+        filterableColumnIds="all"
         emptyMessage="Nenhum comprovante aguardando revisão."
       />
 

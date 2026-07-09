@@ -238,6 +238,7 @@ export function ComprovantesInbox({
         data={data.rows}
         searchPlaceholder="Buscar documento, remetente…"
         csvFilename="comprovantes"
+        filterableColumnIds="all"
         onRowClick={(row) => router.push(`/comprovantes/${row.id}`)}
         emptyMessage="Nenhum comprovante enviado ainda."
       />

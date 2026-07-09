@@ -110,13 +110,32 @@ export function DataTable<TData>({
    * Column ids that get a spreadsheet-style header funnel (multi-select
    * checklist of distinct values). The shared `multiSelect` filter fn is wired
    * onto them automatically unless the column already declares its own.
+   * Pass `"all"` to funnel every eligible column: one with a string header + an
+   * accessor + no custom filterFn (so a table's special filters — estações'
+   * status/fontes/aluguel etc. — are left untouched) + not opted out via
+   * `enableColumnFilter: false`.
    */
-  filterableColumnIds?: string[];
+  filterableColumnIds?: string[] | "all";
 }) {
-  const filterableSet = React.useMemo(
-    () => new Set(filterableColumnIds ?? []),
-    [filterableColumnIds],
-  );
+  const filterableSet = React.useMemo(() => {
+    if (filterableColumnIds === "all") {
+      const ids = columns
+        .filter(
+          (c) =>
+            ("accessorFn" in c || "accessorKey" in c) &&
+            typeof c.header === "string" &&
+            c.header !== "" &&
+            c.enableColumnFilter !== false &&
+            !c.filterFn,
+        )
+        .map((c) =>
+          c.id ?? ("accessorKey" in c ? String(c.accessorKey) : ""),
+        )
+        .filter((id): id is string => id !== "");
+      return new Set(ids);
+    }
+    return new Set(filterableColumnIds ?? []);
+  }, [filterableColumnIds, columns]);
 
   // Inject the shared multi-select filter fn onto filterable columns that don't
   // bring their own, so the header funnel just works from the caller's ids.

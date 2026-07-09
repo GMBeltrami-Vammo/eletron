@@ -360,6 +360,7 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
         pageSize={50}
         csvFilename="estacoes"
         emptyMessage="Nenhuma estação encontrada."
+        filterableColumnIds="all"
         onRowClick={(row) => router.push(`/estacoes/${row.stationId}`)}
         columnFilters={columnFilters}
         onColumnFiltersChange={setColumnFilters}

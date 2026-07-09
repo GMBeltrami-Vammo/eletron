@@ -334,6 +334,7 @@ export function AlertsLifecyclePanel({
         data={filtered}
         searchPlaceholder="Buscar por estação, instalação…"
         csvFilename="alertas"
+        filterableColumnIds="all"
         rowClassName={(r) =>
           cn(selected.has(r.id) && "bg-primary/5")
         }

@@ -206,6 +206,7 @@ export function MensalView({
         searchPlaceholder="Buscar estação…"
         csvFilename={`mensal-${month}`}
         initialSorting={[{ id: "grupo", desc: false }]}
+        filterableColumnIds="all"
         emptyMessage="Nenhuma estação com obrigações neste mês."
         toolbarLeft={
           group !== "all" ? (

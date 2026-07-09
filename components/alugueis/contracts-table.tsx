@@ -225,7 +225,7 @@ export function ContractsTable({ rows }: { rows: ContractRow[] }) {
         cnpjCpf: false,
       }}
       // Spreadsheet-style header funnels (multi-select checklists).
-      filterableColumnIds={["tipo", "status", "pagamento"]}
+      filterableColumnIds="all"
       onRowClick={(row) => {
         if (row.cadastroId !== null) router.push(`/alugueis/${row.cadastroId}`);
       }}

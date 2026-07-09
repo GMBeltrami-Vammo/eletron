@@ -214,6 +214,7 @@ export function AlertsPanel({
         data={filtered}
         searchPlaceholder="Buscar por estação, instalação…"
         csvFilename="alertas"
+        filterableColumnIds="all"
         toolbarLeft={
           <div className="flex flex-wrap items-center gap-1">
             {SEVERITY_ORDER.map((level) => (
