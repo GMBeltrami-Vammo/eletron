@@ -10,11 +10,13 @@ import { StatusBadge } from "@/components/vammo/status-badge";
 import {
   ACCOUNT_TYPE_UI,
   AUTO_DEBIT_UI,
+  CICLO_UI,
   UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { InstalacaoHistorySheet } from "./instalacao-history";
 import { StationCell } from "./station-cell";
 import type { InstalacaoRow } from "./types";
 
@@ -92,7 +94,9 @@ const columns: ColumnDef<InstalacaoRow, unknown>[] = [
   },
   {
     id: "statusFatura",
-    header: "Status fatura",
+    // The concessionária's own status (what the scraper sees on the portal) —
+    // contrasted with the "Ciclo" column, OUR processing status (Q11).
+    header: "Status portal",
     accessorFn: (r) =>
       r.billStatus ? UTILITY_BILL_STATUS_UI[r.billStatus].label : "",
     cell: ({ row }) => {
@@ -119,6 +123,25 @@ const columns: ColumnDef<InstalacaoRow, unknown>[] = [
         ? `${UTILITY_BILL_STATUS_UI[r.billStatus].label}${r.isStatusCarriedForward ? " (defasado)" : ""}`
         : "",
     ),
+  },
+  {
+    id: "ciclo",
+    // Q11 — OUR lifecycle stage of the latest bill (vs the portal's status):
+    // 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
+    header: "Ciclo",
+    accessorFn: (r) => (r.ciclo !== null ? CICLO_UI[r.ciclo].label : ""),
+    cell: ({ row }) => {
+      const stage = row.original.ciclo;
+      if (stage === null) {
+        return <span className="text-muted-foreground">—</span>;
+      }
+      const ui = CICLO_UI[stage];
+      return (
+        <span title={`Estágio ${stage} de 4 — clique na linha para o histórico`}>
+          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+        </span>
+      );
+    },
   },
   {
     id: "ultimaFatura",
@@ -276,6 +299,10 @@ const HIDDEN_BY_DEFAULT = {
 
 export function InstalacoesTable({ rows }: { rows: InstalacaoRow[] }) {
   const [hideStale, setHideStale] = React.useState(false);
+  // Q11 — clicked installation opens the fatura-history drawer. `selected` is
+  // kept through the close animation; `drawerOpen` drives visibility.
+  const [selected, setSelected] = React.useState<InstalacaoRow | null>(null);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
 
   const staleCount = React.useMemo(() => {
     const now = Date.now();
@@ -332,11 +359,22 @@ export function InstalacoesTable({ rows }: { rows: InstalacaoRow[] }) {
         filterableColumnIds={[
           "provedor",
           "statusFatura",
+          "ciclo",
           "debitoAutomatico",
           "cidade",
           "bairro",
         ]}
+        onRowClick={(row) => {
+          setSelected(row);
+          setDrawerOpen(true);
+        }}
         emptyMessage="Nenhuma instalação encontrada."
+      />
+
+      <InstalacaoHistorySheet
+        row={selected}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
       />
     </div>
   );

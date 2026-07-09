@@ -275,37 +275,61 @@ describe("evaluateAlerts", () => {
     expect(overdue[0].payload.fromHistory).toBe(true);
   });
 
-  it("raises due_soon_no_auto_debit only inside the 0–7 day window", () => {
+  it("raises due_soon_no_auto_debit from Ciclo 2 (analisada) until the due date — Q11", () => {
     const snapshot = emptySnapshot();
     snapshot.stations = [station(1)];
     snapshot.billingAccounts = [
       account("enel:soon", 1, "energy_enel"),
       account("enel:far", 1, "energy_enel"),
       account("enel:covered", 1, "energy_enel"),
+      account("enel:detected", 1, "energy_enel"),
     ];
     snapshot.utilityAccountStates = [
       state("enel:soon", {
         billStatus: "a_vencer",
-        dueDate: "2026-07-12",
+        dueDate: "2026-07-12", // 5 days ahead — analisada → fires
         autoDebit: "nao_cadastrado",
       }),
       state("enel:far", {
         billStatus: "a_vencer",
-        dueDate: "2026-07-20", // 13 days — outside the window
+        dueDate: "2026-07-20", // 13 days — analisada now fires too (no window)
         autoDebit: "nao_cadastrado",
       }),
       state("enel:covered", {
         billStatus: "a_vencer",
         dueDate: "2026-07-12",
-        autoDebit: "cadastrado", // auto-debit covers it
+        autoDebit: "cadastrado", // auto-debit covers it — only a worry after due
       }),
+      state("enel:detected", {
+        billStatus: "a_vencer",
+        dueDate: "2026-07-12", // Ciclo 1: portal shows it, PDF not parsed → silent
+        autoDebit: "nao_cadastrado",
+      }),
+    ];
+    // Parsed charges (Ciclo 2, keyed account+due_date) for all but 'detected'.
+    const energyCharge = (ba: string, dueDate: string) => ({
+      id: `${ba}:${dueDate}`, billingAccountId: ba, stationId: 1,
+      kind: "energia" as const, competencia: "2026-07-01",
+      competenciaSource: "explicit" as const, amount: 200, expectedAmount: 200,
+      dueDate, status: "pendente" as const, matchStatus: "auto_matched" as const,
+      paymentMethod: null, banco: null, agencia: null, conta: null,
+      chavePix: null, linhaDigitavel: null, notaFiscal: null,
+      documentoNumero: null, issuerCnpj: null, source: "scraper_enel" as const,
+      dedupeKey: `${ba}:${dueDate}`, legacyRef: null, notes: null, raw: {},
+    });
+    snapshot.charges = [
+      energyCharge("enel:soon", "2026-07-12"),
+      energyCharge("enel:far", "2026-07-20"),
+      energyCharge("enel:covered", "2026-07-12"),
     ];
     const alerts = evaluateAlerts(snapshot, NOW);
     const dueSoon = alerts.filter(
       (a) => a.alertType === "due_soon_no_auto_debit",
     );
-    expect(dueSoon).toHaveLength(1);
-    expect(dueSoon[0].dedupeKey).toBe("due_soon:enel:soon:2026-07-12");
+    expect(dueSoon.map((a) => a.dedupeKey).sort()).toEqual([
+      "due_soon:enel:far:2026-07-20",
+      "due_soon:enel:soon:2026-07-12",
+    ]);
   });
 
   it("raises no_auto_debit only for freshly-scraped accounts", () => {
@@ -369,6 +393,47 @@ describe("evaluateAlerts", () => {
     expect(
       alerts.filter((a) => a.alertType === "due_soon_no_auto_debit"),
     ).toHaveLength(0);
+  });
+
+  it("frozen scrape silences the sem-DA (Ciclo 2) due_soon worry — recency gate", () => {
+    const snapshot = emptySnapshot();
+    snapshot.stations = [station(1)];
+    snapshot.billingAccounts = [
+      account("enel:frozen", 1, "energy_enel"),
+      account("enel:live", 1, "energy_enel"),
+    ];
+    // Identical analisada, sem-DA, a-vencer bills — only the scrape age differs.
+    snapshot.utilityAccountStates = [
+      state("enel:frozen", {
+        billStatus: "a_vencer",
+        dueDate: "2026-07-20",
+        autoDebit: "nao_cadastrado",
+        scrapedAt: "2026-05-01T03:00:00", // 67 days — frozen
+      }),
+      state("enel:live", {
+        billStatus: "a_vencer",
+        dueDate: "2026-07-20",
+        autoDebit: "nao_cadastrado",
+        scrapedAt: "2026-07-06T03:00:00", // 1 day — fresh
+      }),
+    ];
+    const energyCharge = (ba: string) => ({
+      id: `${ba}:2026-07-20`, billingAccountId: ba, stationId: 1,
+      kind: "energia" as const, competencia: "2026-07-01",
+      competenciaSource: "explicit" as const, amount: 200, expectedAmount: 200,
+      dueDate: "2026-07-20", status: "pendente" as const,
+      matchStatus: "auto_matched" as const, paymentMethod: null, banco: null,
+      agencia: null, conta: null, chavePix: null, linhaDigitavel: null,
+      notaFiscal: null, documentoNumero: null, issuerCnpj: null,
+      source: "scraper_enel" as const, dedupeKey: `${ba}:2026-07-20`,
+      legacyRef: null, notes: null, raw: {},
+    });
+    snapshot.charges = [energyCharge("enel:frozen"), energyCharge("enel:live")];
+    const dueSoon = evaluateAlerts(snapshot, NOW).filter(
+      (a) => a.alertType === "due_soon_no_auto_debit",
+    );
+    // Frozen one is gated out by scrape recency; only the fresh one fires.
+    expect(dueSoon.map((a) => a.billingAccountId)).toEqual(["enel:live"]);
   });
 
   it("raises new_installation for accounts first seen under 3 days ago", () => {

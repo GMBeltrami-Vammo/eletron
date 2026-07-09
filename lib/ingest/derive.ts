@@ -90,8 +90,12 @@ const OPEN_BILL_STATUSES: ReadonlySet<UtilityBillStatus> = new Set([
   UTILITY_BILL_STATUS.faturaNegociada,
 ]);
 
-/** Charge statuses that count as "paid" (a bound comprovante / settled). */
-const SETTLED_CHARGE_STATUSES: ReadonlySet<string> = new Set([
+/**
+ * Charge statuses that count as "settled" (a bound comprovante — decision #29).
+ * Canonical set: reused by /energia (ciclo) and /mensal so "paid" means one
+ * thing everywhere (workspace rule: one canonical definition per concept).
+ */
+export const SETTLED_CHARGE_STATUSES: ReadonlySet<string> = new Set([
   "pago",
   "conciliado",
   "antecipado",
@@ -362,15 +366,33 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
   // settled energy charge for the current competência are cleared of overdue/
   // due-soon worries below.
   const settledEnergyAccounts = new Set<string>();
+  // Q11 Ciclo 2 ("analisada"): energy bills whose PDF was parsed, and the
+  // settled subset — both keyed by the scraper invoice identity
+  // `(account, due_date)` (decision #6), matching the due_soon alert's own key.
+  // The sem-DA worry fires only for analisada bills (Ciclo 1 never alarms) and
+  // is suppressed the moment THAT bill is paid — not just when a charge in the
+  // current competência-month is paid (a paid Aug bill must go quiet in July).
+  const parsedBillKeys = new Set<string>();
+  const settledBillKeys = new Set<string>();
   for (const c of snapshot.charges) {
     if (
-      (c.kind === "energia" || c.kind === "aluguel_energia") &&
-      c.billingAccountId !== null &&
+      (c.kind !== "energia" && c.kind !== "aluguel_energia") ||
+      c.billingAccountId === null
+    ) {
+      continue;
+    }
+    const settled = SETTLED_CHARGE_STATUSES.has(c.status);
+    if (
+      settled &&
       c.competencia !== null &&
-      c.competencia.slice(0, 7) === currentMonth &&
-      SETTLED_CHARGE_STATUSES.has(c.status)
+      c.competencia.slice(0, 7) === currentMonth
     ) {
       settledEnergyAccounts.add(c.billingAccountId);
+    }
+    if (c.amount !== null && c.dueDate !== null) {
+      const billKey = `${c.billingAccountId}:${c.dueDate}`;
+      parsedBillKeys.add(billKey);
+      if (settled) settledBillKeys.add(billKey);
     }
   }
 
@@ -420,18 +442,24 @@ export function evaluateAlerts(snapshot: DomainSnapshot, now: Date): Alert[] {
       );
     }
 
-    // 2. due_soon_no_auto_debit — bill due in 0..7 days without auto-debit.
-    // (Bills WITH DA are only a worry after the due date → they fall to rule 1.)
+    // 2. due_soon_no_auto_debit — analisada (Q11 Ciclo 2) bill without
+    // auto-debit, not yet due. Amends decision #29's 7-day window: a sem-DA
+    // bill has no DA to settle it, so it is actionable the moment its PDF is
+    // parsed — the worry fires from Ciclo 2 until the due date, when rule 1
+    // (overdue) takes over. Detected-only (Ciclo 1) bills never alarm; bills
+    // WITH DA are only a worry after the due date → they fall to rule 1.
     if (
       scrapeFresh &&
       state.dueDate !== null &&
       state.autoDebit !== AUTO_DEBIT_STATUS.cadastrado &&
       state.billStatus !== null &&
       OPEN_BILL_STATUSES.has(state.billStatus) &&
-      !settledEnergyAccounts.has(state.billingAccountId)
+      !settledEnergyAccounts.has(state.billingAccountId) &&
+      parsedBillKeys.has(`${state.billingAccountId}:${state.dueDate}`) &&
+      !settledBillKeys.has(`${state.billingAccountId}:${state.dueDate}`)
     ) {
       const days = daysUntil(state.dueDate, now);
-      if (days >= 0 && days <= 7) {
+      if (days >= 0) {
         push(
           makeAlert(
             ALERT_TYPE.dueSoonNoAutoDebit,

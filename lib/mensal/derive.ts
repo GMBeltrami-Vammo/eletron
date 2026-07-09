@@ -22,6 +22,7 @@ import type {
   MonthlyConsumption,
   Station,
 } from "@/lib/domain";
+import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
 
 export type SideState =
   | "paga"
@@ -84,7 +85,6 @@ export interface MonthlyMatrix {
   metrics: MonthlyMetrics;
 }
 
-const SETTLED = new Set<Charge["status"]>(["pago", "conciliado", "antecipado"]);
 
 /** 'YYYY-MM-01' | null → 'YYYY-MM' | null. */
 function monthOf(competencia: string | null): string | null {
@@ -124,7 +124,7 @@ function worst(a: SideState, b: SideState): SideState {
 }
 
 function chargeSettled(c: Charge): boolean {
-  return SETTLED.has(c.status);
+  return SETTLED_CHARGE_STATUSES.has(c.status);
 }
 
 /**

@@ -43,7 +43,7 @@ export function KpiStrip({ kpis }: { kpis: EstacoesKpis }) {
     },
     {
       key: "venceSemDA",
-      label: "A vencer 7 dias sem DA",
+      label: "A vencer sem DA",
       value: kpis.venceSemDaCount,
       sub: "instalações",
       tone: kpis.venceSemDaCount > 0 ? "warning" : "default",

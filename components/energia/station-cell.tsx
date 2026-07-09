@@ -17,10 +17,13 @@ export function StationCell({
   stationId: number | null;
   matchStatus: MatchStatus;
 }) {
+  // stopPropagation: the /energia Instalações table wires an onRowClick (Q11
+  // history drawer), so an in-cell link must not also trigger the row handler.
   if (stationId !== null) {
     return (
       <Link
         href={`/estacoes/${stationId}`}
+        onClick={(e) => e.stopPropagation()}
         className="font-medium tabular-nums underline-offset-2 hover:underline"
       >
         #{stationId}
@@ -29,7 +32,11 @@ export function StationCell({
   }
   const ui = MATCH_STATUS_UI[matchStatus];
   return (
-    <Link href="/revisao" title="Abrir fila de revisão">
+    <Link
+      href="/revisao"
+      title="Abrir fila de revisão"
+      onClick={(e) => e.stopPropagation()}
+    >
       <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
     </Link>
   );

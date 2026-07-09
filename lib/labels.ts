@@ -93,6 +93,17 @@ export const ACCOUNT_TYPE_UI: Record<AccountType, LabelBadge> = {
   third_party: { label: "Terceiro", color: "brown" },
 };
 
+/**
+ * Q11 — Enel/EDP bill lifecycle stages (OUR status, vs the portal's).
+ * Keys are lib/energia/ciclo.ts CicloStage values.
+ */
+export const CICLO_UI: Record<1 | 2 | 3 | 4, LabelBadge> = {
+  1: { label: "Detectada", color: "grey" },
+  2: { label: "Analisada", color: "blue" },
+  3: { label: "Enviada ao fiscal", color: "orange" },
+  4: { label: "Paga", color: "green" },
+};
+
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   pix: "Pix",
   boleto_celular: "Boleto (celular)",
@@ -119,9 +130,9 @@ export const ALERT_TYPE_UI: Record<string, LabelBadge & { description: string }>
     description: "Faturas de energia com status Vencida",
   },
   due_soon_no_auto_debit: {
-    label: "Vence em 7 dias sem DA",
+    label: "A vencer sem DA",
     color: "orange",
-    description: "Vencimento próximo sem débito automático cadastrado",
+    description: "Conta analisada sem débito automático — pagamento manual pendente",
   },
   no_auto_debit: {
     label: "Sem débito automático",

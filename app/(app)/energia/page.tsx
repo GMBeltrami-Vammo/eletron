@@ -12,8 +12,11 @@ import { readEnergyAccounts } from "@/components/energia/energy-accounts";
 import type {
   EnergyProvider,
   FaturaRow,
+  InstalacaoHistoryEntry,
   InstalacaoRow,
 } from "@/components/energia/types";
+import { energyCicloStage } from "@/lib/energia/ciclo";
+import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
 import { getRepository } from "@/lib/data/repository.server";
 import {
   readPaymentLinks,
@@ -27,6 +30,7 @@ import {
 } from "@/lib/http/guards";
 import {
   ACCOUNT_TYPE,
+  type Charge,
   type ChargeEnergyDetails,
   type MonthlyConsumption,
 } from "@/lib/domain";
@@ -83,6 +87,9 @@ function tariffClass(d: ChargeEnergyDetails): string | null {
   return cs.length > 0 ? cs.join(" · ") : null;
 }
 
+/** History window shown in the per-installation drawer. */
+const HISTORY_MONTHS = 12;
+
 function buildRows(
   snapshot: LoadedSnapshot,
   links: PaymentLinkIndex,
@@ -106,10 +113,80 @@ function buildRows(
       a.accountType === ACCOUNT_TYPE.energyEdp,
   );
 
+  // ── Q11 Ciclo inputs: energy charges per account + details per charge ──────
+  const energyAccountIds = new Set(energyAccounts.map((a) => a.id));
+  const chargesByAccount = new Map<string, Charge[]>();
+  for (const c of snapshot.charges) {
+    if (c.billingAccountId === null || !energyAccountIds.has(c.billingAccountId)) {
+      continue;
+    }
+    const list = chargesByAccount.get(c.billingAccountId) ?? [];
+    list.push(c);
+    chargesByAccount.set(c.billingAccountId, list);
+  }
+  const detailsByCharge = new Map(
+    snapshot.chargeEnergyDetails.map((d) => [d.chargeId, d]),
+  );
+
+  const paymentOf = (charge: Charge) =>
+    summarizeLinks(
+      links.byDedupeKey.get(charge.dedupeKey) ?? links.byChargeUuid.get(charge.id),
+    );
+
+  /** Our lifecycle stage of ONE parsed charge (history rows are stages 2–4). */
+  const cicloOf = (charge: Charge) =>
+    energyCicloStage({
+      hasBillSignal: true,
+      hasParsedCharge: charge.amount !== null,
+      fiscalExported:
+        (charge.fiscalExported ?? false) ||
+        (detailsByCharge.get(charge.id)?.fiscalExported ?? false),
+      isPaid:
+        SETTLED_CHARGE_STATUSES.has(charge.status) ||
+        paymentOf(charge)?.documentId != null,
+    }) as NonNullable<ReturnType<typeof energyCicloStage>>;
+
   const instalacoes: InstalacaoRow[] = energyAccounts.map((account) => {
     const state = stateByAccount.get(account.id) ?? null;
     const fr = frDivergence(consumptionByAccount.get(account.id) ?? []);
+
+    // Latest first: competência, falling back to due date (both ISO strings).
+    const charges = (chargesByAccount.get(account.id) ?? []).sort((a, b) =>
+      (b.competencia ?? b.dueDate ?? "").localeCompare(
+        a.competencia ?? a.dueDate ?? "",
+      ),
+    );
+    const history: InstalacaoHistoryEntry[] = charges
+      .slice(0, HISTORY_MONTHS)
+      .map((charge) => ({
+        chargeId: charge.id,
+        competencia: charge.competencia,
+        dueDate: charge.dueDate,
+        amount: charge.amount,
+        ciclo: cicloOf(charge),
+        pdfUrl: detailsByCharge.get(charge.id)?.faturaDriveUrl ?? null,
+        payment: paymentOf(charge),
+      }));
+
+    // Account-level Ciclo tracks the CURRENT portal bill (state.dueDate):
+    //  - a due bill with a matching parsed charge → that charge's stage;
+    //  - a due bill with NO parsed charge → 1 · Detectada (portal saw it, PDF
+    //    not downloaded yet — live-feed only; ≈0 on the frozen clone);
+    //  - no current due bill → the latest charge's stage, else null ("—").
+    // Keyed by due_date (decision #6) so a new portal bill is never masked by
+    // an older paid one, and a "Sem contas" state (no dueDate) shows no phantom.
+    const currentDue = state?.dueDate ?? null;
+    let ciclo: NonNullable<ReturnType<typeof energyCicloStage>> | null;
+    if (currentDue !== null) {
+      const currentCharge = charges.find((c) => c.dueDate === currentDue);
+      ciclo = currentCharge ? cicloOf(currentCharge) : 1;
+    } else {
+      ciclo = history.length > 0 ? history[0].ciclo : null;
+    }
+
     return {
+      ciclo,
+      history,
       accountId: account.id,
       provider: account.accountType as EnergyProvider,
       installationKey: account.enelId ?? account.edpUc ?? account.id,

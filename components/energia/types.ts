@@ -11,6 +11,7 @@ import type {
   UtilityBillStatus,
 } from "@/lib/domain";
 import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
+import type { CicloStage } from "@/lib/energia/ciclo";
 
 /** Energy-provider subset of AccountType. */
 export type EnergyProvider = "energy_enel" | "energy_edp";
@@ -34,6 +35,23 @@ export interface EnergyAccountOption {
   meterReadingRequired: boolean;
 }
 
+/**
+ * One fatura in the per-installation history drawer (Q11) — the account's last
+ * competências with OUR lifecycle stage + the Drive PDF link.
+ */
+export interface InstalacaoHistoryEntry {
+  chargeId: string;
+  /** 'YYYY-MM-01' or null. */
+  competencia: string | null;
+  dueDate: string | null;
+  amount: number | null;
+  ciclo: CicloStage;
+  /** Drive link parsed from the sheet's =HYPERLINK link_fatura. */
+  pdfUrl: string | null;
+  /** Linked charging.payments coverage — null when none. */
+  payment: PaymentLinkSummary | null;
+}
+
 /** One row per enel_id / UC in the "Instalações" tab. */
 export interface InstalacaoRow {
   accountId: string;
@@ -42,6 +60,14 @@ export interface InstalacaoRow {
   installationKey: string;
   stationId: number | null;
   matchStatus: MatchStatus;
+  /**
+   * Q11 "Ciclo" — OUR lifecycle stage of the latest bill (vs the portal's
+   * billStatus): 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
+   * Null when the account has no bill at all.
+   */
+  ciclo: CicloStage | null;
+  /** Last ~12 competências, latest first (history drawer). */
+  history: InstalacaoHistoryEntry[];
   address: string | null;
   neighborhood: string | null;
   city: string | null;
