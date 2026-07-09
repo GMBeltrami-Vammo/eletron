@@ -382,7 +382,7 @@ export interface RunSheetSyncOptions {
   now?: Date;
 }
 
-async function upsertAll(
+export async function upsertAll(
   admin: ChargingClient,
   table: string,
   rows: Row[],
@@ -397,7 +397,7 @@ async function upsertAll(
   }
 }
 
-async function upsertChargesReturning(
+export async function upsertChargesReturning(
   admin: ChargingClient,
   rows: Row[],
 ): Promise<Map<string, string>> {

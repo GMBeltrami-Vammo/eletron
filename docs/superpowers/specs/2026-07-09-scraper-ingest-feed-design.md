@@ -75,9 +75,10 @@ Ingest lands in the **same `charging` schema** the app reads — the current tes
 
 ## Verification
 
-1. Unit: partial-normalize of a sample ENEL + EDP installation → expected account/charge/detail; the station-preserve upsert leaves an already-matched account's `station_id`/`match_status` untouched; dedupe converges with a pre-existing cloned charge (no dupe).
-2. `scripts/test-scraper-ingest.ts` against the live charging schema (a throwaway installation id, then cleaned up) → account state + charge + Ciclo Analisada visible; a no-fatura POST → Ciclo Detectada.
-3. tsc / eslint / vitest / build green; adversarial review of the upsert (esp. the station-preserve + stickiness); commit + push.
+1. Unit (done — `lib/ingest/scraper-feed.test.ts`, 10 cases): partial-normalize of a sample ENEL + EDP installation → expected account/charge/detail; the station-preserve upsert leaves an already-matched account's `station_id`/`match_status` untouched; dedupe converges with a pre-existing cloned charge (no dupe); an existing `rpc` charge is not clobbered; state-1 (`faturas:[]`) yields no charge; the per-POST cap rejects an oversized batch; `normalize` issues are surfaced (a keyless fatura is dropped, not silently ingested).
+2. Static/schema (done): tsc / eslint / vitest (227 pass) / `next build` green; live MCP cross-check that every written column exists and that `billing_accounts` PK is `id` (basis for the upsert-ignore); the PostgREST ops (`.upsert{onConflict,ignoreDuplicates}`, chunked `.in`, `.insert`) are the same ones the proven clone/sheet-sync path uses against this schema.
+3. Adversarial review (done): no data-corruption bug; 3 low findings fixed (chunked preflight reads, idempotent new-account upsert, surfaced normalize issues).
+4. Live end-to-end smoke (**deferred — Gabriel-side**): once `SCRAPER_INGEST_SECRET` is set in Vercel, `SCRAPER_INGEST_SECRET=… SCRAPER_INGEST_URL=https://<deploy>/api/ingest/scraper npx tsx scripts/test-scraper-ingest.ts` POSTs a throwaway state-2 + state-1 installation (ids 900000001/2) → expect account state + charge + Ciclo Analisada for state-2 and Ciclo Detectada for state-1; clean up the throwaway rows afterward. (A local smoke needs the prod service-role key on disk — not run here.)
 
 ## Out of scope
 
