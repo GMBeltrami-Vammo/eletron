@@ -9,7 +9,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ColumnFiltersState } from "@tanstack/react-table";
-import { Clock, Eye, X } from "lucide-react";
+import { Clock, Eye, EyeOff, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -159,9 +159,12 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     () => filtersFor(filtro),
   );
-  // Declutter toggles (request #5): (A) reveal manually-hidden stations,
-  // (B) hide stations whose scraper collection is stale.
-  const [showHidden, setShowHidden] = React.useState(false);
+  // Declutter toggles (request #5): (A) manual hide-list view —
+  // 'default' hides hidden, 'show' includes them, 'only' shows just the hidden
+  // ones (to review / re-exibir); (B) hide stations with a stale collection.
+  const [hiddenView, setHiddenView] = React.useState<
+    "default" | "show" | "only"
+  >("default");
   const [hideStale, setHideStale] = React.useState(false);
 
   const handleToggleHidden = React.useCallback(
@@ -211,14 +214,15 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
   const baseRows = React.useMemo(() => {
     const now = Date.now();
     return rows.filter((r) => {
-      if (!showHidden && r.hidden) return false;
+      if (hiddenView === "default" && r.hidden) return false;
+      if (hiddenView === "only" && !r.hidden) return false;
       if (hideStale) {
         const days = daysSinceCollection(r.freshness, now);
         if (days !== null && days > FRESHNESS_STALE_DAYS) return false;
       }
       return true;
     });
-  }, [rows, showHidden, hideStale]);
+  }, [rows, hiddenView, hideStale]);
 
   const chipCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -310,22 +314,44 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
       {/* Declutter toggles (request #5): manual hide list + freshness filter */}
       <div className="flex flex-wrap items-center gap-1.5">
         {hiddenCount > 0 ? (
-          <button
-            type="button"
-            aria-pressed={showHidden}
-            onClick={() => setShowHidden((v) => !v)}
-            title="Revela as estações marcadas como ocultas"
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
-              showHidden
-                ? "border-ring bg-muted text-foreground"
-                : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <Eye className="size-3.5" strokeWidth={2} />
-            Mostrar ocultas
-            <span className="tabular-nums">{hiddenCount}</span>
-          </button>
+          <>
+            <button
+              type="button"
+              aria-pressed={hiddenView === "show"}
+              onClick={() =>
+                setHiddenView((v) => (v === "show" ? "default" : "show"))
+              }
+              title="Inclui as estações ocultas na lista"
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+                hiddenView === "show"
+                  ? "border-ring bg-muted text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Eye className="size-3.5" strokeWidth={2} />
+              Mostrar ocultas
+              <span className="tabular-nums">{hiddenCount}</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={hiddenView === "only"}
+              onClick={() =>
+                setHiddenView((v) => (v === "only" ? "default" : "only"))
+              }
+              title="Mostra somente as estações ocultas (para revisar ou reexibir)"
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors",
+                hiddenView === "only"
+                  ? "border-ring bg-muted text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <EyeOff className="size-3.5" strokeWidth={2} />
+              Apenas ocultas
+              <span className="tabular-nums">{hiddenCount}</span>
+            </button>
+          </>
         ) : null}
         <button
           type="button"

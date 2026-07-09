@@ -124,6 +124,19 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
     ),
   },
   {
+    id: "instalacao",
+    header: "Instalação",
+    accessorFn: (r) => r.installationKey ?? "",
+    cell: ({ row }) =>
+      row.original.installationKey ? (
+        <span className="tabular-nums text-muted-foreground">
+          {row.original.installationKey}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     id: "competencia",
     header: "Competência",
     accessorFn: (r) => r.competencia ?? "",

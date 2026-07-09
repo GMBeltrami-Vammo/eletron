@@ -30,6 +30,8 @@ export interface PagamentoRow {
    * when `parceiro` is null. Null when the charge has no billing account.
    */
   accountType: AccountType | null;
+  /** Enel id / EDP UC of the billing account (energy rows); null otherwise. */
+  installationKey: string | null;
   /** Documento/Boleto value. */
   amount: number | null;
   /** Planilha/contract expectation (mismatch highlight when they differ). */

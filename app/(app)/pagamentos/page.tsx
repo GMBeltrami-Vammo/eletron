@@ -70,6 +70,7 @@ function buildRows(
         kind: charge.kind,
         parceiro,
         accountType: account?.accountType ?? null,
+        installationKey: account?.enelId ?? account?.edpUc ?? null,
         amount: charge.amount,
         expectedAmount: charge.expectedAmount,
         status: charge.status,
