@@ -64,7 +64,9 @@ async function parseFixture(name: string): Promise<ParsedReceipt[]> {
 }
 
 suite("comprovante parser — real PDFs", () => {
-  it("débito-automático PDF: extracts text and parses DA receipts", async () => {
+  // Real multi-page PDFs (unpdf text extraction) are CPU-heavy — well over the
+  // 5s default; give them room so they never flake in the shared gate.
+  it("débito-automático PDF: extracts text and parses DA receipts", { timeout: 60000 }, async () => {
     const buf = readFileSync(join(DIR, FIXTURES.debitoAutomatico));
     const { pages, pageCount } = await extractPdfText(buf);
     expect(pageCount).toBeGreaterThan(0);
@@ -90,7 +92,7 @@ suite("comprovante parser — real PDFs", () => {
     }
   });
 
-  it("mixed PDF: extracts text and parses receipts with amounts", async () => {
+  it("mixed PDF: extracts text and parses receipts with amounts", { timeout: 60000 }, async () => {
     const buf = readFileSync(join(DIR, FIXTURES.mixed));
     const { pages, pageCount } = await extractPdfText(buf);
     expect(pageCount).toBeGreaterThan(0);
@@ -112,7 +114,7 @@ suite("comprovante parser — real PDFs", () => {
     expect(withAmount.length).toBeGreaterThan(receipts.length / 2);
   });
 
-  it("Format C (concessionária / ELETROPAULO): every recognized receipt has an amount + barcode", async () => {
+  it("Format C (concessionária / ELETROPAULO): every recognized receipt has an amount + barcode", { timeout: 60000 }, async () => {
     let formatCTotal = 0;
     let fixturesWithFormatC = 0;
     const perType: Record<string, number> = {};
@@ -167,7 +169,7 @@ suite("comprovante parser — real PDFs", () => {
     expect(formatCTotal).toBeGreaterThan(0);
   });
 
-  it("boleto payment (Comprovante de pagamento de boleto): 07.07 fixtures parse with amount + linha digitável", async () => {
+  it("boleto payment (Comprovante de pagamento de boleto): 07.07 fixtures parse with amount + linha digitável", { timeout: 60000 }, async () => {
     let boletoTotal = 0;
     let nullAmount = 0;
     let nullBarcode = 0;

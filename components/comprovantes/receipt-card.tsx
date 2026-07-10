@@ -11,7 +11,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { CheckCircle2, FileSearch, Link2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, FileSearch, Link2 } from "lucide-react";
 import type { QueryKey } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
@@ -49,11 +49,13 @@ function Field({
 
 export function ReceiptCard({
   receipt,
+  documentId,
   isOperator,
   onJumpToPage,
   invalidate,
 }: {
   receipt: ReceiptView;
+  documentId: string;
   isOperator: boolean;
   onJumpToPage: (page: number) => void;
   invalidate: QueryKey[];
@@ -85,6 +87,16 @@ export function ReceiptCard({
             Página {receipt.pageNumber}
             {receipt.segmentIndex > 0 ? ` · seg ${receipt.segmentIndex}` : ""}
           </Button>
+          <a
+            href={`/api/files/${documentId}/page/${receipt.pageNumber}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-medium underline-offset-2 hover:underline"
+            title="Abrir só esta página (PDF isolado)"
+          >
+            <ExternalLink className="size-3" strokeWidth={2} />
+            Ver página
+          </a>
           <StatusBadge color={typeUi.color}>{typeUi.label}</StatusBadge>
         </div>
         <MatchBadge

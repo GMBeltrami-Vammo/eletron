@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest";
+import { PDFDocument } from "pdf-lib";
+
+import { PageOutOfRange, splitPdfPage } from "./split";
+
+async function makePdf(pages: number): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < pages; i++) doc.addPage([200, 200]);
+  return doc.save();
+}
+
+describe("splitPdfPage", () => {
+  it("extracts a single page as a valid one-page PDF", async () => {
+    const src = await makePdf(3);
+    const out = await splitPdfPage(src, 2);
+    const reloaded = await PDFDocument.load(out);
+    expect(reloaded.getPageCount()).toBe(1);
+    // a real PDF byte stream
+    expect(Buffer.from(out.slice(0, 5)).toString()).toBe("%PDF-");
+  });
+
+  it("accepts the first and last page", async () => {
+    const src = await makePdf(2);
+    expect((await PDFDocument.load(await splitPdfPage(src, 1))).getPageCount()).toBe(1);
+    expect((await PDFDocument.load(await splitPdfPage(src, 2))).getPageCount()).toBe(1);
+  });
+
+  it("throws PageOutOfRange for an index past the end or below 1", async () => {
+    const src = await makePdf(2);
+    await expect(splitPdfPage(src, 3)).rejects.toBeInstanceOf(PageOutOfRange);
+    await expect(splitPdfPage(src, 0)).rejects.toBeInstanceOf(PageOutOfRange);
+  });
+});

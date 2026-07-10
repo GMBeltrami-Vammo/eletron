@@ -276,6 +276,7 @@ export function ComprovanteDetail({
                 <ReceiptCard
                   key={r.id}
                   receipt={r}
+                  documentId={documentId}
                   isOperator={viewer.isOperator}
                   onJumpToPage={setPage}
                   invalidate={invalidate}
