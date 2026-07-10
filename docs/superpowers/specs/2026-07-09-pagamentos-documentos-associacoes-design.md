@@ -1,7 +1,7 @@
 # Feature D — Documento & Associações — Design Spec
 
 Date: 2026-07-09
-Status: draft, pending review
+Status: approved + shipped (decision #35), in two slices — Part 1 + 2a (commit slice 1), Part 2b + the #29 unmatch fix (commit slice 2)
 
 ---
 
