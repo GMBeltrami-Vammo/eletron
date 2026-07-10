@@ -254,6 +254,7 @@ function buildRows(
       leituraAnterior: details.leituraAnterior,
       leituraAtual: details.leituraAtual,
       tariffClass: tariffClass(details),
+      ciclo: cicloOf(charge),
       fiscalExported: details.fiscalExported,
       autoDebit: state?.autoDebit ?? "desconhecido",
       autoDebitRegistration:

@@ -21,8 +21,9 @@ Users: finance/charging team, Google OAuth restricted to @vammo.com.
 
 ## Rules specific to this repo
 
-- SHEETS SEVERED (decision #25): the app NEVER writes any Google Sheet, and after the R2 cutover it never reads one either.
-  The only permitted sheet read is the one final clone via `scripts/backfill.ts`/`runSheetSync` at the cutover ritual; `lib/sheets/faturas-writeback.ts` and the `sheet_writebacks` outbox are dormant — do not wire new call sites to them.
+- SHEETS SEVERED (decision #25): the app NEVER writes any Google Sheet, and after the R2 cutover it never reads the SCRAPER/RENT sheets either.
+  The only permitted scraper-sheet read is the one final clone via `scripts/backfill.ts`/`runSheetSync` at the cutover ritual; `lib/sheets/faturas-writeback.ts` and the `sheet_writebacks` outbox are dormant — do not wire new call sites to them.
+  EXCEPTION (decision #40, Q12): the FISCAL spreadsheet (`FISCAL_SPREADSHEET_ID`) is a different sheet and MAY be read — `lib/fiscal/fiscal-sheet.ts` checks whether a fatura is already registered there before a send-to-fiscal; still zero sheet writes.
 - The Vammo-Enel scraper stays untouched (decision #10); it keeps writing its own sheet, which this app simply no longer consumes.
 - Sheet-clone code resolves columns by header name only — month columns (`F_MMMAA`/`R_MMMAA`, lowercase `mmmaa` on EDP) are inserted dynamically.
 - All pt-BR parsing (money, dates, comma decimals, "Não/Nao cadastrado", UNIDENTIFIED sentinels) lives ONLY in `lib/ingest/normalize.ts` — screens never see raw source strings.

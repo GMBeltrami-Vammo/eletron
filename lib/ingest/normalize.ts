@@ -335,7 +335,8 @@ export function parseDateISO(value: string): string | null {
 }
 
 /**
- * Timestamps: 'YYYY-MM-DD HH:mm[:ss]' (scraper, BRT wall clock) →
+ * Timestamps: 'YYYY-MM-DD HH:mm[:ss]' (scraper, BRT wall clock) or
+ * 'DD/MM/YYYY HH:mm[:ss]' (FISCAL sheet upload column) →
  * 'YYYY-MM-DDTHH:mm:ss'; full ISO with offset (backoffice created_at) passes
  * through unchanged; bare dates → 'T00:00:00'.
  */
@@ -350,6 +351,12 @@ export function parseTimestamp(value: string): string | null {
     const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
     if (!validYmd(y, mo, d)) return null;
     return `${m[1]}-${m[2]}-${m[3]}T${pad2(Number(m[4]))}:${m[5]}:${m[6] ?? "00"}`;
+  }
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})[ ](\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(v);
+  if (br) {
+    const [d, mo, y] = [Number(br[1]), Number(br[2]), Number(br[3])];
+    if (!validYmd(y, mo, d)) return null;
+    return `${y}-${pad2(mo)}-${pad2(d)}T${pad2(Number(br[4]))}:${br[5]}:${br[6] ?? "00"}`;
   }
   const dateOnly = parseDateISO(v);
   return dateOnly ? `${dateOnly}T00:00:00` : null;

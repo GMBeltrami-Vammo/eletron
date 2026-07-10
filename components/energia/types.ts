@@ -118,6 +118,12 @@ export interface FaturaRow {
   leituraAtual: string | null;
   /** ENEL C1–C6 joined, or EDP classificação · modalidade. */
   tariffClass: string | null;
+  /**
+   * Q11 "Ciclo" — OUR lifecycle stage of THIS fatura (same derivation as the
+   * Instalações tab): 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
+   * Fatura rows are parsed charges, so in practice ≥ 2.
+   */
+  ciclo: CicloStage;
   fiscalExported: boolean;
   /** Débito automático of the installation (R1 — from utility state). */
   autoDebit: AutoDebitStatus;

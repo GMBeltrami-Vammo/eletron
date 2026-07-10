@@ -74,6 +74,26 @@ function parseServiceAccountKey(b64: string): ServiceAccountKey {
   return { client_email: key.client_email, private_key: key.private_key };
 }
 
+/**
+ * Authenticated read-only Sheets client from GSHEETS_SA_KEY_B64. Shared by the
+ * Phase 1 snapshot loader below and the FISCAL-sheet check (lib/fiscal) — the
+ * service account must be a Viewer on every spreadsheet it reads.
+ */
+export function createSheetsClient(
+  env: SheetsLoaderEnv = process.env,
+): ReturnType<typeof google.sheets> {
+  if (!env.GSHEETS_SA_KEY_B64) {
+    throw new Error("GSHEETS_SA_KEY_B64 not configured");
+  }
+  const key = parseServiceAccountKey(env.GSHEETS_SA_KEY_B64);
+  const auth = new google.auth.JWT({
+    email: key.client_email,
+    key: key.private_key,
+    scopes: [SHEETS_SCOPE],
+  });
+  return google.sheets({ version: "v4", auth });
+}
+
 /** batchGet value cell → string (numbers/booleans stringified, null → ''). */
 function cellToString(cell: unknown): string {
   if (cell === null || cell === undefined) return "";
@@ -125,13 +145,7 @@ export async function loadRawTabsFromSheets(
       "Missing Sheets env vars (GSHEETS_SA_KEY_B64, SCRAPER_SPREADSHEET_ID, RENT_SPREADSHEET_ID)",
     );
   }
-  const key = parseServiceAccountKey(env.GSHEETS_SA_KEY_B64 as string);
-  const auth = new google.auth.JWT({
-    email: key.client_email,
-    key: key.private_key,
-    scopes: [SHEETS_SCOPE],
-  });
-  const sheets = google.sheets({ version: "v4", auth });
+  const sheets = createSheetsClient(env);
 
   const scraperFormattedTabs = SCRAPER_TABS.filter((t) => !FORMULA_TABS.has(t));
   const scraperFormulaTabs = SCRAPER_TABS.filter((t) => FORMULA_TABS.has(t));
