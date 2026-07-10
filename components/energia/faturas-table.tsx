@@ -15,6 +15,12 @@ import { toast } from "sonner";
 
 import { sendToFiscal, verifyFaturasOnFiscal } from "@/app/actions/fiscal";
 import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { comprovantePageSrc } from "@/lib/data/payment-links.shared";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { Button } from "@/components/ui/button";
@@ -242,11 +248,29 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     header: "Ciclo",
     accessorFn: (r) => CICLO_UI[r.ciclo].label,
     cell: ({ row }) => {
-      const ui = CICLO_UI[row.original.ciclo];
-      return (
-        <span title={`Estágio ${row.original.ciclo} de 4`}>
+      const r = row.original;
+      const ui = CICLO_UI[r.ciclo];
+      const badge = (
+        <span title={`Estágio ${r.ciclo} de 4`}>
           <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
         </span>
+      );
+      // Ciclo 4 = Paga: hovering shows the bound comprovante's isolated page.
+      const pageSrc = r.ciclo === 4 ? comprovantePageSrc(r.payment) : null;
+      if (!pageSrc) return badge;
+      return (
+        <HoverCard>
+          <HoverCardTrigger render={<span className="cursor-help" />}>
+            {badge}
+          </HoverCardTrigger>
+          <HoverCardContent className="w-[360px] max-w-[90vw]">
+            <iframe
+              src={pageSrc}
+              title="Comprovante da fatura paga"
+              className="h-[460px] w-full rounded-md border-0 bg-white"
+            />
+          </HoverCardContent>
+        </HoverCard>
       );
     },
   },
@@ -351,6 +375,32 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
   },
 ];
 
+// Display order (Gabriel 2026-07-10): identity + status first, energy detail
+// columns (TUSD…Classe) pushed to the end.
+const COLUMN_ORDER = [
+  "provedor",
+  "instalacao",
+  "estacao",
+  "competencia",
+  "debitoAutomatico",
+  "valor",
+  "vencimento",
+  "ciclo",
+  "fiscal",
+  "fatura",
+  "comprovante",
+  "nf",
+  "tusd",
+  "te",
+  "cip",
+  "total",
+  "leituras",
+  "classeTarifaria",
+];
+const orderedColumns = COLUMN_ORDER.map((id) =>
+  columns.find((c) => c.id === id),
+).filter((c): c is ColumnDef<FaturaRow, unknown> => Boolean(c));
+
 export function FaturasTable({
   rows,
   accounts,
@@ -447,7 +497,7 @@ export function FaturasTable({
 
   return (
     <DataTable
-      columns={columns}
+      columns={orderedColumns}
       data={filtered}
       searchPlaceholder="Buscar fatura, NF, instalação…"
       csvFilename="faturas-energia"
