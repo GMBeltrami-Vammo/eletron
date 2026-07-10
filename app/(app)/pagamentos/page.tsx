@@ -140,9 +140,14 @@ async function PagamentosContent() {
 
   const [refs, links] = await Promise.all([readChargeRefs(), readPaymentLinks()]);
 
+  const stations = snapshot.stations
+    .map((s) => ({ id: s.id, name: s.name }))
+    .sort((a, b) => a.id - b.id);
+
   return (
     <PagamentosView
       rows={buildRows(snapshot, refs, links)}
+      stations={stations}
       canWrite={viewer.role !== null}
       isAdmin={viewer.role === "admin"}
     />

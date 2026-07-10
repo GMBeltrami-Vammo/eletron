@@ -74,3 +74,9 @@ export interface PagamentoRow {
    */
   sourceDocumentId: string | null;
 }
+
+/** Lightweight station option for the "Nova cobrança manual" station picker. */
+export interface StationOption {
+  id: number;
+  name: string | null;
+}

@@ -10,7 +10,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import type { ChargeStatus, PaymentMethod } from "@/lib/domain";
+import type { ChargeKind, ChargeStatus, PaymentMethod } from "@/lib/domain";
 import { revalidateSnapshot } from "@/lib/data/repository.server";
 import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
 
@@ -134,6 +134,45 @@ export async function setChargeDocument(input: {
       }),
     );
     await revalidateCharges();
+  });
+}
+
+/**
+ * Creates a manual single charge (Energia or Aluguel) tied to a station — no
+ * contract/counterparty required (billing_account stays null, match_status
+ * 'manually_matched'). For fixing minor issues; the row can later be
+ * reclassified/attributed or have a document bound.
+ */
+export async function createManualCharge(input: {
+  kind: ChargeKind;
+  stationId: number;
+  /** 'YYYY-MM' or 'YYYY-MM-DD'. */
+  competencia: string;
+  amount: number;
+  dueDate?: string | null;
+  paymentMethod?: PaymentMethod | null;
+  documentId?: string | null;
+  notes?: string | null;
+}): Promise<ActionResult<string>> {
+  return withOperator(async (client) => {
+    const competencia =
+      input.competencia.length === 7
+        ? `${input.competencia}-01`
+        : input.competencia;
+    const id = unwrapRpc(
+      await client.rpc("create_manual_charge", {
+        p_kind: input.kind,
+        p_station_id: input.stationId,
+        p_competencia: competencia,
+        p_amount: input.amount,
+        p_due_date: input.dueDate ?? null,
+        p_payment_method: input.paymentMethod ?? null,
+        p_document_id: input.documentId ?? null,
+        p_notes: input.notes ?? null,
+      }),
+    ) as string;
+    await revalidateCharges();
+    return id;
   });
 }
 

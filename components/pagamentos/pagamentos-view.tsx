@@ -32,11 +32,12 @@ import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
-import type { PagamentoRow } from "./types";
+import type { PagamentoRow, StationOption } from "./types";
 import { GerarMesDialog } from "./gerar-mes-dialog";
 import { StatusActions } from "./status-actions";
 import { FlagBadges } from "./flag-badges";
 import { PagamentoDrawer } from "./pagamento-drawer";
+import { NovaCobrancaDialog } from "./nova-cobranca-dialog";
 
 /**
  * Ingest source → pt-BR badge label (labels.ts has no ingest-source map yet;
@@ -468,10 +469,13 @@ function LedgerPanel({
 
 export function PagamentosView({
   rows,
+  stations,
   canWrite,
   isAdmin,
 }: {
   rows: PagamentoRow[];
+  /** Station options for the "Nova cobrança manual" picker. */
+  stations: StationOption[];
   /** operator or admin — enables Gerar mês + lifecycle actions. */
   canWrite: boolean;
   /** admin — additionally enables the "Cancelada" transition. */
@@ -562,6 +566,7 @@ export function PagamentosView({
                 <SelectItem value="all">Todos os meses</SelectItem>
               </SelectContent>
             </Select>
+            <NovaCobrancaDialog canWrite={canWrite} stations={stations} />
             <GerarMesDialog canWrite={canWrite} />
           </>
         }
