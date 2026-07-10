@@ -33,6 +33,7 @@ interface ContractRow {
   valor_mensal: string | number | null;
   due_day: number | null;
   payment_method: PaymentMethod | null;
+  rent_manual: boolean | null;
 }
 
 interface StationRow {
@@ -92,7 +93,7 @@ export async function computeGerarMesProjection(
     admin
       .from("contracts")
       .select(
-        "id, cadastro_id, station_id, status, contract_type, box_count, min_box, valor_por_box, valor_mensal, due_day, payment_method",
+        "id, cadastro_id, station_id, status, contract_type, box_count, min_box, valor_por_box, valor_mensal, due_day, payment_method, rent_manual",
       )
       .order("id", { ascending: true }),
   );
@@ -143,10 +144,20 @@ export async function computeGerarMesProjection(
       });
       continue;
     }
+    // RPC also excludes rent_manual contracts (M7 — reminded, never generated).
+    if (c.rent_manual === true) {
+      skipped.push({
+        cadastroId: c.cadastro_id,
+        stationId: c.station_id,
+        stationName,
+        contractType: c.contract_type,
+        reason: "Aluguel manual — lembrete, não gerado automaticamente",
+      });
+      continue;
+    }
 
     const boxes = station?.active_boxes ?? null;
     const valorMensal = num(c.valor_mensal);
-    const valorPorBox = num(c.valor_por_box);
     const flags: string[] = [];
     let amount: number | null;
     let formulaBody: string;
@@ -156,30 +167,21 @@ export async function computeGerarMesProjection(
         amount = valorMensal;
         formulaBody = `Valor fixo = ${formatBRL(amount)}`;
         break;
+      // por_box / por_box_minimo bill the AGREED valor_mensal (Metabase never
+      // changes the amount — it only flags box drift). Mirrors the RPC.
       case "por_box":
-        if (boxes === null) {
-          amount = valorMensal;
-          flags.push("no_metabase_data");
-          formulaBody = `Valor mensal (sem dados de boxes) = ${formatBRL(amount)}`;
-        } else if (boxes === c.box_count) {
-          amount = valorMensal;
-          formulaBody = `${boxes} box × ${formatBRL(valorPorBox)} = ${formatBRL(amount)}`;
-        } else {
-          amount = valorPorBox !== null ? boxes * valorPorBox : null;
-          flags.push("boxes_mismatch");
-          formulaBody = `${boxes} box × ${formatBRL(valorPorBox)} = ${formatBRL(amount)}`;
-        }
-        break;
       case "por_box_minimo":
+        amount = valorMensal;
         if (boxes === null) {
-          amount = valorMensal;
           flags.push("no_metabase_data");
-          formulaBody = `Valor mensal (sem dados de boxes) = ${formatBRL(amount)}`;
+          formulaBody = `Valor mensal (sem dados de boxes do Metabase) = ${formatBRL(amount)}`;
+        } else if (c.box_count !== null && boxes !== c.box_count) {
+          // Match SQL: `v_boxes <> box_count` is NULL (not true) when box_count
+          // is null, so a null contract box_count is NOT a mismatch.
+          flags.push("boxes_mismatch");
+          formulaBody = `Valor mensal ${formatBRL(amount)} · Metabase ${boxes} box ≠ contrato ${c.box_count} box`;
         } else {
-          const effective = Math.max(c.min_box ?? 0, boxes);
-          amount = valorPorBox !== null ? effective * valorPorBox : null;
-          if (boxes !== c.box_count) flags.push("boxes_mismatch");
-          formulaBody = `MAX(${c.min_box ?? 0}; ${boxes}) × ${formatBRL(valorPorBox)} = ${formatBRL(amount)}`;
+          formulaBody = `Valor mensal (${boxes} box) = ${formatBRL(amount)}`;
         }
         break;
       default:
