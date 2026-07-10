@@ -85,6 +85,30 @@ export async function reclassifyCharge(
       }),
     ) as string;
 
+    // Teach-on-reclassify (feature B): if this cobrança carries an email sender
+    // and now resolves to a station, learn the sender→station mapping so the
+    // next boleto from that sender pre-matches. Best-effort — a teach failure
+    // must not fail the reclassify.
+    try {
+      const { data: after } = await client
+        .from("charges")
+        .select("email_sender, station_id")
+        .eq("id", chargeId)
+        .maybeSingle();
+      const row = after as {
+        email_sender: string | null;
+        station_id: number | null;
+      } | null;
+      if (row?.email_sender && row.station_id !== null) {
+        await client.rpc("set_station_sender", {
+          p_sender_email: row.email_sender,
+          p_station_id: row.station_id,
+        });
+      }
+    } catch {
+      /* teaching is best-effort */
+    }
+
     revalidatePath("/revisao/cobrancas");
     revalidatePath("/pagamentos");
     revalidatePath("/energia");

@@ -281,6 +281,7 @@ interface ChargeRowLite {
   chave_pix: string | null;
   linha_digitavel: string | null;
   payment_method: string | null;
+  email_sender: string | null;
 }
 
 async function one<T>(
@@ -292,11 +293,24 @@ async function one<T>(
   return (data as T) ?? null;
 }
 
-/** Resolves (or creates) the attribution account per H3. Returns nulls when unattributable. */
+/** "Name <a@b.com>" or a bare address → lowercased address (mirrors SQL normalize_sender). */
+export function normalizeSender(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const m = raw.match(/<([^>]+)>/);
+  const addr = (m ? m[1] : raw).trim().toLowerCase();
+  return addr || null;
+}
+
+/**
+ * Resolves (or creates) the attribution account per H3. Returns nulls when
+ * unattributable. `senderStationId` (feature B) is a learned sender→station
+ * hint used only when the AI gave no station.
+ */
 async function resolveAccount(
   admin: ChargingClient,
   c: NormalizedCobranca,
   warnings: string[],
+  senderStationId: number | null,
 ): Promise<{ billingAccountId: string | null; stationId: number | null }> {
   // station id only kept when it actually exists (FK safety)
   let stationId: number | null = null;
@@ -308,12 +322,45 @@ async function resolveAccount(
     if (st) stationId = c.stationId;
     else warnings.push(`estação ${c.stationId} não existe — mantida sem estação`);
   }
+  // Feature B: fall back to the sender→station mapping when the AI gave none.
+  if (stationId === null && senderStationId !== null) {
+    stationId = senderStationId;
+    warnings.push(`estação ${senderStationId} inferida pelo remetente`);
+  }
 
   const isEnergyBearing =
     c.kind === CHARGE_KIND.energia || c.kind === CHARGE_KIND.aluguelEnergia;
 
   if (!isEnergyBearing) {
-    if (c.cadastroId === null) return { billingAccountId: null, stationId };
+    if (c.cadastroId === null) {
+      // No cadastro, but a sender-inferred station → attach to that station's
+      // active contract's rent account when there is exactly one to pick.
+      if (stationId !== null) {
+        const contract = await one<{ id: string }>(
+          admin
+            .from("contracts")
+            .select("id")
+            .eq("station_id", stationId)
+            .eq("status", "ACTIVE")
+            .limit(1)
+            .maybeSingle(),
+          "contracts by station read",
+        );
+        if (contract) {
+          const acct = await one<{ id: string }>(
+            admin
+              .from("billing_accounts")
+              .select("id")
+              .eq("contract_id", contract.id)
+              .eq("account_type", "rent")
+              .maybeSingle(),
+            "billing_accounts read",
+          );
+          if (acct) return { billingAccountId: acct.id, stationId };
+        }
+      }
+      return { billingAccountId: null, stationId };
+    }
     const contract = await one<{ id: string; station_id: number | null }>(
       admin
         .from("contracts")
@@ -450,6 +497,23 @@ export async function ingestCobrancasPayload(
   const driveFileId = cleanCell(payload.drive_file_id ?? "");
   const gmailId = cleanCell(payload.gmail_message_id ?? "") || null;
 
+  // Feature B: normalize the email sender once and resolve any learned
+  // sender→station mapping. Stored on each charge; used to pre-fill the station
+  // when the AI gave none. Mappings are LEARNED on human reclassify, never here.
+  const senderEmail = normalizeSender(payload.remetente);
+  let senderStationId: number | null = null;
+  if (senderEmail) {
+    const senderRow = await one<{ station_id: number }>(
+      admin
+        .from("station_senders")
+        .select("station_id")
+        .eq("sender_email", senderEmail)
+        .maybeSingle(),
+      "station_senders read",
+    );
+    senderStationId = senderRow?.station_id ?? null;
+  }
+
   // NOT_A_BILL short-circuit (H2): 200 + a skipped audit event, zero rows.
   if (bills.length === 0) {
     await admin.from("audit_events").insert({
@@ -536,14 +600,19 @@ export async function ingestCobrancasPayload(
   // ── charges ───────────────────────────────────────────────────────────────
   const taken = new Map<string, number>();
   for (const c of bills) {
-    const { billingAccountId, stationId } = await resolveAccount(admin, c, stats.warnings);
+    const { billingAccountId, stationId } = await resolveAccount(
+      admin,
+      c,
+      stats.warnings,
+      senderStationId,
+    );
     const dedupeKey = cobrancaDedupeKey(c, driveFileId, taken);
 
     const existing = await one<ChargeRowLite>(
       admin
         .from("charges")
         .select(
-          "id, status, amount, expected_amount, flags, source_document_id, banco, agencia, conta, chave_pix, linha_digitavel, payment_method",
+          "id, status, amount, expected_amount, flags, source_document_id, banco, agencia, conta, chave_pix, linha_digitavel, payment_method, email_sender",
         )
         .eq("dedupe_key", dedupeKey)
         .maybeSingle(),
@@ -561,6 +630,7 @@ export async function ingestCobrancasPayload(
         chave_pix: existing.chave_pix ?? c.chavePix,
         linha_digitavel: existing.linha_digitavel ?? c.linhaDigitavel,
         payment_method: existing.payment_method ?? c.paymentMethod,
+        email_sender: existing.email_sender ?? senderEmail,
       };
       // H4 idempotency (review fix): only flag needs_review on the FIRST/new
       // document attach to a non-terminal charge. A redelivery of the SAME
@@ -618,6 +688,7 @@ export async function ingestCobrancasPayload(
       chave_pix: c.chavePix,
       linha_digitavel: c.linhaDigitavel,
       issuer_cnpj: c.cnpj,
+      email_sender: senderEmail,
       source: "email_ai",
       source_document_id: documentId,
       dedupe_key: dedupeKey,

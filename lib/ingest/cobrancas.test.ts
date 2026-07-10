@@ -284,6 +284,42 @@ describe("ingestCobrancasPayload", () => {
     expect(c.status).toBe("boleto_recebido");
   });
 
+  it("pre-matches the station from a learned sender mapping when the AI gave none (feature B)", async () => {
+    const store: Record<string, Row[]> = {
+      stations: [{ id: 777, name: "Estação 777" }],
+      station_senders: [{ sender_email: "cobranca@parceiro.com", station_id: 777 }],
+      contracts: [],
+      billing_accounts: [],
+      charges: [],
+      documents: [],
+      charge_lines: [],
+      audit_events: [],
+    };
+    // energia cobrança with NO cadastro/station from the AI, but a known sender
+    // in the display-name form — the app infers the station + stores the sender.
+    const payload = parsePayload({
+      cobrancas: [
+        {
+          status: "UNIDENTIFIED",
+          "Tipo de Cobrança": "Energia",
+          Mês: "Julho",
+          Ano: "2026",
+          Valor: "300,00",
+          "Tipo de Pagamento": "Pix",
+        },
+      ],
+      drive_file_id: "drive-xyz",
+      nome_arquivo: "boleto.pdf",
+      remetente: "Parceiro <Cobranca@Parceiro.com>",
+      gmail_message_id: "gmail-2",
+    });
+    const stats = await ingestCobrancasPayload(fakeClient(store), payload, DOWNLOAD);
+    expect(stats.created).toBe(1);
+    const c = store.charges[0];
+    expect(c.station_id).toBe(777); // inferred from the sender mapping
+    expect(c.email_sender).toBe("cobranca@parceiro.com"); // normalized + stored
+  });
+
   it("converges onto an existing gerar_mes charge, advancing only pendente (H4)", async () => {
     const store: Record<string, Row[]> = {
       stations: [{ id: 553, name: "Estação 553" }],
