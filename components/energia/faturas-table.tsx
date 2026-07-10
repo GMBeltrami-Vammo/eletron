@@ -341,8 +341,6 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
   },
 ];
 
-type FiscalStatus = { registered: boolean; tabExists: boolean };
-
 export function FaturasTable({
   rows,
   accounts,
@@ -355,25 +353,19 @@ export function FaturasTable({
   const [provider, setProvider] = React.useState("all");
   const [month, setMonth] = React.useState("all");
   const [missingOnly, setMissingOnly] = React.useState(false);
-
-  // Decision #40: on-demand verification against the FISCAL spreadsheet. Null
-  // until the button runs; then a chargeId → status map drives the "No fiscal"
-  // column.
-  const [fiscalResults, setFiscalResults] = React.useState<Map<
-    string,
-    FiscalStatus
-  > | null>(null);
   const [checkingFiscal, setCheckingFiscal] = React.useState(false);
 
+  // Decision #40: verify every fatura against the FISCAL spreadsheet and SYNC
+  // "Enviada ao fiscal" (fiscal_exported) to what was found there. The column +
+  // Ciclo refresh via revalidation; the toast reports the não/sem-aba breakdown.
   const runFiscalCheck = React.useCallback(async () => {
     setCheckingFiscal(true);
     try {
       const res = await verifyFaturasOnFiscal();
       if (res.ok) {
-        setFiscalResults(new Map(Object.entries(res.data.results)));
         const s = res.data.summary;
         toast.success(
-          `Fiscal: ${s.registered} registrada(s) · ${s.notRegistered} não · ${s.noTab} sem aba (de ${s.total})`,
+          `Fiscal: ${s.registered} registrada(s) · ${s.notRegistered} não · ${s.noTab} sem aba (de ${s.total}). ${res.data.promoted} marcada(s) como enviada(s) ao fiscal.`,
         );
       } else {
         toast.error(res.error);
@@ -386,47 +378,6 @@ export function FaturasTable({
       setCheckingFiscal(false);
     }
   }, []);
-
-  const allColumns = React.useMemo<ColumnDef<FaturaRow, unknown>[]>(() => {
-    const cols = [...columns];
-    const fiscalCol: ColumnDef<FaturaRow, unknown> = {
-      id: "fiscalCheck",
-      header: "No fiscal",
-      enableSorting: false,
-      accessorFn: (r) => {
-        if (!fiscalResults) return "";
-        const s = fiscalResults.get(r.chargeId);
-        if (!s) return "?";
-        return s.registered ? "Registrada" : s.tabExists ? "Não" : "Sem aba";
-      },
-      cell: ({ row }) => {
-        if (!fiscalResults) {
-          return <span className="block text-center text-muted-foreground">—</span>;
-        }
-        const s = fiscalResults.get(row.original.chargeId);
-        if (!s) return <span className="block text-center text-muted-foreground">?</span>;
-        return (
-          <span className="flex justify-center">
-            {s.registered ? (
-              <StatusBadge color="green">Registrada</StatusBadge>
-            ) : s.tabExists ? (
-              <StatusBadge color="red" outline>
-                Não
-              </StatusBadge>
-            ) : (
-              <StatusBadge color="grey" outline>
-                Sem aba
-              </StatusBadge>
-            )}
-          </span>
-        );
-      },
-    };
-    const idx = cols.findIndex((c) => c.id === "fiscal");
-    if (idx >= 0) cols.splice(idx + 1, 0, fiscalCol);
-    else cols.push(fiscalCol);
-    return cols;
-  }, [fiscalResults]);
 
   const months = React.useMemo(() => {
     const set = new Set<string>();
@@ -451,7 +402,7 @@ export function FaturasTable({
 
   return (
     <DataTable
-      columns={allColumns}
+      columns={columns}
       data={filtered}
       searchPlaceholder="Buscar fatura, NF, instalação…"
       csvFilename="faturas-energia"
