@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { verifyFaturasOnFiscal } from "@/app/actions/fiscal";
+import { sendToFiscal, verifyFaturasOnFiscal } from "@/app/actions/fiscal";
 import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
@@ -39,6 +39,7 @@ import {
   formatNumber,
 } from "@/lib/format";
 
+import { FiscalManualDialog } from "./fiscal-manual-dialog";
 import { ManualBillDialog } from "./manual-bill-dialog";
 import { StationCell } from "./station-cell";
 import type { EnergyAccountOption, FaturaRow } from "./types";
@@ -354,6 +355,7 @@ export function FaturasTable({
   const [month, setMonth] = React.useState("all");
   const [missingOnly, setMissingOnly] = React.useState(false);
   const [checkingFiscal, setCheckingFiscal] = React.useState(false);
+  const [sendingFiscal, setSendingFiscal] = React.useState(false);
 
   // Decision #40: verify every fatura against the FISCAL spreadsheet and SYNC
   // "Enviada ao fiscal" (fiscal_exported) to what was found there. The column +
@@ -376,6 +378,38 @@ export function FaturasTable({
       );
     } finally {
       setCheckingFiscal(false);
+    }
+  }, []);
+
+  // Decision #42: WRITE eligible faturas (2026, débito automático, not yet on
+  // the sheet) to the FISCAL spreadsheet. Direct send; the row format is
+  // self-verified per row before append.
+  const runSendToFiscal = React.useCallback(async () => {
+    setSendingFiscal(true);
+    try {
+      const res = await sendToFiscal();
+      if (res.ok) {
+        const s = res.data;
+        const parts = [`${s.sent} enviada(s) ao fiscal`];
+        if (s.alreadyOnSheet) parts.push(`${s.alreadyOnSheet} já na planilha`);
+        if (s.naoCadastrado) parts.push(`${s.naoCadastrado} sem débito automático`);
+        if (s.ignoredPast) parts.push(`${s.ignoredPast} ignorada(s) (≤2025)`);
+        if (s.semAba) parts.push(`${s.semAba} sem aba`);
+        if (s.verifyFailed) parts.push(`${s.verifyFailed} formato inválido`);
+        if (s.appendFailed) parts.push(`${s.appendFailed} falha ao gravar`);
+        toast.success(parts.join(" · "));
+        if (s.blockedWarning) {
+          toast.warning(`${s.blockedWarning} (${s.blockedFuture} fatura(s) de 2027+)`);
+        }
+      } else {
+        toast.error(res.error);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao enviar ao fiscal",
+      );
+    } finally {
+      setSendingFiscal(false);
     }
   }, []);
 
@@ -471,12 +505,22 @@ export function FaturasTable({
             )}
             Verificar no fiscal
           </Button>
-          <span title="Marcado pelo export fiscal (Apps Script) — importação na fase 3">
-            <Button variant="outline" size="sm" className="h-9 bg-card" disabled>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 bg-card"
+            onClick={runSendToFiscal}
+            disabled={sendingFiscal || !canWrite}
+            title="Grava na planilha FISCAL as faturas elegíveis: 2026, com débito automático, ainda não na planilha"
+          >
+            {sendingFiscal ? (
+              <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+            ) : (
               <ListChecks className="size-4" strokeWidth={2} />
-              Enviar ao fiscal em lote
-            </Button>
-          </span>
+            )}
+            Enviar ao fiscal em lote
+          </Button>
+          <FiscalManualDialog canWrite={canWrite} />
         </>
       }
     />

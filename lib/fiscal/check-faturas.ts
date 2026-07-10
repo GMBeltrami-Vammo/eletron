@@ -27,14 +27,17 @@ export interface FaturaRef {
   nf: string | null;
   /** Fiscal tab 'MM-YYYY' derived from the due date. */
   tab: string;
+  /** Charge amount (= energy total) — the fiscal "valor". */
+  amount: number | null;
+  /** Installation-level auto-debit (utility_account_state) — the "DA" marker + send gate. */
+  autoDebit: "cadastrado" | "nao_cadastrado" | "desconhecido";
+  /** Drive PDF link for the "Ver Fatura" hyperlink. */
+  driveUrl: string | null;
+  /** "Enviado ao fiscal" flag (charge_energy_details) — the send skips faturas already checked. */
+  fiscalExported: boolean;
 }
 
-export interface FaturaFiscalStatus {
-  chargeId: string;
-  provider: "enel" | "edp";
-  installationId: string;
-  dueDate: string;
-  tab: string;
+export interface FaturaFiscalStatus extends FaturaRef {
   /** At least one row on the due-month tab matched this fatura. */
   registered: boolean;
   /** False when the fiscal sheet has no tab for that month yet. */
@@ -65,12 +68,16 @@ export async function loadEnergyFaturas(
 ): Promise<FaturaRef[]> {
   const accById = new Map<
     string,
-    { provider: "enel" | "edp"; installationId: string }
+    {
+      provider: "enel" | "edp";
+      installationId: string;
+      autoDebit: FaturaRef["autoDebit"];
+    }
   >();
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from("billing_accounts")
-      .select("id, account_type, enel_id, edp_uc")
+      .select("id, account_type, enel_id, edp_uc, utility_account_state(auto_debit)")
       .in("account_type", ["energy_enel", "energy_edp"])
       .range(from, from + 999);
     if (error) throw new Error(`billing_accounts read: ${error.message}`);
@@ -79,11 +86,23 @@ export async function loadEnergyFaturas(
       account_type: string;
       enel_id: string | null;
       edp_uc: string | null;
+      utility_account_state:
+        | { auto_debit: string | null }
+        | { auto_debit: string | null }[]
+        | null;
     }[];
     for (const r of rows) {
       const provider = r.account_type === "energy_enel" ? "enel" : "edp";
       const installationId = (provider === "enel" ? r.enel_id : r.edp_uc)?.trim();
-      if (installationId) accById.set(r.id, { provider, installationId });
+      const st = Array.isArray(r.utility_account_state)
+        ? r.utility_account_state[0]
+        : r.utility_account_state;
+      const ad = st?.auto_debit;
+      const autoDebit: FaturaRef["autoDebit"] =
+        ad === "cadastrado" || ad === "nao_cadastrado" ? ad : "desconhecido";
+      if (installationId) {
+        accById.set(r.id, { provider, installationId, autoDebit });
+      }
     }
     if (rows.length < 1000) break;
   }
@@ -95,7 +114,9 @@ export async function loadEnergyFaturas(
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin
         .from("charges")
-        .select("id, billing_account_id, due_date, charge_energy_details(nf)")
+        .select(
+          "id, billing_account_id, due_date, amount, charge_energy_details(nf, fatura_drive_url, fiscal_exported)",
+        )
         .in("billing_account_id", slice)
         .not("due_date", "is", null)
         .range(from, from + 999);
@@ -104,9 +125,10 @@ export async function loadEnergyFaturas(
         id: string;
         billing_account_id: string;
         due_date: string;
+        amount: number | string | null;
         charge_energy_details:
-          | { nf: string | null }
-          | { nf: string | null }[]
+          | { nf: string | null; fatura_drive_url: string | null; fiscal_exported: boolean | null }
+          | { nf: string | null; fatura_drive_url: string | null; fiscal_exported: boolean | null }[]
           | null;
       }[];
       for (const r of rows) {
@@ -122,6 +144,10 @@ export async function loadEnergyFaturas(
           dueDate: r.due_date,
           nf: ced?.nf?.trim() || null,
           tab: fiscalTabForDueDate(r.due_date),
+          amount: r.amount === null ? null : Number(r.amount),
+          autoDebit: acc.autoDebit,
+          driveUrl: ced?.fatura_drive_url?.trim() || null,
+          fiscalExported: ced?.fiscal_exported === true,
         });
       }
       if (rows.length < 1000) break;

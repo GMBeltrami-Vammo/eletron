@@ -32,6 +32,8 @@ import {
 export type { RawTabs, RawRow };
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
+/** Read-write scope — ONLY for the send-to-fiscal append (decision #42). */
+const SHEETS_RW_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 /**
  * Env shape (structurally compatible with process.env):
@@ -79,8 +81,9 @@ function parseServiceAccountKey(b64: string): ServiceAccountKey {
  * Phase 1 snapshot loader below and the FISCAL-sheet check (lib/fiscal) — the
  * service account must be a Viewer on every spreadsheet it reads.
  */
-export function createSheetsClient(
-  env: SheetsLoaderEnv = process.env,
+function makeSheetsClient(
+  env: SheetsLoaderEnv,
+  scope: string,
 ): ReturnType<typeof google.sheets> {
   if (!env.GSHEETS_SA_KEY_B64) {
     throw new Error("GSHEETS_SA_KEY_B64 not configured");
@@ -89,9 +92,26 @@ export function createSheetsClient(
   const auth = new google.auth.JWT({
     email: key.client_email,
     key: key.private_key,
-    scopes: [SHEETS_SCOPE],
+    scopes: [scope],
   });
   return google.sheets({ version: "v4", auth });
+}
+
+export function createSheetsClient(
+  env: SheetsLoaderEnv = process.env,
+): ReturnType<typeof google.sheets> {
+  return makeSheetsClient(env, SHEETS_SCOPE);
+}
+
+/**
+ * Read-WRITE Sheets client — ONLY for the send-to-fiscal append (decision #42).
+ * The service account must have EDITOR on the FISCAL spreadsheet (Viewer is
+ * enough for the read-only check; the append needs write).
+ */
+export function createSheetsWriteClient(
+  env: SheetsLoaderEnv = process.env,
+): ReturnType<typeof google.sheets> {
+  return makeSheetsClient(env, SHEETS_RW_SCOPE);
 }
 
 /** batchGet value cell → string (numbers/booleans stringified, null → ''). */

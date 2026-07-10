@@ -13,10 +13,16 @@
 import { revalidatePath } from "next/cache";
 
 import { revalidateSnapshot } from "@/lib/data/repository.server";
+import { getSessionEmail } from "@/lib/http/guards";
 import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createSheetsClient } from "@/lib/ingest/sheets-loader";
-import { checkFaturasOnFiscal } from "@/lib/fiscal/check-faturas";
+import { createSheetsClient, createSheetsWriteClient } from "@/lib/ingest/sheets-loader";
+import { checkFaturasOnFiscal, loadEnergyFaturas } from "@/lib/fiscal/check-faturas";
+import { SENDABLE_YEAR } from "@/lib/fiscal/fiscal-row";
+import {
+  sendFaturasToFiscal,
+  type SendFiscalSummary,
+} from "@/lib/fiscal/send-fiscal";
 
 interface FiscalVerifyResult {
   summary: {
@@ -82,5 +88,134 @@ export async function verifyFaturasOnFiscal(): Promise<
       demoted,
       checkedAt: new Date().toISOString(),
     };
+  });
+}
+
+/**
+ * Sends eligible energy faturas to the FISCAL sheet (decision #42): appends the
+ * not-yet-registered, Cadastrado, 2026 faturas to their due-month tab and marks
+ * them fiscal_exported=true (→ Ciclo 3). WRITES the sheet — needs the SA to have
+ * Editor. Direct (no preview step, per Gabriel); the row format is
+ * self-verified before each append.
+ */
+export async function sendToFiscal(): Promise<ActionResult<SendFiscalSummary>> {
+  return withOperator(async (client) => {
+    const spreadsheetId = process.env.FISCAL_SPREADSHEET_ID;
+    if (!spreadsheetId) {
+      throw new Error(
+        "FISCAL_SPREADSHEET_ID não configurado. Defina no Vercel e conceda Editor ao service account na planilha fiscal.",
+      );
+    }
+
+    const summary = await sendFaturasToFiscal(
+      supabaseAdmin(),
+      createSheetsWriteClient(),
+      spreadsheetId,
+      new Date(),
+    );
+
+    // Mark the newly-sent AND the already-on-sheet (but unchecked) faturas as
+    // "Enviado ao fiscal" → Ciclo 3, so both leave the send queue.
+    const toMark = [
+      ...summary.sentChargeIds,
+      ...summary.alreadyOnSheetChargeIds,
+    ];
+    if (toMark.length > 0) {
+      unwrapRpc(
+        await client.rpc("set_fiscal_exported", {
+          p_charge_ids: toMark,
+          p_value: true,
+        }),
+      );
+    }
+
+    revalidatePath("/energia");
+    revalidatePath("/mensal");
+    revalidatePath("/pagamentos");
+    await revalidateSnapshot();
+
+    return summary;
+  });
+}
+
+export interface ManualFaturaRow {
+  chargeId: string;
+  provider: "enel" | "edp";
+  installationId: string;
+  dueDate: string;
+  amount: number | null;
+  nf: string | null;
+  driveUrl: string | null;
+}
+
+interface FiscalManualQueue {
+  /** Google Sheets URL to open + check by hand (null when the id is unset). */
+  sheetUrl: string | null;
+  /** Faturas the auto-send skips (2026, sem débito automático, ainda sem check). */
+  faturas: ManualFaturaRow[];
+}
+
+/**
+ * The manual-handling queue (decision #42): energy faturas the auto-send does
+ * NOT touch — 2026, auto-debit ≠ Cadastrado, not yet marked "Enviado ao
+ * fiscal" — so a human can check/add them in the fiscal sheet by hand.
+ */
+export async function getFiscalManualQueue(): Promise<
+  ActionResult<FiscalManualQueue>
+> {
+  // Read-only (service role) — a session gate is enough; no JWT mint needed.
+  const email = await getSessionEmail();
+  if (!email) return { ok: false, error: "não autenticado" };
+  try {
+    const id = process.env.FISCAL_SPREADSHEET_ID;
+    const sheetUrl = id
+      ? `https://docs.google.com/spreadsheets/d/${id}/edit`
+      : null;
+    const all = await loadEnergyFaturas(supabaseAdmin());
+    const faturas = all
+      .filter(
+        (f) =>
+          Number(f.dueDate.slice(0, 4)) === SENDABLE_YEAR &&
+          f.autoDebit !== "cadastrado" &&
+          !f.fiscalExported,
+      )
+      .map((f) => ({
+        chargeId: f.chargeId,
+        provider: f.provider,
+        installationId: f.installationId,
+        dueDate: f.dueDate,
+        amount: f.amount,
+        nf: f.nf,
+        driveUrl: f.driveUrl,
+      }))
+      .sort((a, b) => (a.dueDate < b.dueDate ? 1 : -1));
+    return { ok: true, data: { sheetUrl, faturas } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "falha ao carregar a fila",
+    };
+  }
+}
+
+/**
+ * Marks faturas "Enviado ao fiscal" by hand (→ Ciclo 3) — used after adding
+ * them to the fiscal sheet manually, so they leave the manual queue.
+ */
+export async function markFaturasFiscalExported(
+  chargeIds: string[],
+): Promise<ActionResult<number>> {
+  return withOperator(async (client) => {
+    if (chargeIds.length === 0) return 0;
+    const changed = unwrapRpc(
+      await client.rpc("set_fiscal_exported", {
+        p_charge_ids: chargeIds,
+        p_value: true,
+      }),
+    ) as number;
+    revalidatePath("/energia");
+    revalidatePath("/mensal");
+    await revalidateSnapshot();
+    return changed;
   });
 }
