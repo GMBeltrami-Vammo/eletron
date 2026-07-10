@@ -36,6 +36,7 @@ import type { PagamentoRow } from "./types";
 import { GerarMesDialog } from "./gerar-mes-dialog";
 import { StatusActions } from "./status-actions";
 import { FlagBadges } from "./flag-badges";
+import { PagamentoDrawer } from "./pagamento-drawer";
 
 /**
  * Ingest source → pt-BR badge label (labels.ts has no ingest-source map yet;
@@ -99,7 +100,11 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
       if (stationId === null) {
         const ui = MATCH_STATUS_UI[matchStatus];
         return (
-          <Link href="/revisao" title="Abrir fila de revisão">
+          <Link
+            href="/revisao"
+            title="Abrir fila de revisão"
+            onClick={(e) => e.stopPropagation()}
+          >
             <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
           </Link>
         );
@@ -108,6 +113,7 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
         <Link
           href={`/estacoes/${stationId}`}
           className="block underline-offset-2 hover:underline"
+          onClick={(e) => e.stopPropagation()}
         >
           <span className="font-medium tabular-nums">#{stationId}</span>
           {stationName ? (
@@ -414,11 +420,13 @@ function LedgerPanel({
   columns,
   monthLabel,
   csvFilename,
+  onRowClick,
 }: {
   rows: PagamentoRow[];
   columns: ColumnDef<PagamentoRow, unknown>[];
   monthLabel: string;
   csvFilename: string;
+  onRowClick?: (row: PagamentoRow) => void;
 }) {
   const summary = summarize(rows);
   return (
@@ -450,6 +458,8 @@ function LedgerPanel({
         initialSorting={[{ id: "estacao", desc: false }]}
         initialColumnVisibility={{ dedupe: false }}
         filterableColumnIds="all"
+        pinnedRightColumnIds={["acoes"]}
+        onRowClick={onRowClick}
         emptyMessage="Nenhuma cobrança encontrada para o período."
       />
     </>
@@ -484,6 +494,7 @@ export function PagamentosView({
   // to it would open the Enel/EDP tab empty. "Todos os meses" shows both tabs
   // populated; the picker narrows.
   const [month, setMonth] = React.useState<string>("all");
+  const [drawerRow, setDrawerRow] = React.useState<PagamentoRow | null>(null);
 
   const filtered = React.useMemo(() => {
     if (month === "all") return rows;
@@ -577,6 +588,7 @@ export function PagamentosView({
             columns={columns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-enel-edp"
+            onRowClick={setDrawerRow}
           />
         </TabsContent>
         <TabsContent value="outros">
@@ -585,9 +597,20 @@ export function PagamentosView({
             columns={columns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-aluguel-outros"
+            onRowClick={setDrawerRow}
           />
         </TabsContent>
       </Tabs>
+
+      <PagamentoDrawer
+        row={drawerRow}
+        open={drawerRow !== null}
+        onOpenChange={(o) => {
+          if (!o) setDrawerRow(null);
+        }}
+        canWrite={canWrite}
+        isAdmin={isAdmin}
+      />
     </>
   );
 }

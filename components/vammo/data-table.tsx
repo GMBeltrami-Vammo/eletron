@@ -88,6 +88,7 @@ export function DataTable<TData>({
   columnFilters,
   onColumnFiltersChange,
   filterableColumnIds,
+  pinnedRightColumnIds,
 }: {
   columns: ColumnDef<TData, unknown>[];
   data: TData[];
@@ -116,7 +117,16 @@ export function DataTable<TData>({
    * `enableColumnFilter: false`.
    */
   filterableColumnIds?: string[] | "all";
+  /**
+   * Column ids frozen to the right edge (sticky) so they stay visible while the
+   * table scrolls horizontally — e.g. a row-actions column on a wide table.
+   */
+  pinnedRightColumnIds?: string[];
 }) {
+  const pinnedRight = React.useMemo(
+    () => new Set(pinnedRightColumnIds ?? []),
+    [pinnedRightColumnIds],
+  );
   const filterableSet = React.useMemo(() => {
     if (filterableColumnIds === "all") {
       const ids = columns
@@ -295,6 +305,8 @@ export function DataTable<TData>({
                       className={cn(
                         "whitespace-nowrap text-xs",
                         canSort && "cursor-pointer select-none",
+                        pinnedRight.has(header.column.id) &&
+                          "sticky right-0 z-20 border-l border-border bg-card",
                       )}
                       onClick={
                         canSort
@@ -353,7 +365,11 @@ export function DataTable<TData>({
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
-                      className="whitespace-nowrap py-2 text-sm"
+                      className={cn(
+                        "whitespace-nowrap py-2 text-sm",
+                        pinnedRight.has(cell.column.id) &&
+                          "sticky right-0 z-10 border-l border-border bg-card",
+                      )}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>

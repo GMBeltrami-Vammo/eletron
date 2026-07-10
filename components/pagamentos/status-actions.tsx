@@ -270,7 +270,7 @@ export function StatusActions({
 
   if (disabledReason) {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
         <span title={disabledReason}>
           <Button variant="ghost" size="icon-sm" disabled aria-label="Ações">
             <MoreHorizontal className="size-4" strokeWidth={2} />
@@ -299,7 +299,7 @@ export function StatusActions({
   const nothingToDo = false;
 
   return (
-    <div className="flex justify-end">
+    <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="ghost" size="icon-sm" aria-label="Ações" />}
