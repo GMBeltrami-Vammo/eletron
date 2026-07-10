@@ -6,6 +6,7 @@
 
 import type {
   AccountType,
+  AutoDebitStatus,
   ChargeKind,
   ChargeStatus,
   IngestSource,
@@ -21,6 +22,10 @@ export interface PagamentoRow {
   matchStatus: MatchStatus;
   /** 'YYYY-MM-01' or null. */
   competencia: string | null;
+  /** Vencimento (charges.due_date, 'YYYY-MM-DD') — the faturas-sheet due_date. */
+  dueDate: string | null;
+  /** Débito automático of the energy account (null for rent/third-party). */
+  autoDebit: AutoDebitStatus | null;
   kind: ChargeKind;
   /** Counterparty resolved via billing account → contract/counterparty. */
   parceiro: string | null;

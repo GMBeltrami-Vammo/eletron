@@ -21,13 +21,14 @@ import { StatCard } from "@/components/vammo/stat-card";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import {
   ACCOUNT_TYPE_UI,
+  AUTO_DEBIT_UI,
   CHARGE_KIND_UI,
   CHARGE_STATUS_UI,
   FISCAL_EXPORT_UI,
   MATCH_STATUS_UI,
   PAYMENT_METHOD_LABEL,
 } from "@/lib/labels";
-import { formatBRL, formatCompetencia } from "@/lib/format";
+import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -145,6 +146,31 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
         {formatCompetencia(row.original.competencia)}
       </span>
     ),
+  },
+  {
+    // Vencimento (faturas-sheet due_date) — populated for energy; rent charges
+    // carry no due_date on the charge, so they read "—".
+    id: "vencimento",
+    header: "Vencimento",
+    accessorFn: (r) => r.dueDate ?? "",
+    cell: ({ row }) => (
+      <span className="tabular-nums text-muted-foreground">
+        {row.original.dueDate ? formatDate(row.original.dueDate) : "—"}
+      </span>
+    ),
+  },
+  {
+    // Débito automático (faturas-sheet auto_debit) — energy account only.
+    id: "debitoAutomatico",
+    header: "Débito automático",
+    accessorFn: (r) => (r.autoDebit ? AUTO_DEBIT_UI[r.autoDebit].label : ""),
+    cell: ({ row }) => {
+      const da = row.original.autoDebit;
+      if (!da) return <span className="text-muted-foreground">—</span>;
+      const ui = AUTO_DEBIT_UI[da];
+      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+    },
+    meta: csvMeta((r) => (r.autoDebit ? AUTO_DEBIT_UI[r.autoDebit].label : "")),
   },
   {
     id: "tipo",

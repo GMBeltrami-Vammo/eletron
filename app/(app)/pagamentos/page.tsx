@@ -44,6 +44,11 @@ function buildRows(
   const detailsByCharge = new Map(
     snapshot.chargeEnergyDetails.map((d) => [d.chargeId, d]),
   );
+  // Débito automático lives on the energy account's utility state (null for
+  // rent/third-party, which have no utility state row).
+  const stateByAccount = new Map(
+    snapshot.utilityAccountStates.map((s) => [s.billingAccountId, s]),
+  );
 
   return snapshot.charges
     .map((charge) => {
@@ -73,6 +78,11 @@ function buildRows(
             : null,
         matchStatus: charge.matchStatus,
         competencia: charge.competencia,
+        dueDate: charge.dueDate,
+        autoDebit:
+          charge.billingAccountId !== null
+            ? (stateByAccount.get(charge.billingAccountId)?.autoDebit ?? null)
+            : null,
         kind: charge.kind,
         parceiro,
         accountType: account?.accountType ?? null,
