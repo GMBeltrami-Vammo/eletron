@@ -74,6 +74,8 @@ export interface PipelineResult {
   receipts: number;
   auto: number;
   review: number;
+  /** Value-matched nothing → auto-rejected (rule 1), kept out of review. */
+  discarded: number;
   outcomes: ReceiptOutcome[];
   error?: string;
 }
@@ -88,9 +90,10 @@ export interface ChunkResult {
   /** True once the final page range has been processed. */
   done: boolean;
   status: DocProcessingStatus;
-  /** Auto-matches / needs-review / receipts produced by THIS chunk. */
+  /** Auto-matches / needs-review / auto-discards / receipts of THIS chunk. */
   auto: number;
   review: number;
+  discarded: number;
   receipts: number;
   outcomes: ReceiptOutcome[];
   error?: string;
@@ -178,8 +181,6 @@ async function updateProgress(
 interface CandidateRow {
   id: string;
   status: string;
-  kind: string;
-  billing_account_id: string | null;
   amount: number | string | null;
   competencia: string | null;
   due_date: string | null;
@@ -190,18 +191,6 @@ interface CandidateRow {
   linha_digitavel: string | null;
   billing_accounts: unknown;
   charge_energy_details: unknown;
-}
-
-function isEnergyCandidate(
-  accountType: string | null | undefined,
-  billingAccountId: string | null,
-  kind: string,
-): boolean {
-  return (
-    accountType === "energy_enel" ||
-    accountType === "energy_edp" ||
-    (billingAccountId == null && kind === "energia")
-  );
 }
 
 /** charge_ids that already carry a comprovante-backed payment (never re-match). */
@@ -227,8 +216,8 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
   const receipted = await loadReceiptedChargeIds(admin);
   const out: OpenChargeCandidate[] = [];
   const select =
-    "id, status, kind, billing_account_id, amount, competencia, due_date, chave_pix, issuer_cnpj, agencia, conta, linha_digitavel, " +
-    "billing_accounts(account_type, auto_debit_registration, counterparties(value_tolerance)), " +
+    "id, status, amount, competencia, due_date, chave_pix, issuer_cnpj, agencia, conta, linha_digitavel, " +
+    "billing_accounts(auto_debit_registration, counterparties(value_tolerance)), " +
     "charge_energy_details(auto_debit_registration)";
   const statuses = [...OPEN_STATUSES, "pago"];
   const openSet = new Set<string>(OPEN_STATUSES);
@@ -244,21 +233,19 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
     const rows = (data ?? []) as unknown as CandidateRow[];
     for (const r of rows) {
       const ba = toOne<{
-        account_type: string | null;
         auto_debit_registration: string | null;
         counterparties: unknown;
       }>(r.billing_accounts);
       const isOpen = openSet.has(r.status);
-      // `pago` charges join the pool ONLY for ENERGY (the clone marked energy
-      // paid via portal status, so a comprovante binds retroactively). For rent
-      // / third-party, a paid prior month must NOT compete with the open charge
-      // (Gabriel 2026-07-10). A pago charge that already has a comprovante is done.
-      if (!isOpen) {
-        if (receipted.has(r.id)) continue;
-        if (!isEnergyCandidate(ba?.account_type, r.billing_account_id, r.kind)) {
-          continue;
-        }
-      }
+      // The pool = every charge WITHOUT a bound comprovante (the n8n gate was
+      // "Comprovante cell empty", regardless of Pago) — open AND `pago` of any
+      // account type. The clone marked whole months paid via sheet/portal sync,
+      // so a dropped comprovante must bind retroactively to rent too (#41e;
+      // GT 05.06: all 148 targets were sync-`pago` rent). Disambiguation between
+      // a paid prior month and the open month comes from the DATE pinning the
+      // competência (match.ts rule 2), NOT from excluding paid charges — the
+      // 2026-07-10 rent exclusion collapsed matching to 19/148 and is reverted.
+      if (!isOpen && receipted.has(r.id)) continue;
       const cp = toOne<{ value_tolerance: number | string | null }>(ba?.counterparties);
       const ed = toOne<{ auto_debit_registration: string | null }>(r.charge_energy_details);
       out.push({
@@ -381,6 +368,7 @@ async function isolateAndStore(
 interface MatchBatch {
   auto: number;
   review: number;
+  discarded: number;
   outcomes: ReceiptOutcome[];
 }
 
@@ -399,6 +387,7 @@ async function matchAndBind(
 ): Promise<MatchBatch> {
   let auto = 0;
   let review = 0;
+  let discarded = 0;
   const outcomes: ReceiptOutcome[] = [];
   const matchedPages = new Set<number>();
   // Mutable copy: once a receipt auto-binds a charge, that charge leaves the
@@ -425,8 +414,25 @@ async function matchAndBind(
       });
       continue;
     }
+    // already rejected (human or rule-1 discard) — a reprocess must NOT
+    // resurrect it into the review queue.
+    if (matchStatus === "rejected") {
+      discarded += 1;
+      outcomes.push({
+        page: r.pageNumber,
+        segment: r.segmentIndex,
+        type: r.receiptType,
+        amount: r.amount,
+        paidAt: r.paidAt,
+        outcome: "discard",
+      });
+      continue;
+    }
 
-    const match = matchReceipt(r, pool);
+    // `pool` shrinks as the batch binds; `candidates` stays whole so rule-1's
+    // "value matches nothing" is order-independent (a same-value receipt later
+    // in the batch must go to review, not be discarded).
+    const match = matchReceipt(r, pool, candidates);
     const notes = match.reasons.join("; ");
 
     if (match.outcome === "auto" && match.chargeId) {
@@ -494,6 +500,26 @@ async function matchAndBind(
         outcome: "auto",
         chargeId,
       });
+    } else if (match.outcome === "discard") {
+      // Rule 1: amount matches no charge at all → auto-rejected, never queued.
+      await admin
+        .from("receipts")
+        .update({
+          match_status: "rejected",
+          match_notes: notes,
+          matched_by_email: PIPELINE_ACTOR,
+          matched_at: nowIso,
+        })
+        .eq("id", receiptId);
+      discarded += 1;
+      outcomes.push({
+        page: r.pageNumber,
+        segment: r.segmentIndex,
+        type: r.receiptType,
+        amount: r.amount,
+        paidAt: r.paidAt,
+        outcome: "discard",
+      });
     } else {
       const candidateNote =
         match.candidateIds && match.candidateIds.length > 0
@@ -516,7 +542,7 @@ async function matchAndBind(
   }
 
   await isolateAndStore(admin, documentId, whole, [...matchedPages]);
-  return { auto, review, outcomes };
+  return { auto, review, discarded, outcomes };
 }
 
 async function loadDocument(
@@ -574,6 +600,7 @@ export async function processComprovanteChunk(
     status: DOC_PROCESSING_STATUS.pending,
     auto: 0,
     review: 0,
+    discarded: 0,
     receipts: 0,
     outcomes: [],
   };
@@ -617,7 +644,7 @@ export async function processComprovanteChunk(
 
     const candidates = await loadCandidates(admin);
     const nowIso = new Date().toISOString();
-    const { auto, review, outcomes } = await matchAndBind(
+    const { auto, review, discarded, outcomes } = await matchAndBind(
       admin,
       documentId,
       buffer,
@@ -652,6 +679,7 @@ export async function processComprovanteChunk(
       status,
       auto,
       review,
+      discarded,
       receipts: parsed.length,
       outcomes,
     };
@@ -680,6 +708,7 @@ export async function processComprovanteDocument(
     receipts: 0,
     auto: 0,
     review: 0,
+    discarded: 0,
     outcomes: [],
   };
 
@@ -721,7 +750,7 @@ export async function processComprovanteDocument(
 
     const candidates = await loadCandidates(admin);
     const nowIso = new Date().toISOString();
-    const { auto, review, outcomes } = await matchAndBind(
+    const { auto, review, discarded, outcomes } = await matchAndBind(
       admin,
       documentId,
       buffer,
@@ -735,7 +764,7 @@ export async function processComprovanteDocument(
     await finalizeDoc(admin, documentId, status);
     await updateProgress(admin, documentId, pageCount, pageCount);
 
-    return { documentId, status, receipts: parsed.length, auto, review, outcomes };
+    return { documentId, status, receipts: parsed.length, auto, review, discarded, outcomes };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await finalizeDoc(admin, documentId, DOC_PROCESSING_STATUS.failed, message).catch(

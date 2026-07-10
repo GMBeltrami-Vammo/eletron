@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { matchReceipt } from "./match";
+import { matchReceipt, pinnedCompetencia } from "./match";
 import type { OpenChargeCandidate, ParsedReceipt } from "./types";
 
 function receipt(overrides: Partial<ParsedReceipt>): ParsedReceipt {
@@ -127,6 +127,8 @@ describe("matchReceipt", () => {
       valueTolerance: 0.01,
       competencia: "2026-05-01",
     });
+    // the CNPJ key matched → never discard on a value miss (juros/multa case);
+    // rule-1 discard requires the receipt to be key-alien too
     expect(matchReceipt(r, [tight]).outcome).toBe("none");
   });
 
@@ -150,7 +152,7 @@ describe("matchReceipt", () => {
     expect(matchReceipt(r, cands).outcome).toBe("ambiguous");
   });
 
-  it("uses the date window to disambiguate two open months", () => {
+  it("pins the competência by payment date (day ≥ 20 → same month)", () => {
     const r = receipt({ chavePix: "x@y.com", amount: 75, paidAt: "2026-05-28" });
     const cands = [
       candidate({ chargeId: "apr", chavePix: "x@y.com", amount: 75, competencia: "2026-04-01" }),
@@ -159,5 +161,164 @@ describe("matchReceipt", () => {
     const res = matchReceipt(r, cands);
     expect(res.outcome).toBe("auto");
     expect(res.chargeId).toBe("may");
+  });
+
+  it("pins the competência to the PREVIOUS month when day < 20 (GT: 05/06 → maio)", () => {
+    const r = receipt({ chavePix: "x@y.com", amount: 75, paidAt: "2026-06-05" });
+    const cands = [
+      candidate({ chargeId: "may", chavePix: "x@y.com", amount: 75, competencia: "2026-05-01", isOpen: false }),
+      candidate({ chargeId: "jun", chavePix: "x@y.com", amount: 75, competencia: "2026-06-01", isOpen: true }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    // the paid May charge wins over the open June one — the DATE decides
+    expect(res.chargeId).toBe("may");
+  });
+
+  it("sends a key+value match OUTSIDE the pinned competência to human review", () => {
+    const r = receipt({ chavePix: "x@y.com", amount: 75, paidAt: "2026-06-05" }); // → maio
+    const cands = [
+      candidate({ chargeId: "jul", chavePix: "x@y.com", amount: 75, competencia: "2026-07-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.candidateIds).toEqual(["jul"]);
+    expect(res.reasons.join(" ")).toContain("validação humana");
+  });
+
+  it("discards a receipt whose amount matches NO charge in the pool (rule 1)", () => {
+    const r = receipt({ cnpjCpf: "92693118000160", amount: 284012.02, paidAt: "2026-06-05" });
+    const cands = [candidate({ chargeId: "c1", amount: 900 }), candidate({ chargeId: "c2", amount: 1200 })];
+    expect(matchReceipt(r, cands).outcome).toBe("discard");
+  });
+
+  it("never discards a null-amount receipt (parser failure ≠ alien payment)", () => {
+    const r = receipt({ chavePix: "x@y.com", amount: null });
+    const cands = [candidate({ chargeId: "c1", chavePix: "x@y.com", amount: 900 })];
+    expect(matchReceipt(r, cands).outcome).toBe("none");
+  });
+
+  it("never discards a KEY-matching receipt even when the amount diverges (juros/multa)", () => {
+    // late rent paid with multa: R$1.530 vs charge R$1.500 — key hit → human, not discard
+    const r = receipt({ chavePix: "landlord@x.com", amount: 1530, paidAt: "2026-06-05" });
+    const cands = [
+      candidate({ chargeId: "c1", chavePix: "landlord@x.com", amount: 1500, competencia: "2026-05-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("none"); // needs_review, NOT rejected
+  });
+
+  it("judges rule-1 against the FULL pool, not the batch-spliced one", () => {
+    // the only R$900 charge was consumed earlier in the batch (spliced pool is
+    // empty) — the second R$900 receipt must go to review, not be discarded
+    const full = [candidate({ chargeId: "c1", chavePix: "a@b.com", amount: 900 })];
+    const spliced: typeof full = [];
+    const r = receipt({ chavePix: "other@key.com", amount: 900, paidAt: "2026-06-05" });
+    expect(matchReceipt(r, spliced, full).outcome).toBe("none");
+    // without the full pool it would discard
+    expect(matchReceipt(r, spliced).outcome).toBe("discard");
+  });
+
+  it("does NOT let prefer-open guess across months for a DATELESS receipt", () => {
+    const r = receipt({ chavePix: "x@y.com", amount: 900, paidAt: null });
+    const cands = [
+      candidate({ chargeId: "may", chavePix: "x@y.com", amount: 900, competencia: "2026-05-01", isOpen: false }),
+      candidate({ chargeId: "jun", chavePix: "x@y.com", amount: 900, competencia: "2026-06-01", isOpen: false }),
+      candidate({ chargeId: "jul", chavePix: "x@y.com", amount: 900, competencia: "2026-07-01", isOpen: true }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous"); // "the one still open" is a guess
+    expect(res.candidateIds).toHaveLength(3);
+  });
+
+  it("goes to review when a NULL-competência survivor can't be ruled out by the pin", () => {
+    const r = receipt({ chavePix: "x@y.com", amount: 900, paidAt: "2026-06-05" }); // → maio
+    const cands = [
+      candidate({ chargeId: "may", chavePix: "x@y.com", amount: 900, competencia: "2026-05-01" }),
+      candidate({ chargeId: "unk", chavePix: "x@y.com", amount: 900, competencia: null }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.candidateIds).toEqual(expect.arrayContaining(["may", "unk"]));
+  });
+
+  it("sends a barcode hit whose VALUE disagrees to review — never a weaker-rank auto", () => {
+    const r = receipt({
+      receiptType: "debito_automatico",
+      codigoBarras: "12345678",
+      cnpjCpf: "61695227000193",
+      amount: 500,
+      paidAt: "2026-06-05",
+    });
+    const cands = [
+      // the barcode names THIS bill, but its amount is 480 (out of tolerance)
+      candidate({ chargeId: "x", autoDebitRegistration: "12345678", amount: 480, competencia: "2026-05-01" }),
+      // a sibling of the same utility CNPJ at exactly 500 — must NOT auto-bind
+      candidate({ chargeId: "y", issuerCnpj: "61695227000193", amount: 500, competencia: "2026-05-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.rule).toBe("codigo_barras");
+    expect(res.candidateIds).toEqual(["x"]);
+  });
+
+  it("falls through to the next rank when the winning rank's value filters everything (GT p40/p144)", () => {
+    // pix rank hits other-month charges at the wrong value; cnpj rank has the
+    // right charge — the rank must yield instead of ending the match.
+    const r = receipt({
+      chavePix: "34528623803",
+      cnpjCpf: "34528623803",
+      amount: 1500,
+      paidAt: "2026-06-05", // → maio
+    });
+    const cands = [
+      candidate({ chargeId: "wrong-val", chavePix: "34528623803", amount: 2000, competencia: "2026-05-01" }),
+      candidate({ chargeId: "right", chavePix: "220349-9", issuerCnpj: "34528623803", amount: 1500, competencia: "2026-05-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.rule).toBe("cnpj_cpf");
+    expect(res.chargeId).toBe("right");
+  });
+
+  it("matches digit keys leading-zero-insensitively (clone lost zeros; banks pad)", () => {
+    // charge pix lost its leading zero in the numeric sheet cell (GT p78)
+    const pix = receipt({ chavePix: "01610670000192", amount: 900, paidAt: "2026-06-05" });
+    const pixCand = [
+      candidate({ chargeId: "c", chavePix: "1610670000192", amount: 900, competencia: "2026-05-01" }),
+    ];
+    expect(matchReceipt(pix, pixCand).chargeId).toBe("c");
+
+    // bank zero-pads the CPF and agência/conta (GT p70: Nubank TED C)
+    const ted = receipt({
+      receiptType: "ted",
+      cnpjCpf: "00022820227856",
+      agencia: "0001",
+      conta: "0000004000921",
+      amount: 1000,
+      paidAt: "2026-06-05",
+    });
+    const tedCand = [
+      candidate({
+        chargeId: "t",
+        issuerCnpj: "22820227856",
+        agencia: "1",
+        conta: "400092-1",
+        amount: 1000,
+        competencia: "2026-05-01",
+      }),
+    ];
+    expect(matchReceipt(ted, tedCand).chargeId).toBe("t");
+  });
+});
+
+describe("pinnedCompetencia", () => {
+  it("maps [20/MM, 20/MM+1) → MM, with year wrap", () => {
+    expect(pinnedCompetencia("2026-06-05")).toBe("2026-05"); // day < 20 → previous
+    expect(pinnedCompetencia("2026-06-20")).toBe("2026-06"); // day ≥ 20 → same
+    expect(pinnedCompetencia("2026-06-25")).toBe("2026-06");
+    expect(pinnedCompetencia("2026-01-10")).toBe("2025-12"); // January wraps
+    expect(pinnedCompetencia(null)).toBeNull();
+    expect(pinnedCompetencia("garbage")).toBeNull();
   });
 });

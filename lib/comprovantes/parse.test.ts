@@ -368,6 +368,36 @@ describe("parseComprovantePages — PIX with chave + masked CNPJ", () => {
   });
 });
 
+// Itaú Sispag TED "Conta Corrente para Conta Corrente" (05.06 comprovante,
+// p47-like): the date is DOT-separated ("realizada em 05.06.2026") and there is
+// no "dados do recebedor" marker — the creditada section carries the keys.
+const TED_CONTA_CORRENTE_PAGE = `Comprovante de Operação - Transferência de Conta Corrente para Conta Corrente
+Identificação no Extrato: 00000000000000029329
+Dados da conta a ser debitada:
+Agência: 0742 Conta: 22501 - 4
+Nome: VAMMO S A
+Dados da conta a ser creditada:
+Agência: 1553 Conta: 99610 - 7
+Nome: R A L PARK ESTACIONAMENTO LTDA
+Valor: R$ 1.249,68
+Informações fornecidas pelo
+pagador:
+Transferência realizada em 05.06.2026 às 15:45:10, via Sispag, CTRL 008767179260000
+Autenticação:
+472ABC`;
+
+describe("parseComprovantePages — TED conta-corrente (data com pontos)", () => {
+  const [r] = parseComprovantePages([TED_CONTA_CORRENTE_PAGE]);
+  it("extracts the dot-separated payment date (pins the competência)", () => {
+    expect(r.paidAt).toBe("2026-06-05");
+    expect(r.amount).toBeCloseTo(1249.68);
+  });
+  it("reads the CREDITADA section's agência/conta, not the debitada's", () => {
+    expect(r.agencia).toBe("1553");
+    expect(r.conta).toBe("996107");
+  });
+});
+
 // "Comprovante de Operação - Títulos Outros Bancos" (page 1 of the 05.06
 // comprovante). The old parser read "Valor pago:" as amount=null → type "outro".
 const TITULOS_PAGE = `Comprovante de Operação - Títulos Outros Bancos

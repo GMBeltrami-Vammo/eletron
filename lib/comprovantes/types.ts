@@ -77,7 +77,13 @@ export interface OpenChargeCandidate {
   isOpen: boolean;
 }
 
-export type MatchOutcome = "auto" | "ambiguous" | "none";
+/**
+ * `discard` = the receipt's amount matches NO charge in the whole pool — it is
+ * not one of ours (Gabriel's rule 1: "se o valor não bate com nenhum valor da
+ * planilha, automaticamente descartado"). The pipeline persists it as
+ * `rejected` so it never reaches the review queue.
+ */
+export type MatchOutcome = "auto" | "ambiguous" | "none" | "discard";
 
 /** Which ranked key the matcher decided on. */
 export type MatchRule =

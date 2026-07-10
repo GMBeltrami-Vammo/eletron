@@ -44,8 +44,32 @@ export function normalizePixKey(
 }
 
 /**
+ * Leading-zero-insensitive equality for pure-digit keys. The sheet clone stored
+ * documento-keys in NUMERIC cells, so `01610670000192` became `1610670000192`;
+ * banks conversely zero-pad (`000228202278-56`). Both sides digits-only and
+ * equal after stripping leading zeros ⇒ same key. Never used for barcodes
+ * (linha digitável zeros are significant).
+ *
+ * Accepted residual risk: a 10-digit landline pix key could zero-equal an
+ * 11-digit CPF of a DIFFERENT owner. In practice charges' phone keys carry the
+ * +55 prefix (never bare 10 digits), and a false hit still needs the same
+ * amount AND the pinned competência to auto-bind.
+ */
+export function digitKeysEqual(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return false;
+  const sa = a.replace(/^0+/, "");
+  const sb = b.replace(/^0+/, "");
+  return sa.length > 0 && sa === sb;
+}
+
+/**
  * n8n `keysMatch`: tolerant equality between two raw PIX keys. Normalizes both,
- * then tries exact, trailing-`com` trim, and `+55`/`55` phone variants.
+ * then tries exact, trailing-`com` trim, `+55`/`55` phone variants, and the
+ * leading-zero-insensitive digit compare (clone keys lost leading zeros).
  */
 export function pixKeysMatch(
   rawA: string | null | undefined,
@@ -56,6 +80,7 @@ export function pixKeysMatch(
   const b = normalizeChave(rawB);
   if (!a || !b) return false;
   if (a === b) return true;
+  if (digitKeysEqual(a, b)) return true;
 
   const aNoCom = a.replace(/\.?com$/, "");
   const bNoCom = b.replace(/\.?com$/, "");

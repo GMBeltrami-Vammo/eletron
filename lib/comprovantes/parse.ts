@@ -102,13 +102,21 @@ export function parseBrDate(raw: string | null | undefined): string | null {
   return null;
 }
 
-/** n8n branch-1 date patterns (labeled + bare, 4- and 2-digit year). */
+/**
+ * n8n branch-1 date patterns (labeled + bare, 4- and 2-digit year), extended
+ * with DOT separators — the Itaú Sispag TED layouts print "Transferência
+ * realizada em 05.06.2026" (dots), which pins the competência (rule 2).
+ */
 function extractPixDate(text: string): string | null {
   const patterns: RegExp[] = [
-    /(?:Data\s*de\s*Transfer[êe]ncia|Data)\s*:?\s*(\d{2})[/-](\d{2})[/-](\d{4})/i,
-    /(?:Data\s*de\s*Transfer[êe]ncia|Data)\s*:?\s*(\d{2})[/-](\d{2})[/-](\d{2})/i,
-    /(\d{2})[/-](\d{2})[/-](\d{4})/,
-    /(\d{2})[/-](\d{2})[/-](\d{2})/,
+    /(?:Data\s*de\s*Transfer[êe]ncia|Data)\s*:?\s*(\d{2})[/.-](\d{2})[/.-](\d{4})/i,
+    /(?:realizad[ao]|efetuad[ao])\s+em\s+(\d{2})[/.-](\d{2})[/.-](\d{4})/i,
+    /(?:Data\s*de\s*Transfer[êe]ncia|Data)\s*:?\s*(\d{2})[/.-](\d{2})[/.-](\d{2})\b/i,
+    // bare fallbacks: digit-boundary guards so a longer digit run (document
+    // numbers, barcode groups) can never be misread as a date fragment.
+    /(?<!\d)(\d{2})[/-](\d{2})[/-](\d{4})(?!\d)/,
+    /(?<!\d)(\d{2})\.(\d{2})\.(\d{4})(?!\d)/,
+    /(?<!\d)(\d{2})[/-](\d{2})[/-](\d{2})(?!\d)/,
   ];
   for (const re of patterns) {
     const m = text.match(re);

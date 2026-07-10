@@ -40,6 +40,8 @@ type UploadRowState =
       documentId: string;
       receipts: number;
       matched: number;
+      /** Rule-1 auto-discards (valor não bate com nenhuma cobrança). */
+      discarded: number;
       needsReview: boolean;
     }
   | { kind: "duplicate"; documentId: string }
@@ -66,6 +68,7 @@ interface ChunkResponse {
   done?: boolean;
   status?: string;
   auto?: number;
+  discarded?: number;
   receipts?: number;
   error?: string;
 }
@@ -86,6 +89,7 @@ export function UploadCard({
   const runChunks = React.useCallback(
     async (id: string, documentId: string, pageCount: number) => {
       let matched = 0;
+      let discarded = 0;
       let receipts = 0;
       let needsReview = false;
       patch(id, { kind: "chunking", documentId, pagesProcessed: 0, pageCount, matched });
@@ -116,6 +120,7 @@ export function UploadCard({
           return;
         }
         matched += body.auto ?? 0;
+        discarded += body.discarded ?? 0;
         receipts += body.receipts ?? 0;
         if (body.done && body.status === "needs_review") needsReview = true;
         patch(id, {
@@ -127,7 +132,7 @@ export function UploadCard({
         });
         if (body.done) break;
       }
-      patch(id, { kind: "done", documentId, receipts, matched, needsReview });
+      patch(id, { kind: "done", documentId, receipts, matched, discarded, needsReview });
     },
     [patch],
   );
@@ -275,6 +280,7 @@ function UploadRowBadge({ state }: { state: UploadRowState }) {
         <span className="text-muted-foreground tabular-nums">
           · {state.receipts} recibo{state.receipts === 1 ? "" : "s"}
           {state.matched > 0 ? ` · ${state.matched} conciliado${state.matched === 1 ? "" : "s"}` : ""}
+          {state.discarded > 0 ? ` · ${state.discarded} descartado${state.discarded === 1 ? "" : "s"}` : ""}
         </span>
       );
       if (state.needsReview) {
