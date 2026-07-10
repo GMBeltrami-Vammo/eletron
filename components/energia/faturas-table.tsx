@@ -392,6 +392,8 @@ export function FaturasTable({
         const s = res.data;
         const parts = [`${s.sent} enviada(s) ao fiscal`];
         if (s.alreadyOnSheet) parts.push(`${s.alreadyOnSheet} já na planilha`);
+        if (s.zeroValue) parts.push(`${s.zeroValue} valor 0 (pagas)`);
+        if (s.pastDue) parts.push(`${s.pastDue} vencidas (não enviadas)`);
         if (s.naoCadastrado) parts.push(`${s.naoCadastrado} sem débito automático`);
         if (s.ignoredPast) parts.push(`${s.ignoredPast} ignorada(s) (≤2025)`);
         if (s.semAba) parts.push(`${s.semAba} sem aba`);

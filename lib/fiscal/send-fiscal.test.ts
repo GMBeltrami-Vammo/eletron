@@ -4,6 +4,8 @@ import { parseFiscalRow } from "./fiscal-sheet";
 import type { FaturaRef } from "./check-faturas";
 import {
   buildFiscalRow,
+  classifyFaturaForSend,
+  fiscalTodayISO,
   formatDueDateBR,
   formatValorBR,
   nowFiscalTimestamp,
@@ -110,6 +112,57 @@ describe("buildFiscalRow — hyperlink separator + missing url", () => {
     expect(buildFiscalRow(fatura({ driveUrl: null }), TS, ";")[11]).toBe(
       "Ver Fatura",
     );
+  });
+});
+
+describe("fiscalTodayISO (São Paulo date)", () => {
+  it("returns the São Paulo calendar date (UTC-3)", () => {
+    expect(fiscalTodayISO(new Date("2026-07-10T12:00:00Z"))).toBe("2026-07-10");
+    // 02:00 UTC is still the previous day in São Paulo
+    expect(fiscalTodayISO(new Date("2026-07-10T02:00:00Z"))).toBe("2026-07-09");
+  });
+});
+
+describe("classifyFaturaForSend", () => {
+  const base = {
+    registered: false,
+    tabExists: true,
+    amount: 100 as number | null,
+    dueDate: "2026-07-15",
+    autoDebit: "cadastrado",
+  };
+  const today = "2026-07-10";
+  const cls = (o: Partial<typeof base>) =>
+    classifyFaturaForSend({ ...base, ...o }, today);
+
+  it("value 0 wins over everything (even if registered)", () => {
+    expect(cls({ amount: 0 })).toBe("zero");
+    expect(cls({ amount: 0, registered: true })).toBe("zero");
+    expect(cls({ amount: 0, dueDate: "2025-01-01" })).toBe("zero");
+  });
+  it("already on the sheet → registered", () => {
+    expect(cls({ registered: true })).toBe("registered");
+  });
+  it("null amount → noValor", () => {
+    expect(cls({ amount: null })).toBe("noValor");
+  });
+  it("due-year ≤ 2025 → ignoredPast, ≥ 2027 → blockedFuture", () => {
+    expect(cls({ dueDate: "2025-12-01" })).toBe("ignoredPast");
+    expect(cls({ dueDate: "2027-01-10" })).toBe("blockedFuture");
+  });
+  it("due date already passed → pastDue (today itself is NOT passed)", () => {
+    expect(cls({ dueDate: "2026-07-09" })).toBe("pastDue");
+    expect(cls({ dueDate: "2026-07-10" })).toBe("send"); // == today
+  });
+  it("2026 without débito automático → naoCadastrado", () => {
+    expect(cls({ autoDebit: "nao_cadastrado" })).toBe("naoCadastrado");
+    expect(cls({ autoDebit: "desconhecido" })).toBe("naoCadastrado");
+  });
+  it("2026 Cadastrado but no month tab → semAba", () => {
+    expect(cls({ tabExists: false })).toBe("semAba");
+  });
+  it("2026, Cadastrado, future due, tab exists → send", () => {
+    expect(cls({})).toBe("send");
   });
 });
 

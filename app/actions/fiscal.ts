@@ -114,17 +114,29 @@ export async function sendToFiscal(): Promise<ActionResult<SendFiscalSummary>> {
       new Date(),
     );
 
-    // Mark the newly-sent AND the already-on-sheet (but unchecked) faturas as
-    // "Enviado ao fiscal" → Ciclo 3, so both leave the send queue.
-    const toMark = [
-      ...summary.sentChargeIds,
-      ...summary.alreadyOnSheetChargeIds,
-    ];
-    if (toMark.length > 0) {
+    // "Verificar no fiscal" sync (run as part of the send): everything on the
+    // sheet (registered + just sent) → checked; everything not on the sheet →
+    // unchecked. Then settle the value-0 faturas (paid + auto-checked).
+    if (summary.fiscalTrueIds.length > 0) {
       unwrapRpc(
         await client.rpc("set_fiscal_exported", {
-          p_charge_ids: toMark,
+          p_charge_ids: summary.fiscalTrueIds,
           p_value: true,
+        }),
+      );
+    }
+    if (summary.fiscalFalseIds.length > 0) {
+      unwrapRpc(
+        await client.rpc("set_fiscal_exported", {
+          p_charge_ids: summary.fiscalFalseIds,
+          p_value: false,
+        }),
+      );
+    }
+    if (summary.zeroValueIds.length > 0) {
+      unwrapRpc(
+        await client.rpc("settle_zero_value_faturas", {
+          p_charge_ids: summary.zeroValueIds,
         }),
       );
     }

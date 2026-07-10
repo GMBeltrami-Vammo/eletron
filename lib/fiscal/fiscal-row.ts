@@ -33,6 +33,56 @@ export function formatDueDateBR(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
+/** Today in São Paulo as ISO 'YYYY-MM-DD' (for the due-date-passed guard). */
+export function fiscalTodayISO(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/** How the send should treat one fatura. */
+export type SendClass =
+  | "registered" // already on the sheet → checked, not sent
+  | "zero" // value 0 → paid + checked, not sent (decision #42 exception)
+  | "noValor" // amount unknown → skip
+  | "ignoredPast" // due-year ≤ SENDABLE_YEAR-1 → ignore
+  | "blockedFuture" // due-year ≥ SENDABLE_YEAR+1 → block
+  | "pastDue" // due date already passed → do not send
+  | "naoCadastrado" // sem débito automático → manual
+  | "semAba" // 2026 but the due-month tab does not exist
+  | "send"; // eligible → append
+
+/**
+ * Decides how the send treats a fatura (pure, unit-tested). `todayIso` is the
+ * São Paulo date. Order matters: value-0 wins over everything (even if on the
+ * sheet — a R$0 bill is settled, not sent); then already-on-sheet; then the
+ * year guard; then the due-date-passed guard; then the Cadastrado gate.
+ */
+export function classifyFaturaForSend(
+  f: {
+    registered: boolean;
+    tabExists: boolean;
+    amount: number | null;
+    dueDate: string;
+    autoDebit: string;
+  },
+  todayIso: string,
+): SendClass {
+  if (f.amount === 0) return "zero";
+  if (f.registered) return "registered";
+  if (f.amount === null) return "noValor";
+  const year = Number(f.dueDate.slice(0, 4));
+  if (!Number.isFinite(year) || year <= SENDABLE_YEAR - 1) return "ignoredPast";
+  if (year >= SENDABLE_YEAR + 1) return "blockedFuture";
+  if (f.dueDate < todayIso) return "pastDue";
+  if (f.autoDebit !== "cadastrado") return "naoCadastrado";
+  if (!f.tabExists) return "semAba";
+  return "send";
+}
+
 /** A `Date` rendered as São Paulo local time 'DD/MM/YYYY HH:MM:SS'. */
 export function nowFiscalTimestamp(now: Date): string {
   const parts = new Intl.DateTimeFormat("pt-BR", {
