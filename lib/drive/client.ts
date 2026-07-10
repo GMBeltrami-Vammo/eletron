@@ -99,6 +99,19 @@ export async function uploadFile(opts: {
   return { fileId, webViewLink: res.data.webViewLink ?? "" };
 }
 
+/** Permanently deletes a Drive file (used by the comprovante reset). Idempotent-ish: a 404 is swallowed. */
+export async function deleteFile(fileId: string): Promise<void> {
+  const drive = getDriveClient();
+  try {
+    await drive.files.delete({ fileId, supportsAllDrives: true });
+  } catch (err) {
+    const status = (err as { code?: number; status?: number })?.code ??
+      (err as { status?: number })?.status;
+    if (status === 404) return; // already gone
+    throw err;
+  }
+}
+
 /** Downloads a Drive file's raw bytes. */
 export async function downloadFile(fileId: string): Promise<Buffer> {
   const drive = getDriveClient();

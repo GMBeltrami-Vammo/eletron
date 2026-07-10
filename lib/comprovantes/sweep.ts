@@ -1,9 +1,12 @@
 /**
- * Sweep of comprovante documents left `processing_status='pending'` — upload
- * deferrals and crashed runs. Extracted from the drive-poll route so the daily
- * catch-up cron (Phase 2.5 chain: metabase-sync → alerts-eval → sweep) can run
- * it without the Drive listing. Idempotent: processing stamps a terminal
- * status, so a re-run only picks up rows still pending.
+ * Sweep of comprovante documents left `processing_status='pending'` — the
+ * crash-recovery net now that intake is app-upload only (the n8n drive-poll is
+ * gone, 2026-07-10). A doc is 'pending' when its client-driven chunk loop never
+ * finished (tab closed mid-upload); the daily catch-up cron (Phase 2.5 chain:
+ * metabase-sync → alerts-eval → sweep) reprocesses it WHOLE via
+ * processComprovanteDocument. Idempotent: receipts upsert, payments are unique,
+ * page isolation is upsert-by-path, and the flip only fires from OPEN — so a
+ * fully-processed doc that is somehow still 'pending' converges without harm.
  */
 
 import type { ChargingClient } from "@/lib/data/supabase-repository";

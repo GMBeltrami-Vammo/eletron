@@ -476,11 +476,19 @@ function parseBoletoPaymentPage(
  * segment; every other non-empty page yields exactly one PIX/TED receipt. The
  * boleto-payment header is checked after DA/concessionária so the shared
  * "Comprovante de pagamento de …" prefix never mis-routes.
+ *
+ * `startPage` (1-based) is the true document page of `pages[0]`. It MUST be
+ * passed when `pages` is a chunk slice (chunked processing), or every receipt
+ * would get the wrong `page_number` — corrupting the isolated-page storage path
+ * and the page the hover/deep-dive opens. Defaults to 1 (whole-document call).
  */
-export function parseComprovantePages(pages: string[]): ParsedReceipt[] {
+export function parseComprovantePages(
+  pages: string[],
+  startPage = 1,
+): ParsedReceipt[] {
   const receipts: ParsedReceipt[] = [];
   pages.forEach((raw, i) => {
-    const pageNumber = i + 1;
+    const pageNumber = startPage + i;
     const pageText = raw ?? "";
     if (DA_HEADER_RE.test(pageText)) {
       receipts.push(...parseDebitoAutomaticoPage(pageText, pageNumber));

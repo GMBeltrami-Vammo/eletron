@@ -99,3 +99,15 @@ export function comprovanteHref(s: PaymentLinkSummary | null): string | null {
     ? `/comprovantes/${s.documentId}?page=${s.page}`
     : `/comprovantes/${s.documentId}`;
 }
+
+/**
+ * Source of the isolated matched-page PDF for the chip's hover preview
+ * (`/api/files/[documentId]/page/[page]`) — the per-page Supabase artifact the
+ * pipeline eagerly materializes at match time (falls back to page 1). Null when
+ * no linked document.
+ */
+export function comprovantePageSrc(s: PaymentLinkSummary | null): string | null {
+  if (!s || !s.documentId) return null;
+  const page = s.page && s.page > 0 ? s.page : 1;
+  return `/api/files/${s.documentId}/page/${page}`;
+}

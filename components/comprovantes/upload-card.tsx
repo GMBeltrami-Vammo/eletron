@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * Upload card — drops multiple comprovante PDFs and POSTs each to
- * `/api/uploads/comprovante` (the committed route: same-origin → session →
- * operator → sha256 dedupe-before-Drive → inline pipeline for ≤20-page PDFs).
- * Per-file state machine mirrors the route's response shapes:
- *   Enviando → Processando (pending/deferred) | Concluído | Já enviado
- *   (duplicate, links to the original) | Protegido por senha | Erro.
+ * Upload card — drops comprovante PDFs and, for each, (1) POSTs the whole file
+ * to `/api/uploads/comprovante` (same-origin → session → operator → sha256
+ * dedupe → Drive), then (2) loops 10-page chunks against
+ * `/api/uploads/comprovante/chunk`, driving a progress bar until the document is
+ * fully processed (Gabriel 2026-07-10 — replaces the n8n processing + the
+ * 20-page inline cap). Per-file state machine:
+ *   Enviando → Processando N/M páginas (progress bar) → Concluído · Já enviado
+ *   (duplicate) · Protegido por senha · Processando… (deferred, count unknown) ·
+ *   Erro.
  */
 
 import * as React from "react";
@@ -17,12 +20,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { UploadDropzone } from "@/components/vammo/upload-dropzone";
 
-const MAX_BYTES = 25_000_000;
+// Vercel caps the request body at ~4.5 MB (same on Pro — the accepted ceiling);
+// reject larger files up front with a friendly message instead of a platform 413.
+const MAX_BYTES = 4_400_000;
+const CHUNK_SIZE = 10;
 
 type UploadRowState =
   | { kind: "uploading" }
+  | {
+      kind: "chunking";
+      documentId: string;
+      pagesProcessed: number;
+      pageCount: number;
+      matched: number;
+    }
   | { kind: "processing"; documentId: string }
-  | { kind: "done"; documentId: string; receipts: number }
+  | {
+      kind: "done";
+      documentId: string;
+      receipts: number;
+      matched: number;
+      needsReview: boolean;
+    }
   | { kind: "duplicate"; documentId: string }
   | { kind: "protected"; documentId: string }
   | { kind: "error"; message: string };
@@ -37,7 +56,17 @@ interface UploadResponse {
   documentId?: string;
   deduplicated?: boolean;
   status?: string;
-  receipts?: unknown[];
+  pageCount?: number | null;
+  error?: string;
+}
+
+interface ChunkResponse {
+  pageCount?: number;
+  pagesProcessed?: number;
+  done?: boolean;
+  status?: string;
+  auto?: number;
+  receipts?: number;
   error?: string;
 }
 
@@ -51,10 +80,57 @@ export function UploadCard({
   const [rows, setRows] = React.useState<UploadRow[]>([]);
 
   const patch = React.useCallback((id: string, state: UploadRowState) => {
-    setRows((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, state } : r)),
-    );
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, state } : r)));
   }, []);
+
+  const runChunks = React.useCallback(
+    async (id: string, documentId: string, pageCount: number) => {
+      let matched = 0;
+      let receipts = 0;
+      let needsReview = false;
+      patch(id, { kind: "chunking", documentId, pagesProcessed: 0, pageCount, matched });
+
+      for (let from = 1; from <= pageCount; from += CHUNK_SIZE) {
+        const to = Math.min(from + CHUNK_SIZE - 1, pageCount);
+        let res: Response;
+        let body: ChunkResponse = {};
+        try {
+          res = await fetch("/api/uploads/comprovante/chunk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentId, from, to }),
+          });
+          body = (await res.json()) as ChunkResponse;
+        } catch (err) {
+          patch(id, {
+            kind: "error",
+            message: err instanceof Error ? err.message : "Falha no processamento",
+          });
+          return;
+        }
+        if (!res.ok || body.error) {
+          patch(id, {
+            kind: "error",
+            message: body.error ?? `Falha no processamento (${res.status})`,
+          });
+          return;
+        }
+        matched += body.auto ?? 0;
+        receipts += body.receipts ?? 0;
+        if (body.done && body.status === "needs_review") needsReview = true;
+        patch(id, {
+          kind: "chunking",
+          documentId,
+          pagesProcessed: body.pagesProcessed ?? to,
+          pageCount: body.pageCount ?? pageCount,
+          matched,
+        });
+        if (body.done) break;
+      }
+      patch(id, { kind: "done", documentId, receipts, matched, needsReview });
+    },
+    [patch],
+  );
 
   const uploadOne = React.useCallback(
     async (row: UploadRow) => {
@@ -77,14 +153,12 @@ export function UploadCard({
         } else if (res.status === 422 && body.documentId) {
           patch(row.id, { kind: "protected", documentId: body.documentId });
         } else if (res.ok && body.documentId) {
-          if (body.status === "pending") {
-            patch(row.id, { kind: "processing", documentId: body.documentId });
+          onUploaded();
+          if (typeof body.pageCount === "number" && body.pageCount > 0) {
+            await runChunks(row.id, body.documentId, body.pageCount);
           } else {
-            patch(row.id, {
-              kind: "done",
-              documentId: body.documentId,
-              receipts: Array.isArray(body.receipts) ? body.receipts.length : 0,
-            });
+            // count unknown → the daily sweep processes it whole
+            patch(row.id, { kind: "processing", documentId: body.documentId });
           }
         } else {
           patch(row.id, {
@@ -101,7 +175,7 @@ export function UploadCard({
         onUploaded();
       }
     },
-    [patch, onUploaded],
+    [patch, onUploaded, runChunks],
   );
 
   const onFiles = React.useCallback(
@@ -132,7 +206,7 @@ export function UploadCard({
           disabled={!isOperator}
           hint={
             isOperator
-              ? "PDF com uma ou várias páginas — cada página vira um recibo. Reenvios idênticos são deduplicados por hash."
+              ? "PDF com uma ou várias páginas — processado em blocos de 10 páginas com barra de progresso; cada página vira um recibo. Reenvios idênticos são deduplicados por hash. Limite ~4 MB por arquivo."
               : "Requer papel operador ou admin para enviar."
           }
         />
@@ -166,6 +240,26 @@ function UploadRowBadge({ state }: { state: UploadRowState }) {
           Enviando…
         </span>
       );
+    case "chunking": {
+      const pct =
+        state.pageCount > 0
+          ? Math.min(100, Math.round((state.pagesProcessed / state.pageCount) * 100))
+          : 0;
+      return (
+        <span className="inline-flex items-center gap-2 text-xs text-info-emphasis">
+          <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
+          <span className="tabular-nums">
+            {state.pagesProcessed}/{state.pageCount} pág.
+          </span>
+          <span className="block h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+            <span
+              className="block h-full rounded-full bg-info-emphasis transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </span>
+        </span>
+      );
+    }
     case "processing":
       return (
         <Link
@@ -176,7 +270,25 @@ function UploadRowBadge({ state }: { state: UploadRowState }) {
           Processando…
         </Link>
       );
-    case "done":
+    case "done": {
+      const detail = (
+        <span className="text-muted-foreground tabular-nums">
+          · {state.receipts} recibo{state.receipts === 1 ? "" : "s"}
+          {state.matched > 0 ? ` · ${state.matched} conciliado${state.matched === 1 ? "" : "s"}` : ""}
+        </span>
+      );
+      if (state.needsReview) {
+        return (
+          <Link
+            href={`/comprovantes/${state.documentId}`}
+            className="inline-flex items-center gap-1.5 text-xs text-warning-emphasis hover:underline"
+          >
+            <TriangleAlert className="size-3.5" strokeWidth={2} />
+            Requer revisão
+            {detail}
+          </Link>
+        );
+      }
       return (
         <Link
           href={`/comprovantes/${state.documentId}`}
@@ -184,11 +296,10 @@ function UploadRowBadge({ state }: { state: UploadRowState }) {
         >
           <CheckCircle2 className="size-3.5" strokeWidth={2} />
           Concluído
-          <span className="text-muted-foreground tabular-nums">
-            · {state.receipts} recibo{state.receipts === 1 ? "" : "s"}
-          </span>
+          {detail}
         </Link>
       );
+    }
     case "duplicate":
       return (
         <Link

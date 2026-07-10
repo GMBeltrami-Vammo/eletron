@@ -140,7 +140,7 @@ export const INGEST_SOURCE = {
   sheetBackfill: "sheet_backfill",
   /** Rent charges generated in-app by the `gerar_mes` RPC (Phase 2). */
   gerarMes: "gerar_mes",
-  /** Auto-matched payments written by the comprovante poller (Phase 2). */
+  /** Auto-matched payments written by the comprovante pipeline (chunk upload / daily sweep). */
   autoMatch: "auto_match",
   /** Files uploaded through an in-app upload route (Phase 2). */
   appUpload: "app_upload",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 
-import { PageOutOfRange, splitPdfPage } from "./split";
+import { isolatePages, PageOutOfRange, splitPdfPage } from "./split";
 
 async function makePdf(pages: number): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -29,5 +29,29 @@ describe("splitPdfPage", () => {
     const src = await makePdf(2);
     await expect(splitPdfPage(src, 3)).rejects.toBeInstanceOf(PageOutOfRange);
     await expect(splitPdfPage(src, 0)).rejects.toBeInstanceOf(PageOutOfRange);
+  });
+});
+
+describe("isolatePages", () => {
+  it("isolates several pages from a single load, keyed by page number", async () => {
+    const src = await makePdf(5);
+    const out = await isolatePages(src, [1, 3, 5]);
+    expect([...out.keys()].sort((a, b) => a - b)).toEqual([1, 3, 5]);
+    for (const bytes of out.values()) {
+      expect((await PDFDocument.load(bytes)).getPageCount()).toBe(1);
+      expect(Buffer.from(bytes.slice(0, 5)).toString()).toBe("%PDF-");
+    }
+  });
+
+  it("dedupes repeated page numbers", async () => {
+    const out = await isolatePages(await makePdf(3), [2, 2, 2]);
+    expect(out.size).toBe(1);
+    expect(out.has(2)).toBe(true);
+  });
+
+  it("throws PageOutOfRange when any requested page is out of range", async () => {
+    await expect(isolatePages(await makePdf(2), [1, 5])).rejects.toBeInstanceOf(
+      PageOutOfRange,
+    );
   });
 });

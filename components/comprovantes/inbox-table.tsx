@@ -27,6 +27,7 @@ import {
   origemLabel,
 } from "./labels";
 import type { InboxData, InboxDocRow, ViewerContext } from "./types";
+import { ResetComprovantesButton } from "./reset-comprovantes-button";
 import { UploadCard } from "./upload-card";
 import { Gate, useRunAction } from "./write-helpers";
 
@@ -205,6 +206,13 @@ export function ComprovantesInbox({
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <ResetComprovantesButton
+          isOperator={viewer.isOperator}
+          invalidate={[INBOX_KEY]}
+        />
+      </div>
+
       <UploadCard isOperator={viewer.isOperator} onUploaded={invalidate} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

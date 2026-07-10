@@ -84,6 +84,24 @@ describe("parseComprovantePages — TED", () => {
   });
 });
 
+describe("parseComprovantePages — startPage offset (chunked slices)", () => {
+  it("labels page_number as startPage + index, not the 1-based array index", () => {
+    // a chunk covering document pages 11–12 (a 2-page slice)
+    const receipts = parseComprovantePages([PIX_PAGE, TED_PAGE], 11);
+    expect(receipts.map((r) => r.pageNumber)).toEqual([11, 12]);
+  });
+  it("defaults to page 1 for a whole-document call", () => {
+    const [r] = parseComprovantePages([PIX_PAGE]);
+    expect(r.pageNumber).toBe(1);
+  });
+  it("keeps multi-segment page numbers correct under an offset", () => {
+    const receipts = parseComprovantePages([DEBITO_AUTOMATICO_PAGE], 41);
+    expect(receipts).toHaveLength(2);
+    expect(receipts.every((r) => r.pageNumber === 41)).toBe(true);
+    expect(receipts.map((r) => r.segmentIndex)).toEqual([0, 1]);
+  });
+});
+
 describe("parseComprovantePages — débito automático (multi-segment)", () => {
   const receipts = parseComprovantePages([DEBITO_AUTOMATICO_PAGE]);
   it("splits one page into one receipt per segment", () => {

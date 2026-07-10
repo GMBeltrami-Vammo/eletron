@@ -1,10 +1,16 @@
 /**
  * POST /api/uploads/comprovante — payment-receipt (PDF) upload. Guards:
  * same-origin → `@vammo.com` session → operator. Validates, hash-dedupes,
- * uploads to the comprovantes Drive folder (NO public permission), inserts a
- * `documents` row, and runs the pipeline inline for ≤20-page PDFs (bigger ones
- * stay `pending` for the drive-poll cron — D4). Encrypted PDFs are stored and
- * routed to `needs_review` with an alert (never silently dropped).
+ * uploads the whole PDF to the comprovantes Drive folder (NO public permission),
+ * inserts a `documents` row, and RETURNS `{ documentId, pageCount }` — the app
+ * no longer processes inline (that + n8n are gone). The client then loops
+ * 10-page chunks against `/api/uploads/comprovante/chunk` with a progress bar
+ * (Gabriel 2026-07-10). Encrypted PDFs are stored and routed to `needs_review`
+ * with an alert (never silently dropped).
+ *
+ * The whole file passes through this function, so it is bound by Vercel's
+ * ~4.5 MB request-body cap (identical on Pro — the accepted ceiling); the client
+ * dropzone rejects larger files with a friendly message before the POST.
  */
 
 import { NextResponse } from "next/server";
@@ -17,16 +23,13 @@ import {
   userClientFor,
 } from "@/lib/http/guards";
 import { pdfPageCount, PdfEncryptedError } from "@/lib/comprovantes/extract";
-import { processComprovanteDocument } from "@/lib/comprovantes/pipeline";
-import { driveFolderId, uploadFile } from "@/lib/drive/client";
+import { deleteFile, driveFolderId, uploadFile } from "@/lib/drive/client";
 import { sanitizeDriveName } from "@/lib/drive/naming";
 import { isEncryptedPdf, validateUpload } from "@/lib/uploads/validate";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
-
-const INLINE_PAGE_LIMIT = 20;
 
 function json(body: unknown, status: number): NextResponse {
   return NextResponse.json(body, { status });
@@ -106,7 +109,25 @@ export async function POST(req: Request): Promise<NextResponse> {
       })
       .select("id")
       .single();
-    if (error) return json({ error: `falha ao registrar o comprovante: ${error.message}` }, 500);
+    if (error) {
+      // Concurrent upload of a byte-identical PDF lost the content_hash race
+      // (the SELECT dedup above ran before the winner committed). The unique
+      // constraint is the source of truth: return the winner's row as a normal
+      // dedup + delete the Drive file this loser just uploaded (review #4).
+      if ((error as { code?: string }).code === "23505") {
+        await deleteFile(uploaded.fileId).catch(() => {});
+        const { data: won } = await admin
+          .from("documents")
+          .select("id, processing_status")
+          .eq("content_hash", v.sha256)
+          .maybeSingle();
+        if (won) {
+          const w = won as { id: string; processing_status: string };
+          return json({ documentId: w.id, deduplicated: true, status: w.processing_status }, 200);
+        }
+      }
+      return json({ error: `falha ao registrar o comprovante: ${error.message}` }, 500);
+    }
     const documentId = (docIns as { id: string }).id;
 
     if (encrypted) {
@@ -126,22 +147,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // inline for small PDFs; bigger ones wait for the drive-poll cron (D4)
-    if (pageCount !== null && pageCount <= INLINE_PAGE_LIMIT) {
-      const result = await processComprovanteDocument(documentId, admin);
-      return json(
-        {
-          documentId,
-          status: result.status,
-          receipts: result.outcomes,
-        },
-        201,
-      );
-    }
-    return json(
-      { documentId, status: "pending", receipts: [], note: "processamento adiado para o cron" },
-      201,
-    );
+    // Handoff: the client loops 10-page chunks against /chunk with a progress
+    // bar. `pageCount` null (unreadable count) → the client can't chunk, so the
+    // daily sweep processes it whole (rare — corrupt/edge PDFs).
+    return json({ documentId, status: "pending", pageCount }, 201);
   } catch (err) {
     return json(
       { error: err instanceof Error ? err.message : "falha no upload do comprovante" },

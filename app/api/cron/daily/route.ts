@@ -4,7 +4,9 @@
  * Phase 2.5 (sheets severed): the chain is metabase-sync → alerts-eval →
  * comprovantes sweep. Sheet-sync is GONE — the scraper sheet is no longer an
  * ingestion source; Metabase is queried directly and everything else arrives
- * via the app (uploads, n8n webhook, Drive poll). Auth: constant-time Bearer
+ * via the app (uploads + the n8n cobrança webhook). The comprovante drive-poll
+ * is also gone (2026-07-10) — the sweep is now purely the crash-recovery net for
+ * uploads whose chunk loop was interrupted. Auth: constant-time Bearer
  * CRON_SECRET. Resilient: each step runs even if the previous one failed.
  */
 
