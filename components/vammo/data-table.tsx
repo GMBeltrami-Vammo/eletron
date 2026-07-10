@@ -283,9 +283,14 @@ export function DataTable<TData>({
         {toolbarRight}
       </div>
 
-      {/* Table card */}
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <Table>
+      {/* Table card — the shadcn Table's own container is the single, bounded
+          both-axis scroll viewport (containerClassName). The card only draws the
+          border/rounding and clips it. This replaces the old double overflow-x-auto
+          (card + Table) whose horizontal scrollbar sat below the full table height
+          and was unreachable; now both scrollbars live at the card's edges and the
+          header stays pinned while scrolling. */}
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <Table containerClassName="max-h-[70vh] overflow-auto">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent">
@@ -303,10 +308,14 @@ export function DataTable<TData>({
                     <TableHead
                       key={header.id}
                       className={cn(
-                        "whitespace-nowrap text-xs",
+                        // Sticky top keeps the header row visible while the
+                        // bounded viewport scrolls vertically; bg-card so rows
+                        // don't bleed through. Pinned-right header is the
+                        // top-right corner, so it needs the higher z-index.
+                        "sticky top-0 z-10 whitespace-nowrap bg-card text-xs",
                         canSort && "cursor-pointer select-none",
                         pinnedRight.has(header.column.id) &&
-                          "sticky right-0 z-20 border-l border-border bg-card",
+                          "right-0 z-30 border-l border-border",
                       )}
                       onClick={
                         canSort

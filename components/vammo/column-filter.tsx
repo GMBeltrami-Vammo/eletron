@@ -36,9 +36,17 @@ export function ColumnFilter<TData>({
   const selected = (column.getFilterValue() as string[] | undefined) ?? [];
   const selectedSet = new Set(selected);
 
-  // Distinct values present in the column (accessor output), sorted pt-BR.
+  // Optional value→label map (e.g. status codes → pt-BR labels), so coded
+  // columns show human text in the checklist while still filtering on the raw
+  // accessor value. The filter value stays the raw value; only display differs.
+  const meta = column.columnDef.meta as
+    | { filterLabel?: (value: string) => string }
+    | undefined;
+  const labelFor = (value: string) => meta?.filterLabel?.(value) ?? value;
+
+  // Distinct values present in the column (accessor output), sorted pt-BR by label.
   const facets = column.getFacetedUniqueValues();
-  const options: { value: string; count: number }[] = [];
+  const options: { value: string; label: string; count: number }[] = [];
   const seen = new Map<string, number>();
   for (const [raw, count] of facets) {
     if (raw === null || raw === undefined) continue;
@@ -46,12 +54,14 @@ export function ColumnFilter<TData>({
     if (value === "") continue;
     seen.set(value, (seen.get(value) ?? 0) + count);
   }
-  for (const [value, count] of seen) options.push({ value, count });
-  options.sort((a, b) => a.value.localeCompare(b.value, "pt-BR"));
+  for (const [value, count] of seen) {
+    options.push({ value, label: labelFor(value), count });
+  }
+  options.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 
   const q = query.trim().toLowerCase();
   const shown = q
-    ? options.filter((o) => o.value.toLowerCase().includes(q))
+    ? options.filter((o) => o.label.toLowerCase().includes(q))
     : options;
 
   const active = selected.length > 0;
@@ -150,8 +160,8 @@ export function ColumnFilter<TData>({
                   tabIndex={-1}
                   className="pointer-events-none"
                 />
-                <span className="flex-1 truncate text-xs" title={o.value}>
-                  {o.value}
+                <span className="flex-1 truncate text-xs" title={o.label}>
+                  {o.label}
                 </span>
                 <span className="text-[10px] tabular-nums text-muted-foreground">
                   {o.count}

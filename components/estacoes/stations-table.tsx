@@ -60,9 +60,13 @@ const FILTRO_TO_CHIP: Record<string, (typeof CHIP_TYPES)[number]> = {
   desligamento: "scheduled_shutdown",
 };
 
-/** ?filtro= → preselected facet columnFilter. */
-const FILTRO_TO_FACET: Record<string, { id: string; value: string }> = {
-  ativas: { id: "status", value: "ACTIVE" },
+/**
+ * ?filtro= → preselected facet columnFilter. `status` is a multi-select column
+ * (shares the header-funnel's `string[]` value format); `aluguelMes` keeps its
+ * custom single-string filter fn.
+ */
+const FILTRO_TO_FACET: Record<string, { id: string; value: string | string[] }> = {
+  ativas: { id: "status", value: ["ACTIVE"] },
   aluguelPendente: { id: "aluguelMes", value: RENT_OPEN_SENTINEL },
 };
 
@@ -102,28 +106,45 @@ interface FacetOption {
   label: string;
 }
 
-/** One facet select bound to a TanStack columnFilter id. */
+/**
+ * One facet select bound to a TanStack columnFilter id. When `multi`, it reads
+ * and writes the `string[]` value format that the column's header funnel also
+ * uses (so the select and the funnel target the same column without conflict);
+ * the dropdown reflects the first selected value. Otherwise it uses a plain
+ * string value (for columns with a custom single-value filter fn).
+ */
 function FacetSelect({
   label,
   columnId,
   options,
   filters,
   onChange,
+  multi = false,
 }: {
   label: string;
   columnId: string;
   options: FacetOption[];
   filters: ColumnFiltersState;
-  onChange: (columnId: string, value: string | null) => void;
+  onChange: (columnId: string, value: string | string[] | null) => void;
+  multi?: boolean;
 }) {
   const current = filters.find((f) => f.id === columnId);
-  const value = typeof current?.value === "string" ? current.value : "all";
+  const raw = current?.value;
+  const value = multi
+    ? Array.isArray(raw) && raw.length > 0
+      ? String(raw[0])
+      : "all"
+    : typeof raw === "string"
+      ? raw
+      : "all";
   const selected = options.find((o) => o.value === value);
 
   return (
     <Select
       value={value}
-      onValueChange={(v) => onChange(columnId, v === "all" ? null : String(v))}
+      onValueChange={(v) =>
+        onChange(columnId, v === "all" ? null : multi ? [String(v)] : String(v))
+      }
     >
       <SelectTrigger
         size="sm"
@@ -250,10 +271,12 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
     });
   }
 
-  function setFacet(columnId: string, value: string | null) {
+  function setFacet(columnId: string, value: string | string[] | null) {
     setColumnFilters((prev) => {
       const next = prev.filter((f) => f.id !== columnId);
-      if (value !== null) next.push({ id: columnId, value });
+      const isEmpty =
+        value === null || (Array.isArray(value) && value.length === 0);
+      if (!isEmpty) next.push({ id: columnId, value });
       return next;
     });
   }
@@ -395,6 +418,7 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
             <FacetSelect
               label="Status"
               columnId="status"
+              multi
               options={Object.entries(STATION_STATUS_UI).map(([value, ui]) => ({
                 value,
                 label: ui.label,
@@ -417,6 +441,7 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
             <FacetSelect
               label="Fatura"
               columnId="statusFatura"
+              multi
               options={UTILITY_BILL_STATUS_SEVERITY.map((status) => ({
                 value: status,
                 label: UTILITY_BILL_STATUS_UI[status].label,
@@ -427,6 +452,7 @@ export function StationsTable({ rows }: { rows: EstacaoRow[] }) {
             <FacetSelect
               label="DA"
               columnId="debitoAutomatico"
+              multi
               options={Object.entries(AUTO_DEBIT_UI).map(([value, ui]) => ({
                 value,
                 label: ui.label,
