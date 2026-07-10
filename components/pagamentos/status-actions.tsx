@@ -36,13 +36,16 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   confirmCharge,
   recordPayment,
+  setChargeDocument,
   updateChargeStatus,
 } from "@/app/actions/charges";
 import { adjustCharge } from "@/app/actions/alterations";
-import type { ChargeStatus, PaymentMethod } from "@/lib/domain";
-import { CHARGE_STATUS_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
+import { reclassifyCharge } from "@/app/actions/cobrancas";
+import type { ChargeKind, ChargeStatus, PaymentMethod } from "@/lib/domain";
+import { CHARGE_KIND_UI, CHARGE_STATUS_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL } from "@/lib/format";
 import type { PagamentoRow } from "./types";
+import { DocumentPicker } from "./document-picker";
 
 /** update_charge_status targets (never pago/conciliado/atrasado — RPC forbids). */
 const STATUS_TARGETS: { status: ChargeStatus; adminOnly?: boolean }[] = [
@@ -61,7 +64,27 @@ type DialogMode =
   | { kind: "pago" }
   | { kind: "confirm" }
   | { kind: "adjust" }
+  | { kind: "reclassify" }
   | null;
+
+/**
+ * Safe kind targets for the inline (kind-only) reclassify, by billing-account
+ * type. reclassify_charge only reattributes the account when a cadastro/
+ * counterparty is supplied — which this quick dialog does NOT collect — so a
+ * kind flip that would REQUIRE a different account type is unsafe here:
+ *  - rent account: aluguel ↔ aluguel_energia only (both valid on a rent
+ *    account); pure `energia` needs a third_party counterparty → do it in
+ *    /revisão › cobranças, not here.
+ *  - third_party account: any of the three (the account stays third_party).
+ * The charge's CURRENT kind is always included so the select is never empty.
+ */
+function reclassifyKindsFor(accountType: string | null, current: ChargeKind): ChargeKind[] {
+  const base: ChargeKind[] =
+    accountType === "rent"
+      ? ["aluguel", "aluguel_energia"]
+      : ["aluguel", "aluguel_energia", "energia"];
+  return base.includes(current) ? base : [current, ...base];
+}
 
 /** pt-BR money string → number, or null. */
 function parseMoney(raw: string): number | null {
@@ -92,6 +115,9 @@ export function StatusActions({
   // Adjust dialog fields.
   const [adjAmount, setAdjAmount] = React.useState("");
   const [adjDue, setAdjDue] = React.useState("");
+  // Reclassify (tipo) dialog + document picker.
+  const [reclassKind, setReclassKind] = React.useState<ChargeKind>(row.kind);
+  const [docPickerOpen, setDocPickerOpen] = React.useState(false);
 
   const uuid = row.chargeUuid;
   const disabledReason = !canWrite
@@ -147,6 +173,43 @@ export function StatusActions({
       if (res.ok) {
         toast.success("Cobrança ajustada.");
         close();
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  function openReclassify() {
+    setReclassKind(row.kind);
+    setReason("");
+    setMode({ kind: "reclassify" });
+  }
+
+  function runReclassify() {
+    if (!uuid) return;
+    startTransition(async () => {
+      const res = await reclassifyCharge({
+        chargeId: uuid,
+        kind: reclassKind,
+        notes: reason.trim() || null,
+      });
+      if (res.ok) {
+        toast.success("Cobrança reclassificada.");
+        close();
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  function runUnbindDocument() {
+    if (!uuid) return;
+    startTransition(async () => {
+      const res = await setChargeDocument({ chargeId: uuid, documentId: null });
+      if (res.ok) {
+        toast.success("Documento desvinculado.");
         router.refresh();
       } else {
         toast.error(res.error);
@@ -219,8 +282,21 @@ export function StatusActions({
 
   // adjust_charge refuses pago; everything else may be re-priced / re-dated
   const canAdjust = !isTerminal;
-  const nothingToDo =
-    !canPay && !isConciliado && !canAdjust && availableTargets.length === 0;
+  // Reclassify (tipo) is for rent / third-party charges only: reclassify_charge
+  // routes energia to a third_party account, so running it on an Enel/EDP row
+  // would wrongly move it off its concessionária account; and an UNIDENTIFIED
+  // row (no account) has nothing to reattribute — flipping its kind would just
+  // strip it from the review queue. It also refuses pago / charges with payments.
+  const canReclassify =
+    (row.accountType === "rent" || row.accountType === "third_party") &&
+    !isTerminal &&
+    !isConciliado;
+  const reclassKinds = reclassifyKindsFor(row.accountType, row.kind);
+  // Whether any "edit" action precedes the document section (drives the divider).
+  const hasEditActions = isConciliado || canPay || canAdjust || canReclassify;
+  // Document binding is always offered (any charge can set/clear its source
+  // bill), so the menu is never empty once it is enabled.
+  const nothingToDo = false;
 
   return (
     <div className="flex justify-end">
@@ -247,6 +323,20 @@ export function StatusActions({
           {canAdjust ? (
             <DropdownMenuItem onClick={openAdjust}>
               Ajustar valor/vencimento…
+            </DropdownMenuItem>
+          ) : null}
+          {canReclassify ? (
+            <DropdownMenuItem onClick={openReclassify}>
+              Reclassificar tipo…
+            </DropdownMenuItem>
+          ) : null}
+          {hasEditActions ? <DropdownMenuSeparator /> : null}
+          <DropdownMenuItem onClick={() => setDocPickerOpen(true)}>
+            Vincular documento…
+          </DropdownMenuItem>
+          {row.sourceDocumentId ? (
+            <DropdownMenuItem onClick={runUnbindDocument}>
+              Desvincular documento
             </DropdownMenuItem>
           ) : null}
           {availableTargets.length > 0 ? (
@@ -397,6 +487,61 @@ export function StatusActions({
         </DialogContent>
       </Dialog>
 
+      {/* Reclassificar tipo (reclassify_charge — kind-only patch, Locação) */}
+      <Dialog
+        open={mode?.kind === "reclassify"}
+        onOpenChange={(o) => (o ? null : close())}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reclassificar cobrança</DialogTitle>
+            <DialogDescription>
+              Ajusta o tipo desta cobrança. A alteração fica no histórico com o
+              seu nome. Só é possível em cobranças ainda em aberto (sem
+              pagamento).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="reclass-tipo">Tipo</Label>
+              <Select
+                value={reclassKind}
+                onValueChange={(v) => setReclassKind(v as ChargeKind)}
+              >
+                <SelectTrigger id="reclass-tipo" className="w-full bg-card">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {reclassKinds.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {CHARGE_KIND_UI[k].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="reclass-reason">Observação (opcional)</Label>
+              <Textarea
+                id="reclass-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Ex.: a cobrança também inclui energia…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <Button
+              onClick={runReclassify}
+              disabled={pending || reclassKind === row.kind}
+            >
+              Reclassificar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Mudança de status (update_charge_status) */}
       <Dialog
         open={mode?.kind === "status"}
@@ -439,6 +584,15 @@ export function StatusActions({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Vincular documento de origem (set_charge_document) */}
+      {uuid ? (
+        <DocumentPicker
+          open={docPickerOpen}
+          onOpenChange={setDocPickerOpen}
+          chargeId={uuid}
+        />
+      ) : null}
     </div>
   );
 }

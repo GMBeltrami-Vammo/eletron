@@ -62,4 +62,10 @@ export interface PagamentoRow {
    * comprovante). Resolved by resolveDocumentHref() in buildRows.
    */
   documentHref: string | null;
+  /**
+   * The bound source-bill document id (charges.source_document_id), or null.
+   * Drives the "Desvincular documento" row action; distinct from documentHref
+   * (which also covers the energy Drive-fatura fallback that has no doc row).
+   */
+  sourceDocumentId: string | null;
 }

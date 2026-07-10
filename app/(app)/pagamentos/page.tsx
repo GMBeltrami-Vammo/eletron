@@ -99,6 +99,7 @@ function buildRows(
           charge.sourceDocumentId ?? null,
           detailsByCharge.get(charge.id)?.faturaDriveUrl ?? null,
         ),
+        sourceDocumentId: charge.sourceDocumentId ?? null,
       };
     });
 }

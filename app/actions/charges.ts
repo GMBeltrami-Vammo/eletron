@@ -116,6 +116,27 @@ export async function gerarMes(input: {
   });
 }
 
+/**
+ * Binds (or clears, when documentId is null) a charge's SOURCE bill
+ * (boleto/fatura/nota) — the "Documento de origem". Refuses a non-source-bill
+ * document (comprovante/foto_medidor/contrato) inside the RPC. Does NOT touch
+ * status/payments (source doc is metadata, independent of decision #29).
+ */
+export async function setChargeDocument(input: {
+  chargeId: string;
+  documentId: string | null;
+}): Promise<ActionResult> {
+  return withOperator(async (client) => {
+    unwrapRpc(
+      await client.rpc("set_charge_document", {
+        p_charge_id: input.chargeId,
+        p_document_id: input.documentId ?? null,
+      }),
+    );
+    await revalidateCharges();
+  });
+}
+
 /** Attributes an UNIDENTIFIED charge to a billing account (cascades station). */
 export async function resolveUnmatchedCharge(input: {
   chargeId: string;
