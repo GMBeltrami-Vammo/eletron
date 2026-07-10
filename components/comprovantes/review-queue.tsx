@@ -32,14 +32,145 @@ import type {
   ReviewReceiptRow,
   ViewerContext,
 } from "./types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Gate, useRunAction } from "./write-helpers";
+import { paymentMethodForReceipt } from "./payment-method";
 import { buildResolvableGroups, type ResolvableGroup } from "./resolve-groups";
+import { recordPayment } from "@/app/actions/charges";
 
 const REVIEW_KEY = ["comprovantes-review"] as const;
 
 interface PickerTarget {
   row: ReviewReceiptRow;
   preselect: string | null;
+}
+
+interface ConfirmTarget {
+  row: ReviewReceiptRow;
+  candidate: ReviewCandidate;
+}
+
+/**
+ * One-click candidate confirmation: clicking a candidate chip opens this
+ * lightweight recibo × cobrança summary; confirming records the payment
+ * directly (same record_payment call the full picker makes) — no search, no
+ * amount typing. Only offered when the receipt has a parsed amount; otherwise
+ * the chip falls back to the full ChargePicker.
+ */
+function ConfirmBindDialog({
+  target,
+  onOpenChange,
+  isOperator,
+  invalidate,
+}: {
+  target: ConfirmTarget | null;
+  onOpenChange: (open: boolean) => void;
+  isOperator: boolean;
+  invalidate: QueryKey[];
+}) {
+  const { run, pending } = useRunAction();
+  if (!target) return null;
+  const { row, candidate } = target;
+  const typeUi = RECEIPT_TYPE_UI[row.receiptType];
+
+  async function confirm() {
+    if (row.amount === null) return;
+    const ok = await run(
+      () =>
+        recordPayment({
+          chargeId: candidate.id,
+          receiptId: row.id,
+          amount: row.amount as number,
+          paidAt: row.paidAt,
+          method: paymentMethodForReceipt(row.receiptType),
+        }),
+      { success: "Comprovante conciliado", invalidate },
+    );
+    if (ok) onOpenChange(false);
+  }
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Confirmar conciliação</DialogTitle>
+          <DialogDescription>
+            O recibo será vinculado a esta cobrança, que é marcada como paga
+            quando o valor a cobre.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Recibo
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <StatusBadge color={typeUi.color}>{typeUi.label}</StatusBadge>
+              <span className="tabular-nums">página {row.pageNumber}</span>
+              <span className="font-medium tabular-nums">{formatBRL(row.amount)}</span>
+              {row.paidAt ? (
+                <span className="tabular-nums text-muted-foreground">
+                  {formatDate(row.paidAt)}
+                </span>
+              ) : null}
+              {row.chavePix ?? row.cnpjCpf ? (
+                <span
+                  className="max-w-[180px] truncate font-mono text-xs text-muted-foreground"
+                  title={row.chavePix ?? row.cnpjCpf ?? undefined}
+                >
+                  {row.chavePix ?? formatCnpjCpf(row.cnpjCpf ?? "")}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border p-3 text-sm">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Cobrança
+            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <StatusBadge color={CHARGE_KIND_UI[candidate.kind].color}>
+                {CHARGE_KIND_UI[candidate.kind].label}
+              </StatusBadge>
+              {candidate.stationId !== null ? (
+                <span className="font-medium tabular-nums">
+                  #{candidate.stationId}
+                  {candidate.stationName ? ` — ${candidate.stationName}` : ""}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Sem estação</span>
+              )}
+              <span className="tabular-nums text-muted-foreground">
+                {formatCompetencia(candidate.competencia)}
+              </span>
+              <span className="font-medium tabular-nums">
+                {formatBRL(candidate.amount)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+            Cancelar
+          </Button>
+          <Gate isOperator={isOperator}>
+            <Button onClick={() => void confirm()} disabled={!isOperator || pending}>
+              <Link2 className="size-4" strokeWidth={2} />
+              Conciliar
+            </Button>
+          </Gate>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 /**
@@ -267,6 +398,7 @@ export function ReviewQueue({
   viewer: ViewerContext;
 }) {
   const [target, setTarget] = React.useState<PickerTarget | null>(null);
+  const [confirmTarget, setConfirmTarget] = React.useState<ConfirmTarget | null>(null);
 
   const { data = initialData } = useQuery({
     queryKey: REVIEW_KEY,
@@ -295,6 +427,12 @@ export function ReviewQueue({
   const columns = React.useMemo<ColumnDef<ReviewReceiptRow, unknown>[]>(() => {
     const openPicker = (row: ReviewReceiptRow, preselect: string | null) =>
       setTarget({ row, preselect });
+    // Candidate chip → one-click confirm (needs the parsed amount to record the
+    // payment); without an amount the full picker still handles it.
+    const openCandidate = (row: ReviewReceiptRow, candidate: ReviewCandidate) => {
+      if (row.amount !== null) setConfirmTarget({ row, candidate });
+      else setTarget({ row, preselect: candidate.id });
+    };
 
     return [
       {
@@ -406,7 +544,7 @@ export function ReviewQueue({
                   <button
                     type="button"
                     disabled={!viewer.isOperator}
-                    onClick={() => openPicker(row.original, c.id)}
+                    onClick={() => openCandidate(row.original, c)}
                     title="Conciliar com este candidato"
                     className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] hover:bg-muted disabled:opacity-50"
                   >
@@ -504,6 +642,15 @@ export function ReviewQueue({
           preselectChargeId={target.preselect}
         />
       ) : null}
+
+      <ConfirmBindDialog
+        target={confirmTarget}
+        onOpenChange={(open) => {
+          if (!open) setConfirmTarget(null);
+        }}
+        isOperator={viewer.isOperator}
+        invalidate={[REVIEW_KEY, ["comprovantes-inbox"]]}
+      />
     </div>
   );
 }
