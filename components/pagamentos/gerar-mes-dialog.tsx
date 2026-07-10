@@ -134,7 +134,7 @@ export function GerarMesDialog({ canWrite }: { canWrite: boolean }) {
           if (!o) reset();
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Gerar cobranças do mês</DialogTitle>
             <DialogDescription>
@@ -231,7 +231,7 @@ function ProjectionView({
     );
   }
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span>
           <span className="font-semibold text-foreground tabular-nums">
@@ -257,7 +257,7 @@ function ProjectionView({
         ) : null}
       </div>
 
-      <div className="max-h-[46vh] overflow-auto rounded-lg border border-border">
+      <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
@@ -324,7 +324,7 @@ function ProjectionView({
             {projection.skipped.length} pulada(s) — desativadas, não-Pix/
             Transferência ou sem cobrança
           </summary>
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-2 max-h-48 space-y-1 overflow-auto">
             {projection.skipped.map((s, i) => (
               <li
                 key={`${s.cadastroId ?? s.stationId ?? "x"}-${i}`}
