@@ -16,7 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ACCOUNT_TYPE_UI, AUTO_DEBIT_UI, FISCAL_EXPORT_UI } from "@/lib/labels";
+import {
+  ACCOUNT_TYPE_UI,
+  AUTO_DEBIT_UI,
+  CICLO_UI,
+  FISCAL_EXPORT_UI,
+} from "@/lib/labels";
 import {
   formatBRL,
   formatCompetencia,
@@ -218,6 +223,21 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
         {row.original.tariffClass ?? "—"}
       </span>
     ),
+  },
+  {
+    id: "ciclo",
+    // Q11 — OUR lifecycle stage of this fatura (same scale as Instalações):
+    // 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
+    header: "Ciclo",
+    accessorFn: (r) => CICLO_UI[r.ciclo].label,
+    cell: ({ row }) => {
+      const ui = CICLO_UI[row.original.ciclo];
+      return (
+        <span title={`Estágio ${row.original.ciclo} de 4`}>
+          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+        </span>
+      );
+    },
   },
   {
     id: "fiscal",
