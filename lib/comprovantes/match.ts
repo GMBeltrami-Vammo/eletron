@@ -140,6 +140,17 @@ export function matchReceipt(
     }
   }
 
+  // Prefer the single OPEN survivor when already-paid charges also matched
+  // (energy keeps paid charges in the pool; a comprovante should settle the
+  // still-open charge, not re-bind an already-paid one).
+  if (survivors.length >= 2) {
+    const open = survivors.filter((c) => c.isOpen);
+    if (open.length === 1) {
+      reasons.push("desambiguado: única cobrança em aberto (as demais já pagas)");
+      survivors = open;
+    }
+  }
+
   if (survivors.length === 1) {
     return {
       outcome: "auto",

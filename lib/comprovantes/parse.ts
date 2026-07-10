@@ -46,6 +46,15 @@ const CONCESSIONARIA_CUT_RE = /cortar aqui/i;
 // the shared "Comprovante de pagamento de …" prefix never collides. The body is
 // cut at the shared "Em caso de dúvidas" footer (DA_FOOTER_RE).
 const BOLETO_PAYMENT_HEADER_RE = /Comprovante de pagamento de boleto/i;
+
+// ── título-payment header (branch-5 dispatch + segmentation) ─────────────────
+// A bank-generated "Comprovante de Operação - Títulos Outros Bancos" — the
+// payer's proof of paying a título/boleto via Itaú Sispag (seen in the 05.06
+// rent comprovante). Neither n8n nor the PIX/TED branch parses its "Valor pago:"
+// layout (→ amount=null, type "outro"). Distinct from the concessionária header
+// ("…Concessionárias / 0048 - ELETROPAULO") and the "pagamento de boleto"
+// header, so no dispatch collision. Body cut at the "Cortar aqui" separator.
+const TITULOS_PAYMENT_HEADER_RE = /Comprovante de Opera[çc][aã]o\s*-\s*T[íi]tulos/i;
 const BR_MONEY_RE = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
 const BR_DATE_RE = /\d{2}[/.]\d{2}[/.]\d{4}/g;
 
@@ -142,44 +151,65 @@ function extractChave(text: string): string | null {
   return null;
 }
 
-/** n8n "Extract CNPJ as Chave" fallback — CNPJ do recebedor / pre-Pagador / agência-conta. */
-function extractCnpjFallback(pageText: string): string | null {
-  const m1 = pageText.match(
-    /CNPJ\s*do\s*[Rr]ecebedor\s*:?\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/i,
-  );
-  if (m1) return m1[1].replace(/\D/g, "");
-  const pagadorIdx = pageText.search(/(?:Pagador|Ordenante|Remetente)/i);
-  const before = pagadorIdx > -1 ? pageText.substring(0, pagadorIdx) : pageText;
-  const m2 = before.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
-  if (m2) return m2[1].replace(/\D/g, "");
-  return null;
-}
-
-/** n8n "Get TED values" — credited-account section: agência / conta / banco / CPF-CNPJ. */
-function extractTedFields(pageText: string): {
+/**
+ * Extracts the RECEBEDOR's agência / conta / banco / CNPJ. Receives the
+ * recebedor-scoped text (from parsePixTedPage), so it never picks up the
+ * pagador's account. Handles two layouts:
+ *   - Itaú PIX/TED combined "agência/conta: 0444/41193-8".
+ *   - Bradesco "Dados da conta a ser creditada: … Agência: X Conta corrente: Y".
+ * A bank-masked CNPJ ("*****435000-**") or any non-11/14-digit partial yields
+ * null — never a garbage key that could false-match (the old code leaked the
+ * PAYER's agência/conta here, matching rent receipts on the wrong account).
+ */
+function extractTedFields(text: string): {
   agencia: string | null;
   conta: string | null;
   banco: string | null;
   cnpjCpf: string | null;
 } {
-  const sectionMatch = pageText.match(
-    /Dados da conta a ser creditada:([\s\S]*?)(?:Informa[çc][õo]es fornecidas|Transfer[êe]ncia realizada|Autentica[çc][ãa]o)/i,
-  );
-  const section = sectionMatch ? sectionMatch[1] : pageText;
+  // Itaú combined "agência/conta: 0444/41193-8". The conta class uses a literal
+  // space (not \s) so it spans the "22501 - 4" form but never bleeds onto the
+  // next line if a bare numeric line follows (review finding).
+  const combined = text.match(/ag[eê]ncia\/conta\s*:?\s*(\d+)\s*\/\s*([\d.\- ]+)/i);
+  let agencia = combined ? digits(combined[1]) || null : null;
+  let conta = combined ? digits(combined[2]) || null : null;
 
-  const agencia = digits(section.match(/Ag[eê]ncia\s*:?\s*([\d-]+)/i)?.[1] ?? null);
-  const contaRaw =
-    section.match(/Conta\s*corrente\s*:?\s*([0-9\s-]+)/i)?.[1] ??
-    section.match(/Conta\s*:?\s*([0-9\s-]+)/i)?.[1] ??
+  // Bradesco "Dados da conta a ser creditada:" section (separate Agência/Conta).
+  if (!agencia && !conta) {
+    const sectionMatch = text.match(
+      /Dados da conta a ser creditada:([\s\S]*?)(?:Informa[çc][õo]es fornecidas|Transfer[êe]ncia realizada|Autentica[çc][ãa]o)/i,
+    );
+    const section = sectionMatch ? sectionMatch[1] : text;
+    agencia = digits(section.match(/Ag[eê]ncia\s*:?\s*([\d-]+)/i)?.[1] ?? null) || null;
+    const contaRaw =
+      section.match(/Conta\s*corrente\s*:?\s*([0-9\s-]+)/i)?.[1] ??
+      section.match(/Conta\s*:?\s*([0-9\s-]+)/i)?.[1] ??
+      null;
+    conta = digits(contaRaw) || null;
+  }
+
+  const instMatch = text.match(/institui[çc][ãa]o\s*:?\s*([^\n]+)/i);
+  const bancoMatch = text.match(/(\d{3})\s*-\s*([^\n]+)/);
+  const banco = instMatch
+    ? instMatch[1].trim()
+    : bancoMatch
+      ? `${bancoMatch[1]} - ${bancoMatch[2].trim()}`
+      : null;
+
+  // Recebedor CNPJ/CPF — prefer the explicit "do recebedor" label, else any
+  // "CPF/CNPJ:" that is NOT the pagador's. Masked/partial → null.
+  const rawCnpj =
+    text.match(/CPF\s*\/?\s*CNPJ\s*do\s*recebedor\s*:?\s*([^\n]+)/i)?.[1] ??
+    text.match(/CPF\s*\/?\s*CNPJ(?!\s*do\s*pagador)\s*:?\s*([^\n]+)/i)?.[1] ??
     null;
-  const conta = digits(contaRaw);
-  const bancoMatch = section.match(/(\d{3})\s*-\s*([^\n]+)/);
-  const banco = bancoMatch ? `${bancoMatch[1]} - ${bancoMatch[2].trim()}` : null;
-  const agConta = pageText.match(/ag[eê]ncia\/conta\s*:?\s*([\d/\-.]+)/i)?.[1] ?? null;
-  const cnpjCpf =
-    digits(section.match(/CPF\/CNPJ\s*:?\s*([\d.\-/]+)/i)?.[1] ?? null) ??
-    extractCnpjFallback(pageText) ??
-    digits(agConta);
+  let cnpjCpf: string | null = null;
+  if (rawCnpj && !rawCnpj.includes("*")) {
+    // Take the first doc-shaped token on the line (stops at the first space) so
+    // trailing same-line content can't corrupt the digit count. The masked "*"
+    // guard above runs on the full line, so masking is still detected first.
+    const d = digits(rawCnpj.match(/\d[\d.\-/]*/)?.[0] ?? null);
+    if (d && (d.length === 11 || d.length === 14)) cnpjCpf = d;
+  }
 
   return { agencia, conta, banco, cnpjCpf };
 }
@@ -204,7 +234,9 @@ function parsePixTedPage(pageText: string, pageNumber: number): ParsedReceipt {
   const chavePixNormalized = chave ? normalizePixKey(chave).key || null : null;
   const paidAt = extractPixDate(text);
 
-  const ted = extractTedFields(pageText);
+  // Scope to the recebedor section so we read the RECEBEDOR's agência/conta/CNPJ,
+  // never the pagador's (the pagador block precedes "dados do recebedor").
+  const ted = extractTedFields(text);
   // If the chave itself is a bare document, expose it for CNPJ matching too.
   const chaveDigits = chave ? chave.replace(/\D/g, "") : "";
   const cnpjFromChave =
@@ -467,15 +499,87 @@ function parseBoletoPaymentPage(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Branch 5 — título payment ("Comprovante de Operação - Títulos Outros Bancos")
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Parses "Comprovante de Operação - Títulos Outros Bancos" pages (branch 5) —
+ * the payer's proof of paying a título/boleto via Itaú Sispag. Modeled as a
+ * `boleto_barcode` receipt with TWO keys so the ranked matcher can bind it:
+ *   - codigoBarras → "Representação numérica do código de barras: <linha
+ *     digitável>" (rank-1 key, vs `charges.linha_digitavel`).
+ *   - cnpjCpf      → the FAVORECIDO's "CPF/CNPJ:" (the one that is NOT "do
+ *     pagador"; rank-3 key, vs `charges.issuer_cnpj`).
+ * amount → "Valor pago:"; paidAt → "Pagamento efetuado em"; `utility` null
+ * (arbitrary beneficiary). Bodies split on the header, cut at "Cortar aqui".
+ */
+function parseTitulosPage(
+  pageText: string,
+  pageNumber: number,
+): ParsedReceipt[] {
+  const segments = pageText
+    .split(TITULOS_PAYMENT_HEADER_RE)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const out: ParsedReceipt[] = [];
+  segments.forEach((segment, segIndex) => {
+    const body = segment.split(CONCESSIONARIA_CUT_RE)[0].trim();
+    if (!body) return;
+
+    const amount = parseBrMoney(
+      body.match(/Valor pago[:\s]*R\$\s*([\d.,]+)/i)?.[1] ?? null,
+    );
+    const codigoBarras = digits(
+      body.match(/c[oó]digo de barras[:\s]*([\d\s]+)/i)?.[1] ?? null,
+    );
+    // Favorecido CNPJ — the "CPF/CNPJ:" that is NOT the pagador's.
+    const cnpjCpf = digits(
+      body.match(/CPF\s*\/?\s*CNPJ(?!\s*do\s*pagador)\s*:?\s*(\d[\d.\-/]*)/i)?.[1] ??
+        null,
+    );
+    const dataRaw = body.match(/Pagamento efetuado em\s+([\d./]+)/i)?.[1] ?? null;
+    const autenticacao =
+      body.match(/Autentica[çc][aã]o[:\s]*\n?\s*([A-F0-9]{20,})/i)?.[1]?.trim() ??
+      null;
+    const ctrl = body.match(/CTRL\s+(\d+)/i)?.[1] ?? null;
+
+    // Drop split fragments that carry neither a value nor a barcode (branch 2/3/4 parity).
+    if (amount === null && codigoBarras === null) return;
+
+    out.push({
+      pageNumber,
+      segmentIndex: segIndex,
+      receiptType: RECEIPT_TYPE.boletoBarcode,
+      amount,
+      paidAt: parseBrDate(dataRaw),
+      chavePix: null,
+      chavePixNormalized: null,
+      cnpjCpf,
+      banco: null,
+      agencia: null,
+      conta: null,
+      identificacao: null,
+      autenticacao,
+      codigoBarras,
+      ctrl,
+      utility: null,
+      rawText: body,
+    });
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Public entry point
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * Parses per-page comprovante text into receipts. Débito-automático,
- * concessionária / ELETROPAULO and boleto-payment pages yield one receipt per
- * segment; every other non-empty page yields exactly one PIX/TED receipt. The
- * boleto-payment header is checked after DA/concessionária so the shared
- * "Comprovante de pagamento de …" prefix never mis-routes.
+ * concessionária / ELETROPAULO, boleto-payment and título-payment pages yield
+ * one receipt per segment; every other non-empty page yields exactly one
+ * PIX/TED receipt. The boleto-payment and título headers are checked after
+ * DA/concessionária so the shared "Comprovante de …" prefixes never mis-route.
  *
  * `startPage` (1-based) is the true document page of `pages[0]`. It MUST be
  * passed when `pages` is a chunk slice (chunked processing), or every receipt
@@ -496,6 +600,8 @@ export function parseComprovantePages(
       receipts.push(...parseConcessionariaPage(pageText, pageNumber));
     } else if (BOLETO_PAYMENT_HEADER_RE.test(pageText)) {
       receipts.push(...parseBoletoPaymentPage(pageText, pageNumber));
+    } else if (TITULOS_PAYMENT_HEADER_RE.test(pageText)) {
+      receipts.push(...parseTitulosPage(pageText, pageNumber));
     } else if (pageText.trim().length > 0) {
       receipts.push(parsePixTedPage(pageText, pageNumber));
     }

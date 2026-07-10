@@ -39,6 +39,7 @@ function candidate(overrides: Partial<OpenChargeCandidate>): OpenChargeCandidate
     linhaDigitavel: null,
     autoDebitRegistration: null,
     valueTolerance: 0.01,
+    isOpen: true,
     ...overrides,
   };
 }
@@ -127,6 +128,26 @@ describe("matchReceipt", () => {
       competencia: "2026-05-01",
     });
     expect(matchReceipt(r, [tight]).outcome).toBe("none");
+  });
+
+  it("prefers the single OPEN survivor when an already-paid charge also matches", () => {
+    const r = receipt({ chavePix: "shared@x.com", amount: 100, paidAt: "2026-05-28" });
+    const cands = [
+      candidate({ chargeId: "paid", chavePix: "shared@x.com", amount: 100, competencia: "2026-05-01", isOpen: false }),
+      candidate({ chargeId: "open", chavePix: "shared@x.com", amount: 100, competencia: "2026-05-01", isOpen: true }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.chargeId).toBe("open");
+  });
+
+  it("stays ambiguous when two OPEN charges share value + chave", () => {
+    const r = receipt({ chavePix: "a@b.com", amount: 50, paidAt: "2026-05-28" });
+    const cands = [
+      candidate({ chargeId: "o1", chavePix: "a@b.com", amount: 50, competencia: "2026-05-01", isOpen: true }),
+      candidate({ chargeId: "o2", chavePix: "a@b.com", amount: 50, competencia: "2026-05-01", isOpen: true }),
+    ];
+    expect(matchReceipt(r, cands).outcome).toBe("ambiguous");
   });
 
   it("uses the date window to disambiguate two open months", () => {

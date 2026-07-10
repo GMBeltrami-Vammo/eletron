@@ -159,3 +159,27 @@ export async function rejectReceipt(
     revalidatePath("/comprovantes");
   });
 }
+
+/**
+ * Bulk-rejects unmatched/needs-review receipts in one call (migration 32) — the
+ * "Descartar não relacionados" control for large comprovantes where most parsed
+ * receipts match nothing. Receipts that don't qualify are skipped; returns how
+ * many were actually rejected.
+ */
+export async function rejectReceipts(
+  receiptIds: string[],
+  reason: string,
+): Promise<ActionResult<number>> {
+  return withOperator(async (client) => {
+    if (receiptIds.length === 0) return 0;
+    const rejected = unwrapRpc(
+      await client.rpc("reject_receipts", {
+        p_receipt_ids: receiptIds,
+        p_reason: reason,
+      }),
+    ) as number;
+    revalidatePath("/revisao/comprovantes");
+    revalidatePath("/comprovantes");
+    return rejected;
+  });
+}

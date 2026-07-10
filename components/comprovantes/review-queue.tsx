@@ -12,13 +12,13 @@ import * as React from "react";
 import Link from "next/link";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Ban, Link2 } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, Link2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { formatCnpjCpf } from "@/components/revisao/labels";
-import { rejectReceipt } from "@/app/actions/comprovantes";
+import { rejectReceipt, rejectReceipts } from "@/app/actions/comprovantes";
 import { CHARGE_KIND_UI, MATCH_STATUS_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 
@@ -81,6 +81,95 @@ function RejectButton({
   );
 }
 
+/**
+ * "Sem correspondência" — receipts the matcher couldn't tie to ANY charge
+ * (candidateIds empty). On a 200+-entry comprovante most of these are unrelated
+ * payments (health plans, suppliers). Hidden by default so they don't drown the
+ * real review work; expandable to inspect, with a one-click bulk reject.
+ */
+function NoMatchSection({
+  rows,
+  columns,
+  isOperator,
+  invalidate,
+}: {
+  rows: ReviewReceiptRow[];
+  columns: ColumnDef<ReviewReceiptRow, unknown>[];
+  isOperator: boolean;
+  invalidate: QueryKey[];
+}) {
+  const [open, setOpen] = React.useState(false);
+  const { run, pending } = useRunAction();
+
+  if (rows.length === 0) return null;
+
+  function onRejectAll() {
+    const ok = window.confirm(
+      `Descartar ${rows.length} recibo(s) sem correspondência? ` +
+        "Eles não casaram com nenhuma cobrança e sairão da fila (marcados como não relacionados). " +
+        "Recibos que já tenham pagamento vinculado são ignorados.",
+    );
+    if (!ok) return;
+    void run(
+      () => rejectReceipts(rows.map((r) => r.id), "descartado em lote (sem correspondência)"),
+      {
+        success: "Recibos sem correspondência descartados",
+        invalidate,
+      },
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-muted/30">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-1.5 text-sm font-medium"
+        >
+          {open ? (
+            <ChevronDown className="size-4" strokeWidth={2} />
+          ) : (
+            <ChevronRight className="size-4" strokeWidth={2} />
+          )}
+          Sem correspondência
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+            {rows.length}
+          </span>
+        </button>
+        <span className="text-xs text-muted-foreground">
+          não casaram com nenhuma cobrança — provavelmente não relacionados
+        </span>
+        <Gate isOperator={isOperator}>
+          <Button
+            size="xs"
+            variant="outline"
+            className="ml-auto"
+            disabled={!isOperator || pending}
+            onClick={onRejectAll}
+          >
+            <Trash2 className="size-3" strokeWidth={2} />
+            Descartar {rows.length}
+          </Button>
+        </Gate>
+      </div>
+
+      {open ? (
+        <div className="border-t border-border p-2">
+          <DataTable
+            columns={columns}
+            data={rows}
+            searchPlaceholder="Buscar sem correspondência…"
+            csvFilename="comprovantes-sem-correspondencia"
+            filterableColumnIds="all"
+            emptyMessage="Nenhum recibo sem correspondência."
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ReviewQueue({
   initialData,
   viewer,
@@ -95,6 +184,17 @@ export function ReviewQueue({
     queryFn: fetchReviewData,
     initialData,
   });
+
+  // Split: receipts with ranked candidates (a human should pick) vs receipts
+  // that matched nothing (candidateIds empty → "sem correspondência", hidden).
+  const { withCandidates, noMatch } = React.useMemo(() => {
+    const withCandidates: ReviewReceiptRow[] = [];
+    const noMatch: ReviewReceiptRow[] = [];
+    for (const r of data.rows) {
+      (r.candidateIds.length > 0 ? withCandidates : noMatch).push(r);
+    }
+    return { withCandidates, noMatch };
+  }, [data.rows]);
 
   const columns = React.useMemo<ColumnDef<ReviewReceiptRow, unknown>[]>(() => {
     const openPicker = (row: ReviewReceiptRow, preselect: string | null) =>
@@ -271,11 +371,18 @@ export function ReviewQueue({
 
       <DataTable
         columns={columns}
-        data={data.rows}
+        data={withCandidates}
         searchPlaceholder="Buscar documento, chave, identificação…"
         csvFilename="comprovantes-revisao"
         filterableColumnIds="all"
-        emptyMessage="Nenhum comprovante aguardando revisão."
+        emptyMessage="Nenhum comprovante aguardando decisão."
+      />
+
+      <NoMatchSection
+        rows={noMatch}
+        columns={columns}
+        isOperator={viewer.isOperator}
+        invalidate={[REVIEW_KEY, ["comprovantes-inbox"]]}
       />
 
       {target ? (

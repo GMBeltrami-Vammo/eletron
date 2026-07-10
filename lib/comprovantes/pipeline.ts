@@ -178,6 +178,8 @@ async function updateProgress(
 interface CandidateRow {
   id: string;
   status: string;
+  kind: string;
+  billing_account_id: string | null;
   amount: number | string | null;
   competencia: string | null;
   due_date: string | null;
@@ -188,6 +190,18 @@ interface CandidateRow {
   linha_digitavel: string | null;
   billing_accounts: unknown;
   charge_energy_details: unknown;
+}
+
+function isEnergyCandidate(
+  accountType: string | null | undefined,
+  billingAccountId: string | null,
+  kind: string,
+): boolean {
+  return (
+    accountType === "energy_enel" ||
+    accountType === "energy_edp" ||
+    (billingAccountId == null && kind === "energia")
+  );
 }
 
 /** charge_ids that already carry a comprovante-backed payment (never re-match). */
@@ -213,10 +227,11 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
   const receipted = await loadReceiptedChargeIds(admin);
   const out: OpenChargeCandidate[] = [];
   const select =
-    "id, status, amount, competencia, due_date, chave_pix, issuer_cnpj, agencia, conta, linha_digitavel, " +
-    "billing_accounts(auto_debit_registration, counterparties(value_tolerance)), " +
+    "id, status, kind, billing_account_id, amount, competencia, due_date, chave_pix, issuer_cnpj, agencia, conta, linha_digitavel, " +
+    "billing_accounts(account_type, auto_debit_registration, counterparties(value_tolerance)), " +
     "charge_energy_details(auto_debit_registration)";
   const statuses = [...OPEN_STATUSES, "pago"];
+  const openSet = new Set<string>(OPEN_STATUSES);
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await admin
@@ -228,12 +243,22 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
     if (error) throw new Error(`candidate charges read failed: ${error.message}`);
     const rows = (data ?? []) as unknown as CandidateRow[];
     for (const r of rows) {
-      // a `pago` charge that already has a comprovante is done — skip it.
-      if (r.status === "pago" && receipted.has(r.id)) continue;
       const ba = toOne<{
+        account_type: string | null;
         auto_debit_registration: string | null;
         counterparties: unknown;
       }>(r.billing_accounts);
+      const isOpen = openSet.has(r.status);
+      // `pago` charges join the pool ONLY for ENERGY (the clone marked energy
+      // paid via portal status, so a comprovante binds retroactively). For rent
+      // / third-party, a paid prior month must NOT compete with the open charge
+      // (Gabriel 2026-07-10). A pago charge that already has a comprovante is done.
+      if (!isOpen) {
+        if (receipted.has(r.id)) continue;
+        if (!isEnergyCandidate(ba?.account_type, r.billing_account_id, r.kind)) {
+          continue;
+        }
+      }
       const cp = toOne<{ value_tolerance: number | string | null }>(ba?.counterparties);
       const ed = toOne<{ auto_debit_registration: string | null }>(r.charge_energy_details);
       out.push({
@@ -249,6 +274,7 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
         autoDebitRegistration:
           ed?.auto_debit_registration ?? ba?.auto_debit_registration ?? null,
         valueTolerance: num(cp?.value_tolerance) ?? 0.01,
+        isOpen,
       });
     }
     if (rows.length < PAGE) break;

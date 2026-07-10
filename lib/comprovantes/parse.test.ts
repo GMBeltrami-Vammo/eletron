@@ -275,6 +275,136 @@ describe("parseComprovantePages — boleto payment (Comprovante de pagamento de 
   });
 });
 
+// Itaú PIX layout with a bank-MASKED recebedor CNPJ and NO chave (the real
+// 05.06 rent comprovante, page 6). The pagador block precedes "dados do
+// recebedor"; the OLD parser leaked the pagador's "0742/22501" as the key.
+const MASKED_RECEBEDOR_PIX_PAGE = `Comprovante de Transferência
+dados do pagador
+nome do pagador: VAMMO S A
+CPF / CNPJ do pagador: 47.418.909/0001-28
+agência/conta: 0742/22501 - 4
+dados do recebedor
+nome do recebedor: INSTITUTO RESPONSA
+CPF / CNPJ do recebedor: *****435000-**
+instituição: ITAU UNIBANCO S A
+agência/conta: 0444/41193-8
+tipo de conta: Conta Corrente
+dados da transação
+valor: R$ 22.026,23
+data da transferência: 05/06/2026
+tipo de pagamento: PIX TRANSFERENCIA`;
+
+describe("parseComprovantePages — PIX with masked recebedor CNPJ (Itaú)", () => {
+  const [r] = parseComprovantePages([MASKED_RECEBEDOR_PIX_PAGE]);
+  it("reads the RECEBEDOR's agência/conta, never the pagador's", () => {
+    expect(r.agencia).toBe("0444");
+    expect(r.conta).toBe("411938");
+    // regression guard: the pagador's account must NOT leak through
+    expect(r.conta).not.toBe("225014");
+    expect(r.amount).toBeCloseTo(22026.23);
+  });
+  it("treats the masked CNPJ as null (never a partial that false-matches)", () => {
+    expect(r.cnpjCpf).toBeNull();
+  });
+});
+
+// Hardening (review findings): the conta capture must not bleed onto a following
+// bare-numeric line, and the CNPJ capture must not be corrupted by trailing
+// same-line content.
+describe("parseComprovantePages — receiver extraction hardening", () => {
+  it("does not bleed the conta across a following numeric line", () => {
+    const page = `Comprovante de Transferência
+dados do pagador
+agência/conta: 0742/22501 - 4
+dados do recebedor
+nome do recebedor: FULANO LTDA
+CPF / CNPJ do recebedor: 11.222.333/0001-44
+agência/conta: 0444/41193-8
+00123456789
+valor: R$ 100,00
+data da transferência: 05/06/2026
+tipo de pagamento: PIX TRANSFERENCIA`;
+    const [r] = parseComprovantePages([page]);
+    expect(r.agencia).toBe("0444");
+    expect(r.conta).toBe("411938");
+    expect(r.cnpjCpf).toBe("11222333000144");
+  });
+
+  it("captures a clean CNPJ even with trailing content on the same line", () => {
+    const page = `Comprovante de Transferência
+dados do recebedor
+CPF / CNPJ do recebedor: 11.222.333/0001-44 ref 999
+valor: R$ 100,00
+data da transferência: 05/06/2026
+tipo de pagamento: PIX TRANSFERENCIA`;
+    const [r] = parseComprovantePages([page]);
+    expect(r.cnpjCpf).toBe("11222333000144");
+  });
+});
+
+// Itaú PIX with a phone chave AND a masked CNPJ (page 9 — this one matched
+// because the chave carried the key). Confirms the chave survives + masked → null.
+const PIX_CHAVE_MASKED_PAGE = `Comprovante de Transferência
+dados do pagador
+nome do pagador: MATRIZ 1
+CPF / CNPJ do pagador: 47.418.909/0001-28
+agência/conta: 0742/22501 - 4
+dados do recebedor
+nome do recebedor: ZERO GRAU MOTO BIKE PECAS
+chave: +5511947379316
+CPF / CNPJ do recebedor: *****912000-**
+instituição: ITAU UNIBANCO S A
+dados da transação
+valor: R$ 6.000,00
+data da transferência: 05/06/2026
+tipo de pagamento: PIX TRANSFERENCIA`;
+
+describe("parseComprovantePages — PIX with chave + masked CNPJ", () => {
+  const [r] = parseComprovantePages([PIX_CHAVE_MASKED_PAGE]);
+  it("keeps the phone chave and ignores the masked CNPJ", () => {
+    expect(r.chavePix).toBe("+5511947379316");
+    expect(r.cnpjCpf).toBeNull();
+    expect(r.amount).toBeCloseTo(6000);
+  });
+});
+
+// "Comprovante de Operação - Títulos Outros Bancos" (page 1 of the 05.06
+// comprovante). The old parser read "Valor pago:" as amount=null → type "outro".
+const TITULOS_PAGE = `Comprovante de Operação - Títulos Outros Bancos
+Identificação no Extrato: PAG. TIT. BANCO 237
+Dados da conta a ser debitada:
+Agência: 0742 Conta: 22501 - 4
+Nome: VAMMO S A
+Dados do pagamento:
+CPF/CNPJ: 92693118000160
+Nome do favorecido: BRADESCO SAUDE S A
+CPF/CNPJ do pagador: 47.418.909/0001-28
+Representação numérica
+do código de barras: 23790 00108 52070 048559 02026 538609 7 14680028401202
+Valor pago: R$ 284.012,02
+Data de vencimento: 05/06/2026
+Pagamento efetuado em 05.06.2026 às 15:47:19, via Sispag, CTRL 003217806852395
+Autenticação:
+44A3DE1B8BE42653F67F6C53F07A1DBBECD8B331`;
+
+describe("parseComprovantePages — título payment (Comprovante de Operação - Títulos)", () => {
+  const [r] = parseComprovantePages([TITULOS_PAGE]);
+  it("parses a título page as a barcode-linked receipt with the favorecido CNPJ", () => {
+    expect(parseComprovantePages([TITULOS_PAGE])).toHaveLength(1);
+    expect(r.receiptType).toBe("boleto_barcode");
+    expect(r.amount).toBeCloseTo(284012.02);
+    // favorecido CNPJ (before "Nome do favorecido"), NOT the pagador's
+    expect(r.cnpjCpf).toBe("92693118000160");
+    expect(r.codigoBarras).toBe("23790001085207004855902026538609714680028401202");
+    expect(r.codigoBarras).toHaveLength(47);
+    expect(r.utility).toBeNull();
+    expect(r.paidAt).toBe("2026-06-05");
+  });
+  it("is NOT mis-routed to PIX/TED (amount is not null)", () => {
+    expect(r.amount).not.toBeNull();
+  });
+});
+
 /**
  * Real-PDF acceptance gate (D1 / drive-comprovantes §4.2) — DEFERRED until
  * Gabriel provides redacted fixtures. Drop ≥1 PDF per branch under

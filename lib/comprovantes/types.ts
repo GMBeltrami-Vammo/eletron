@@ -72,6 +72,9 @@ export interface OpenChargeCandidate {
   autoDebitRegistration: string | null;
   /** Per-counterparty amount tolerance (default 0.01; Kitchen Central 1.00). */
   valueTolerance: number;
+  /** true = an OPEN charge; false = a `pago`-without-comprovante charge (energy
+   * only). Used to prefer the open survivor when the key/amount is ambiguous. */
+  isOpen: boolean;
 }
 
 export type MatchOutcome = "auto" | "ambiguous" | "none";
