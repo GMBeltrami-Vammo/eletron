@@ -314,6 +314,7 @@ async function resolveAccount(
 ): Promise<{ billingAccountId: string | null; stationId: number | null }> {
   // station id only kept when it actually exists (FK safety)
   let stationId: number | null = null;
+  let stationFromSender = false;
   if (c.stationId !== null) {
     const st = await one<{ id: number }>(
       admin.from("stations").select("id").eq("id", c.stationId).maybeSingle(),
@@ -325,6 +326,7 @@ async function resolveAccount(
   // Feature B: fall back to the sender→station mapping when the AI gave none.
   if (stationId === null && senderStationId !== null) {
     stationId = senderStationId;
+    stationFromSender = true;
     warnings.push(`estação ${senderStationId} inferida pelo remetente`);
   }
 
@@ -333,9 +335,12 @@ async function resolveAccount(
 
   if (!isEnergyBearing) {
     if (c.cadastroId === null) {
-      // No cadastro, but a sender-inferred station → attach to that station's
-      // active contract's rent account when there is exactly one to pick.
-      if (stationId !== null) {
+      // No cadastro, but a SENDER-inferred station → attach to that station's
+      // active contract's rent account (≤1 ACTIVE per station is guaranteed by
+      // the one_active_contract_per_station index). Only for sender-inferred
+      // stations — an AI-classified charge with a station but no cadastro keeps
+      // its prior behavior (billing_account null), unchanged by feature B.
+      if (stationFromSender && stationId !== null) {
         const contract = await one<{ id: string }>(
           admin
             .from("contracts")
