@@ -51,6 +51,45 @@ export async function recordPayment(
   });
 }
 
+export interface ResolveGroupPair {
+  chargeId: string;
+  receiptId: string;
+  amount: number;
+  paidAt?: string | null;
+  method?: PaymentMethod | null;
+}
+
+/**
+ * Binds N receipts to N charges 1:1 in one call — the review "resolver grupo"
+ * control. For a symmetric ambiguous group (same landlord/key, same value, N
+ * receipts ↔ N open charges) every pairing is interchangeable, so a human
+ * confirms the whole group at once. Each pair goes through `record_payment`
+ * (decision #29: a bound comprovante flips the charge to `pago`). Continues past
+ * a failed pair (e.g. a charge already paid by a concurrent action) and reports
+ * the counts; one JWT mint for the batch.
+ */
+export async function resolveReceiptGroup(
+  pairs: ResolveGroupPair[],
+): Promise<ActionResult<{ bound: number; failed: number }>> {
+  return withOperator(async (client) => {
+    let bound = 0;
+    let failed = 0;
+    for (const p of pairs) {
+      const { error } = await client.rpc("record_payment", {
+        p_charge_id: p.chargeId,
+        p_receipt_id: p.receiptId,
+        p_amount: p.amount,
+        p_paid_at: p.paidAt ?? null,
+        p_method: p.method ?? null,
+      });
+      if (error) failed++;
+      else bound++;
+    }
+    await revalidateCharges();
+    return { bound, failed };
+  });
+}
+
 /** Deletes a payment and walks the charge status back if it becomes under-covered. */
 export async function unmatchPayment(input: {
   paymentId: string;

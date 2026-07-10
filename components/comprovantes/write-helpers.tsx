@@ -18,7 +18,6 @@ import { toast } from "sonner";
 // Type-only import: `@/lib/http/actions` is `server-only`; `import type` is
 // erased at build time so nothing server-only reaches the client bundle.
 import type { ActionResult } from "@/lib/http/actions";
-import type { PaymentMethod, ReceiptType } from "@/lib/domain";
 
 export const NOT_OPERATOR = "Requer papel operador ou admin";
 
@@ -74,18 +73,6 @@ export function Gate({
   );
 }
 
-/** Receipt type → the payment method to record for a manual match. */
-export function paymentMethodForReceipt(
-  type: ReceiptType,
-): PaymentMethod | null {
-  switch (type) {
-    case "pix":
-      return "pix";
-    case "ted":
-      return "transferencia";
-    case "debito_automatico":
-      return "debito_automatico";
-    default:
-      return null;
-  }
-}
+// Pure mapping lives in its own JSX-free module (so pure code can import it);
+// re-exported here for the existing client-side consumers.
+export { paymentMethodForReceipt } from "./payment-method";

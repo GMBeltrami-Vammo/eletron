@@ -12,13 +12,14 @@ import * as React from "react";
 import Link from "next/link";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Ban, ChevronDown, ChevronRight, Link2, Trash2 } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, Layers, Link2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { formatCnpjCpf } from "@/components/revisao/labels";
 import { rejectReceipt, rejectReceipts } from "@/app/actions/comprovantes";
+import { resolveReceiptGroup } from "@/app/actions/charges";
 import { CHARGE_KIND_UI, MATCH_STATUS_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 
@@ -32,12 +33,100 @@ import type {
   ViewerContext,
 } from "./types";
 import { Gate, useRunAction } from "./write-helpers";
+import { buildResolvableGroups, type ResolvableGroup } from "./resolve-groups";
 
 const REVIEW_KEY = ["comprovantes-review"] as const;
 
 interface PickerTarget {
   row: ReviewReceiptRow;
   preselect: string | null;
+}
+
+/**
+ * "Grupos resolvíveis" — the N↔N one-click resolver. Shown above the ambiguous
+ * table so the operator can clear whole landlord groups (a payment per station,
+ * all the same value) at once instead of picking each receipt by hand.
+ */
+function ResolvableGroups({
+  groups,
+  isOperator,
+  invalidate,
+}: {
+  groups: ResolvableGroup[];
+  isOperator: boolean;
+  invalidate: QueryKey[];
+}) {
+  const { run, pending } = useRunAction();
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <Layers className="size-4 text-muted-foreground" strokeWidth={2} />
+        <span className="text-sm font-medium">Grupos resolvíveis (N↔N)</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+          {groups.length}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          mesmo valor/chave, um pagamento por cobrança — confirme para casar de uma vez
+        </span>
+      </div>
+      <ul className="divide-y divide-border">
+        {groups.map((g) => {
+          const n = g.receipts.length;
+          const value = g.receipts[0].amount;
+          return (
+            <li
+              key={g.key}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm"
+            >
+              <span className="font-medium tabular-nums">
+                {n} recibo(s) ↔ {n} cobrança(s)
+              </span>
+              <span className="tabular-nums">{formatBRL(value)}</span>
+              <span className="flex flex-wrap gap-1">
+                {g.candidates.map((c) => (
+                  <span
+                    key={c.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]"
+                  >
+                    <StatusBadge color={CHARGE_KIND_UI[c.kind].color}>
+                      {CHARGE_KIND_UI[c.kind].label}
+                    </StatusBadge>
+                    {c.stationId !== null ? (
+                      <span className="tabular-nums">#{c.stationId}</span>
+                    ) : null}
+                    <span className="tabular-nums text-muted-foreground">
+                      {formatCompetencia(c.competencia)}
+                    </span>
+                  </span>
+                ))}
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                p{g.receipts.map((r) => r.pageNumber).join(", p")}
+              </span>
+              <Gate isOperator={isOperator}>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  disabled={!isOperator || pending}
+                  onClick={() =>
+                    void run(() => resolveReceiptGroup(g.pairs), {
+                      success: `Grupo casado (${n}↔${n})`,
+                      invalidate,
+                    })
+                  }
+                >
+                  <Layers className="size-3" strokeWidth={2} />
+                  Resolver grupo
+                </Button>
+              </Gate>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 /**
@@ -195,6 +284,13 @@ export function ReviewQueue({
     }
     return { withCandidates, noMatch };
   }, [data.rows]);
+
+  // Symmetric N↔N ambiguous groups (one landlord, N same-value charges) — the
+  // one-click resolver. Built from the with-candidates set.
+  const resolvableGroups = React.useMemo(
+    () => buildResolvableGroups(withCandidates),
+    [withCandidates],
+  );
 
   const columns = React.useMemo<ColumnDef<ReviewReceiptRow, unknown>[]>(() => {
     const openPicker = (row: ReviewReceiptRow, preselect: string | null) =>
@@ -368,6 +464,12 @@ export function ReviewQueue({
           comprovantes estiver configurado.
         </p>
       ) : null}
+
+      <ResolvableGroups
+        groups={resolvableGroups}
+        isOperator={viewer.isOperator}
+        invalidate={[REVIEW_KEY, ["comprovantes-inbox"]]}
+      />
 
       <DataTable
         columns={columns}
