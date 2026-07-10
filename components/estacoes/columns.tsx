@@ -142,7 +142,6 @@ export function buildColumns(
       id: "status",
       header: "Status",
       accessorFn: (row) => row.status ?? "",
-      filterFn: "equalsString",
       cell: ({ row }) => {
         const status = row.original.status;
         if (status === null) {
@@ -152,6 +151,9 @@ export function buildColumns(
         return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
       },
       meta: {
+        filterLabel: (value: string) =>
+          STATION_STATUS_UI[value as keyof typeof STATION_STATUS_UI]?.label ??
+          value,
         csvValue: (row: EstacaoRow) =>
           row.status ? STATION_STATUS_UI[row.status].label : "",
       },
@@ -205,7 +207,6 @@ export function buildColumns(
       id: "statusFatura",
       header: "Fatura energia",
       accessorFn: (row) => row.worstBillStatus ?? "",
-      filterFn: "equalsString",
       cell: ({ row }) => {
         const status = row.original.worstBillStatus;
         if (status === null) {
@@ -226,6 +227,9 @@ export function buildColumns(
         );
       },
       meta: {
+        filterLabel: (value: string) =>
+          UTILITY_BILL_STATUS_UI[value as keyof typeof UTILITY_BILL_STATUS_UI]
+            ?.label ?? value,
         csvValue: (row: EstacaoRow) =>
           row.worstBillStatus
             ? UTILITY_BILL_STATUS_UI[row.worstBillStatus].label
@@ -272,12 +276,13 @@ export function buildColumns(
       id: "debitoAutomatico",
       header: "Débito automático",
       accessorFn: (row) => row.autoDebitAggregate,
-      filterFn: "equalsString",
       cell: ({ row }) => {
         const ui = AUTO_DEBIT_UI[row.original.autoDebitAggregate];
         return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
       },
       meta: {
+        filterLabel: (value: string) =>
+          AUTO_DEBIT_UI[value as keyof typeof AUTO_DEBIT_UI]?.label ?? value,
         csvValue: (row: EstacaoRow) => AUTO_DEBIT_UI[row.autoDebitAggregate].label,
       },
     },
