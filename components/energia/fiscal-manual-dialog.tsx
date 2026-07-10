@@ -149,6 +149,16 @@ export function FiscalManualDialog({ canWrite }: { canWrite: boolean }) {
                       NF {r.nf}
                     </span>
                   ) : null}
+                  {r.autoDebitRegistration ? (
+                    <span
+                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums"
+                      title="Nº de registro do débito automático"
+                    >
+                      Reg. DA {r.autoDebitRegistration}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">sem nº de registro</span>
+                  )}
                   <span className="ml-auto flex items-center gap-2">
                     {r.driveUrl ? (
                       <a

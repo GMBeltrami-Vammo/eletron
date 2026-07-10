@@ -22,6 +22,7 @@ function fatura(overrides: Partial<FaturaRef> = {}): FaturaRef {
     tab: "07-2026",
     amount: 40.24,
     autoDebit: "cadastrado",
+    autoDebitRegistration: "100235348160",
     driveUrl: "https://drive.google.com/file/d/ABC123/view?usp=drivesdk",
     fiscalExported: false,
     ...overrides,

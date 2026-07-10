@@ -273,9 +273,18 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     accessorFn: (r) => AUTO_DEBIT_UI[r.autoDebit].label,
     cell: ({ row }) => {
       const ui = AUTO_DEBIT_UI[row.original.autoDebit];
+      const reg = row.original.autoDebitRegistration;
       return (
-        <span title={row.original.autoDebitRegistration ?? undefined}>
+        <span className="flex flex-col items-start gap-0.5">
           <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
+          {reg ? (
+            <span
+              className="font-mono text-[11px] tabular-nums text-muted-foreground"
+              title="Nº de registro do débito automático"
+            >
+              {reg}
+            </span>
+          ) : null}
         </span>
       );
     },

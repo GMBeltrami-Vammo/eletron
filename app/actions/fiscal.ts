@@ -157,6 +157,8 @@ export interface ManualFaturaRow {
   dueDate: string;
   amount: number | null;
   nf: string | null;
+  /** Débito-automático registration number — needed to handle these by hand. */
+  autoDebitRegistration: string | null;
   driveUrl: string | null;
 }
 
@@ -198,6 +200,7 @@ export async function getFiscalManualQueue(): Promise<
         dueDate: f.dueDate,
         amount: f.amount,
         nf: f.nf,
+        autoDebitRegistration: f.autoDebitRegistration,
         driveUrl: f.driveUrl,
       }))
       .sort((a, b) => (a.dueDate < b.dueDate ? 1 : -1));

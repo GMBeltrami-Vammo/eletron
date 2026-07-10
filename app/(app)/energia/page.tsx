@@ -257,8 +257,12 @@ function buildRows(
       ciclo: cicloOf(charge),
       fiscalExported: details.fiscalExported,
       autoDebit: state?.autoDebit ?? "desconhecido",
+      // Prefer the per-fatura detail (always populated) — the installation state
+      // is often null for exactly the não-cadastrado ones handled manually.
       autoDebitRegistration:
-        state?.autoDebitRegistration ?? account.autoDebitRegistration,
+        details.autoDebitRegistration ??
+        state?.autoDebitRegistration ??
+        account.autoDebitRegistration,
       hasComprovante: Boolean(state?.ultimoComprovante),
       comprovanteDate: state?.ultimoComprovanteDate ?? null,
       // dedupe_key join works on both backends; uuid join when id IS the uuid

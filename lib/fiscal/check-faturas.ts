@@ -31,6 +31,8 @@ export interface FaturaRef {
   amount: number | null;
   /** Installation-level auto-debit (utility_account_state) — the "DA" marker + send gate. */
   autoDebit: "cadastrado" | "nao_cadastrado" | "desconhecido";
+  /** Débito-automático registration number (prefers the per-fatura detail). */
+  autoDebitRegistration: string | null;
   /** Drive PDF link for the "Ver Fatura" hyperlink. */
   driveUrl: string | null;
   /** "Enviado ao fiscal" flag (charge_energy_details) — the send skips faturas already checked. */
@@ -62,6 +64,13 @@ function isMissingTabError(err: unknown): boolean {
   return /unable to parse range/i.test(msg);
 }
 
+interface CedRow {
+  nf: string | null;
+  fatura_drive_url: string | null;
+  fiscal_exported: boolean | null;
+  auto_debit_registration: string | null;
+}
+
 /** Every Enel/EDP fatura with a due date, with its installation id + nf + tab. */
 export async function loadEnergyFaturas(
   admin: ChargingClient,
@@ -72,12 +81,15 @@ export async function loadEnergyFaturas(
       provider: "enel" | "edp";
       installationId: string;
       autoDebit: FaturaRef["autoDebit"];
+      autoDebitReg: string | null;
     }
   >();
   for (let from = 0; ; from += 1000) {
     const { data, error } = await admin
       .from("billing_accounts")
-      .select("id, account_type, enel_id, edp_uc, utility_account_state(auto_debit)")
+      .select(
+        "id, account_type, enel_id, edp_uc, utility_account_state(auto_debit, auto_debit_registration)",
+      )
       .in("account_type", ["energy_enel", "energy_edp"])
       .range(from, from + 999);
     if (error) throw new Error(`billing_accounts read: ${error.message}`);
@@ -87,8 +99,8 @@ export async function loadEnergyFaturas(
       enel_id: string | null;
       edp_uc: string | null;
       utility_account_state:
-        | { auto_debit: string | null }
-        | { auto_debit: string | null }[]
+        | { auto_debit: string | null; auto_debit_registration: string | null }
+        | { auto_debit: string | null; auto_debit_registration: string | null }[]
         | null;
     }[];
     for (const r of rows) {
@@ -101,7 +113,12 @@ export async function loadEnergyFaturas(
       const autoDebit: FaturaRef["autoDebit"] =
         ad === "cadastrado" || ad === "nao_cadastrado" ? ad : "desconhecido";
       if (installationId) {
-        accById.set(r.id, { provider, installationId, autoDebit });
+        accById.set(r.id, {
+          provider,
+          installationId,
+          autoDebit,
+          autoDebitReg: st?.auto_debit_registration?.trim() || null,
+        });
       }
     }
     if (rows.length < 1000) break;
@@ -115,7 +132,7 @@ export async function loadEnergyFaturas(
       const { data, error } = await admin
         .from("charges")
         .select(
-          "id, billing_account_id, due_date, amount, charge_energy_details(nf, fatura_drive_url, fiscal_exported)",
+          "id, billing_account_id, due_date, amount, charge_energy_details(nf, fatura_drive_url, fiscal_exported, auto_debit_registration)",
         )
         .in("billing_account_id", slice)
         .not("due_date", "is", null)
@@ -127,8 +144,8 @@ export async function loadEnergyFaturas(
         due_date: string;
         amount: number | string | null;
         charge_energy_details:
-          | { nf: string | null; fatura_drive_url: string | null; fiscal_exported: boolean | null }
-          | { nf: string | null; fatura_drive_url: string | null; fiscal_exported: boolean | null }[]
+          | CedRow
+          | CedRow[]
           | null;
       }[];
       for (const r of rows) {
@@ -146,6 +163,8 @@ export async function loadEnergyFaturas(
           tab: fiscalTabForDueDate(r.due_date),
           amount: r.amount === null ? null : Number(r.amount),
           autoDebit: acc.autoDebit,
+          autoDebitRegistration:
+            ced?.auto_debit_registration?.trim() || acc.autoDebitReg,
           driveUrl: ced?.fatura_drive_url?.trim() || null,
           fiscalExported: ced?.fiscal_exported === true,
         });
