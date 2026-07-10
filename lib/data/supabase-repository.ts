@@ -307,6 +307,7 @@ interface ChargeRow {
   legacy_ref: { tab: string; rowNumber: number } | null;
   raw: Record<string, string> | null;
   notes: string | null;
+  source_document_id: string | null;
 }
 interface EnergyDetailRow {
   charge_id: string;
@@ -597,6 +598,7 @@ export async function loadChargingWorld(
     dedupeKey: r.dedupe_key,
     legacyRef: r.legacy_ref,
     notes: r.notes,
+    sourceDocumentId: r.source_document_id,
     raw: r.raw ?? {},
   }));
 

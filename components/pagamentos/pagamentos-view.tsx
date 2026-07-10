@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Check, Minus } from "lucide-react";
+import { Check, ExternalLink, Minus } from "lucide-react";
 
 import {
   Select,
@@ -259,6 +259,31 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
         <span className="text-muted-foreground">—</span>
       ),
     meta: csvMeta((r) => (r.payment ? "vinculado" : "")),
+  },
+  {
+    // Source bill (boleto/fatura/nota) — distinct from the payment-proof
+    // "Comprovante" column. Energy → Drive fatura link; rent/manual → the
+    // /api/files proxy; resolved by resolveDocumentHref in buildRows.
+    id: "documento",
+    header: "Documento de origem",
+    enableSorting: false,
+    accessorFn: (r) => (r.documentHref ? "Vinculado" : ""),
+    cell: ({ row }) =>
+      row.original.documentHref ? (
+        <a
+          href={row.original.documentHref}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Ver documento
+          <ExternalLink className="size-3.5" strokeWidth={2} />
+        </a>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    meta: csvMeta((r) => (r.documentHref ? "vinculado" : "")),
   },
   {
     id: "fiscal",

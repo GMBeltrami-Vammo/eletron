@@ -285,9 +285,11 @@ export function ComprovanteDetail({
           )}
         </section>
 
-        {/* Vínculos */}
+        {/* Faturas vinculadas a este comprovante (add via ReceiptCard "Conciliar…", remove here) */}
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">Vínculos</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Faturas vinculadas a este comprovante
+          </h2>
           <BindingsTable
             payments={data.payments}
             totals={data.totals}

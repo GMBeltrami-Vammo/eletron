@@ -116,23 +116,13 @@ export async function getViewerContext(): Promise<ViewerContext> {
     isOperator: false,
     isAdmin: false,
   };
+  // ROLES SUSPENDED (decision #26): any authenticated @vammo.com session with
+  // Supabase configured gets full write affordances (role 'admin'), exactly
+  // like getViewer() (components/admin/viewer.ts) and matching migration 8's
+  // is_operator()/is_admin() → is_vammo_user() in Postgres. The old
+  // charging.user_roles lookup that lived here is the restoration point.
   if (!email || !chargingEnvPresent()) return base;
-  try {
-    const admin = supabaseAdmin();
-    const { data } = await admin
-      .from("user_roles")
-      .select("role")
-      .eq("email", email)
-      .maybeSingle();
-    const role = (data as { role?: string } | null)?.role ?? null;
-    if (role === "admin")
-      return { email, role: "admin", isOperator: true, isAdmin: true };
-    if (role === "operator")
-      return { email, role: "operator", isOperator: true, isAdmin: false };
-    return base;
-  } catch {
-    return base;
-  }
+  return { email, role: "admin", isOperator: true, isAdmin: true };
 }
 
 // ── Inbox ─────────────────────────────────────────────────────────────────

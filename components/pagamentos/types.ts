@@ -55,4 +55,11 @@ export interface PagamentoRow {
   lastActorAt: string | null;
   /** Linked charging.payments coverage (R1) — null when none / sheets mode. */
   payment: PaymentLinkSummary | null;
+  /**
+   * Source bill (boleto/fatura/nota) href for the "Documento de origem" column:
+   * energy → the Drive fatura link; rent/manual → the /api/files proxy; null
+   * when nothing is bound. Distinct from `payment` (the payment-proof
+   * comprovante). Resolved by resolveDocumentHref() in buildRows.
+   */
+  documentHref: string | null;
 }

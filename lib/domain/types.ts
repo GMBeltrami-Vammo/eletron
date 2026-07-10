@@ -286,6 +286,14 @@ export interface Charge {
   /** legacy_ref — {tab, rowNumber} sheet provenance. */
   legacyRef: { tab: string; rowNumber: number } | null;
   notes: string | null;
+  /**
+   * source_document_id — the charge's SOURCE bill (boleto/fatura/nota) in
+   * charging.documents; distinct from the payment-proof "Comprovante"
+   * (payment→receipt→document). Written by create_manual_bill / the cobrança
+   * webhook / set_charge_document. Optional like statusSource/flags: the sheets
+   * backend leaves it undefined ≙ null; the Supabase backend reads the column.
+   */
+  sourceDocumentId?: string | null;
   raw: Record<string, string>;
 }
 

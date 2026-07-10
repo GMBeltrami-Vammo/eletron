@@ -1355,6 +1355,9 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       // Charge-level canonical fiscal flag (Q8): reuse the "Financeiro Check"
       // value already parsed above. Means "enviado ao fiscal", never "pago".
       fiscalExported,
+      // Sheet-built charges have no bound source document (set only by the
+      // Supabase writers: create_manual_bill / webhook / set_charge_document).
+      sourceDocumentId: null,
       raw: stripRowKey(row),
     };
     charges.push(charge);
@@ -1579,6 +1582,8 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       // column (col R) — a TRUE/FALSE boolean like energy's "Financeiro Check"
       // (blank ⇒ not sent). Means "enviado ao fiscal", never "pago".
       fiscalExported: parseBoolean(row["No Fiscal"] ?? "") ?? false,
+      // Sheet-built charges have no bound source document (Supabase-only).
+      sourceDocumentId: null,
       raw: stripRowKey(row),
     };
     charges.push(charge);

@@ -14,6 +14,7 @@ import {
   summarizeLinks,
   type PaymentLinkIndex,
 } from "@/lib/data/payment-links";
+import { resolveDocumentHref } from "@/lib/data/document-href";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
 import { readChargeRefs, type ChargeRef } from "./charge-refs";
@@ -38,6 +39,11 @@ function buildRows(
     snapshot.counterparties.map((c) => [c.id, c]),
   );
   const stationById = new Map(snapshot.stations.map((s) => [s.id, s]));
+  // Energy fatura PDF links live on the energy detail, keyed by charge id
+  // (= dedupeKey); the same pattern energia/page.tsx uses for its PDF column.
+  const detailsByCharge = new Map(
+    snapshot.chargeEnergyDetails.map((d) => [d.chargeId, d]),
+  );
 
   return snapshot.charges
     .map((charge) => {
@@ -88,6 +94,10 @@ function buildRows(
         payment: summarizeLinks(
           links.byDedupeKey.get(charge.dedupeKey) ??
             links.byChargeUuid.get(charge.id),
+        ),
+        documentHref: resolveDocumentHref(
+          charge.sourceDocumentId ?? null,
+          detailsByCharge.get(charge.id)?.faturaDriveUrl ?? null,
         ),
       };
     });
