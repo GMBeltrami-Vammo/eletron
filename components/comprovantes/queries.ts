@@ -322,6 +322,8 @@ interface ChargeEmbed {
   status: ChargeStatus;
   due_date: string | null;
   dedupe_key: string;
+  issuer_cnpj: string | null;
+  billing_accounts: unknown;
 }
 
 interface PaymentJoinRow {
@@ -380,7 +382,7 @@ export async function getDeepDiveData(
       const { data: payData } = await admin
         .from("payments")
         .select(
-          "id, amount, paid_at, method, source, created_by_email, created_at, receipt_id, charge_id, charges(id, station_id, kind, competencia, amount, status, due_date, dedupe_key)",
+          "id, amount, paid_at, method, source, created_by_email, created_at, receipt_id, charge_id, charges(id, station_id, kind, competencia, amount, status, due_date, dedupe_key, issuer_cnpj, billing_accounts(counterparties(name, cnpj_cpf)))",
         )
         .in("receipt_id", receiptIds);
       payRows = (payData ?? []) as unknown as PaymentJoinRow[];
@@ -399,6 +401,10 @@ export async function getDeepDiveData(
       const c = toOne<ChargeEmbed>(p.charges);
       const sid = c?.station_id ?? null;
       const status = c?.status ?? "pendente";
+      const ba = toOne<{ counterparties: unknown }>(c?.billing_accounts);
+      const cp = toOne<{ name: string | null; cnpj_cpf: string | null }>(
+        ba?.counterparties,
+      );
       return {
         id: p.id,
         amount: toNum(p.amount),
@@ -416,6 +422,8 @@ export async function getDeepDiveData(
         chargeDueDate: c?.due_date ?? null,
         stationId: sid,
         stationName: sid !== null ? (stationNames.get(sid) ?? null) : null,
+        counterpartyName: cp?.name ?? null,
+        counterpartyCnpj: cp?.cnpj_cpf ?? c?.issuer_cnpj ?? null,
         confirmed: status === "pago",
       };
     });

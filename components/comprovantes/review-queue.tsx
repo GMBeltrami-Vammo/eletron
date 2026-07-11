@@ -143,19 +143,16 @@ function ConfirmBindDialog({
   const { row, candidate } = target;
   const typeUi = RECEIPT_TYPE_UI[row.receiptType];
 
-  const receiptKey = row.chavePix ?? row.cnpjCpf ?? null;
-  const chargeKey = candidate.chavePix ?? candidate.issuerCnpj ?? null;
   const valorMatch =
     row.amount !== null &&
     candidate.amount !== null &&
     Math.abs(row.amount - candidate.amount) <= 0.01;
-  const keyMatch =
-    digitsEqual(row.chavePix, candidate.chavePix) ||
+  const chaveMatch = digitsEqual(row.chavePix, candidate.chavePix);
+  // CNPJ can appear as chave on one side and issuer on the other — cross-check.
+  const cnpjMatch =
     digitsEqual(row.cnpjCpf, candidate.issuerCnpj) ||
     digitsEqual(row.chavePix, candidate.issuerCnpj) ||
-    digitsEqual(row.cnpjCpf, candidate.chavePix) ||
-    (digitsEqual(row.agencia, candidate.agencia) &&
-      digitsEqual(row.conta, candidate.conta));
+    digitsEqual(row.cnpjCpf, candidate.chavePix);
   const agConta = (ag: string | null, ct: string | null) =>
     ag && ct ? `ag ${ag} / cc ${ct}` : null;
   const recebedor = receiverName(row.rawText);
@@ -200,11 +197,12 @@ function ConfirmBindDialog({
             <Field label="Valor" value={formatBRL(row.amount)} strong match={valorMatch} />
             <Field label="Data" value={formatDate(row.paidAt)} />
             <Field label="Recebedor" value={recebedor} />
+            <Field label="Chave PIX" value={row.chavePix} mono match={chaveMatch} />
             <Field
-              label="Chave/CNPJ"
-              value={row.chavePix ?? (row.cnpjCpf ? formatCnpjCpf(row.cnpjCpf) : null)}
+              label="CNPJ/CPF"
+              value={row.cnpjCpf ? formatCnpjCpf(row.cnpjCpf) : null}
               mono
-              match={keyMatch && receiptKey !== null}
+              match={cnpjMatch}
             />
             <Field label="Ag/Conta" value={agConta(row.agencia, row.conta)} mono />
             <Field label="Banco" value={row.banco} />
@@ -249,14 +247,12 @@ function ConfirmBindDialog({
                   : null
               }
             />
+            <Field label="Chave PIX" value={candidate.chavePix} mono match={chaveMatch} />
             <Field
-              label="Chave/CNPJ"
-              value={
-                candidate.chavePix ??
-                (candidate.issuerCnpj ? formatCnpjCpf(candidate.issuerCnpj) : null)
-              }
+              label="CNPJ/CPF"
+              value={candidate.issuerCnpj ? formatCnpjCpf(candidate.issuerCnpj) : null}
               mono
-              match={keyMatch && chargeKey !== null}
+              match={cnpjMatch}
             />
             <Field label="Ag/Conta" value={agConta(candidate.agencia, candidate.conta)} mono />
             <Field
@@ -560,21 +556,37 @@ export function ReviewQueue({
         header: "Documento",
         accessorFn: (r) => r.filename ?? r.documentId,
         cell: ({ row }) => (
-          <Link
-            href={`/comprovantes/${row.original.documentId}`}
-            className="block max-w-[220px] underline-offset-2 hover:underline"
-            title={row.original.filename ?? undefined}
-          >
-            <span className="block truncate font-medium">
-              {row.original.filename ?? "(sem nome)"}
+          <div className="max-w-[240px]">
+            {/* deep-link to the deep-dive AT this receipt's page (?page jumps the viewer) */}
+            <Link
+              href={`/comprovantes/${row.original.documentId}?page=${row.original.pageNumber}`}
+              className="block underline-offset-2 hover:underline"
+              title={row.original.filename ?? undefined}
+            >
+              <span className="block truncate font-medium">
+                {row.original.filename ?? "(sem nome)"}
+              </span>
+            </Link>
+            <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+              <span>
+                página {row.original.pageNumber}
+                {row.original.segmentIndex > 0
+                  ? ` · seg ${row.original.segmentIndex}`
+                  : ""}
+              </span>
+              {/* open just this page's PDF, isolated */}
+              <a
+                href={`/api/files/${row.original.documentId}/page/${row.original.pageNumber}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 font-medium text-foreground/80 underline-offset-2 hover:underline"
+                title="Abrir só esta página (PDF)"
+              >
+                <FileText className="size-3" strokeWidth={2} />
+                ver
+              </a>
             </span>
-            <span className="text-xs text-muted-foreground tabular-nums">
-              página {row.original.pageNumber}
-              {row.original.segmentIndex > 0
-                ? ` · seg ${row.original.segmentIndex}`
-                : ""}
-            </span>
-          </Link>
+          </div>
         ),
       },
       {

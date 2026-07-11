@@ -39,6 +39,7 @@ import { StatusBadge } from "@/components/vammo/status-badge";
 import { confirmCharge, unmatchPayment } from "@/app/actions/charges";
 import { CHARGE_KIND_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia } from "@/lib/format";
+import { formatCnpjCpf } from "@/components/revisao/labels";
 
 import type { DeepDiveData, PaymentView } from "./types";
 import { Gate, useRunAction } from "./write-helpers";
@@ -127,6 +128,20 @@ export function BindingsTable({
                           {formatCompetencia(p.chargeCompetencia)}
                         </span>
                       </span>
+                      {p.counterpartyName || p.counterpartyCnpj ? (
+                        <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                          {p.counterpartyName ? (
+                            <span className="max-w-52 truncate" title={p.counterpartyName}>
+                              {p.counterpartyName}
+                            </span>
+                          ) : null}
+                          {p.counterpartyCnpj ? (
+                            <span className="font-mono tabular-nums">
+                              {formatCnpjCpf(p.counterpartyCnpj)}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell className="py-2 text-right align-top text-sm tabular-nums">

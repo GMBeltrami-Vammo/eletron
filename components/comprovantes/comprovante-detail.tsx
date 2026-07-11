@@ -155,7 +155,17 @@ export function ComprovanteDetail({
               </div>
             </div>
             <div className="flex items-center gap-1.5">
-              <StatusBadge color={statusUi.color}>{statusUi.label}</StatusBadge>
+              {doc.processingStatus === "needs_review" ? (
+                <Link
+                  href="/revisao/comprovantes"
+                  title="Abrir a fila de revisão de comprovantes"
+                  className="rounded-full outline-none ring-offset-background transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <StatusBadge color={statusUi.color}>{statusUi.label}</StatusBadge>
+                </Link>
+              ) : (
+                <StatusBadge color={statusUi.color}>{statusUi.label}</StatusBadge>
+              )}
               <Button
                 variant="outline"
                 size="sm"

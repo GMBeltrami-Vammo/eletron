@@ -87,6 +87,9 @@ export interface PaymentView {
   chargeDueDate: string | null;
   stationId: number | null;
   stationName: string | null;
+  /** Locador/fornecedor razão social + CNPJ (via billing_account → counterparty). */
+  counterpartyName: string | null;
+  counterpartyCnpj: string | null;
   /** charge.status === 'pago' — a named human confirmed it. */
   confirmed: boolean;
 }
