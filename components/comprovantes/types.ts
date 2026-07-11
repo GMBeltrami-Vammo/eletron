@@ -175,6 +175,16 @@ export interface ReviewCandidate {
   amount: number | null;
   stationId: number | null;
   stationName: string | null;
+  /** Enriched fields so a human can confirm a match without leaving the queue. */
+  dueDate: string | null;
+  status: ChargeStatus;
+  dedupeKey: string;
+  /** Counterparty razão social (landlord/supplier) — the strongest yes/no signal. */
+  counterpartyName: string | null;
+  chavePix: string | null;
+  issuerCnpj: string | null;
+  agencia: string | null;
+  conta: string | null;
 }
 
 export interface ReviewReceiptRow {
@@ -192,6 +202,7 @@ export interface ReviewReceiptRow {
   cnpjCpf: string | null;
   agencia: string | null;
   conta: string | null;
+  banco: string | null;
   identificacao: string | null;
   codigoBarras: string | null;
   matchStatus: MatchStatus;

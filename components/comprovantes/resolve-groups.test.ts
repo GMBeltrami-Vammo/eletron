@@ -11,6 +11,14 @@ function candidate(id: string): ReviewCandidate {
     amount: 1200,
     stationId: 100,
     stationName: "Estação X",
+    dueDate: "2026-05-05",
+    status: "pendente",
+    dedupeKey: `pag:${id}:2026-05:aluguel`,
+    counterpartyName: "Locador X",
+    chavePix: null,
+    issuerCnpj: null,
+    agencia: null,
+    conta: null,
   };
 }
 
@@ -30,6 +38,7 @@ function row(overrides: Partial<ReviewReceiptRow>): ReviewReceiptRow {
     cnpjCpf: null,
     agencia: null,
     conta: null,
+    banco: null,
     identificacao: null,
     codigoBarras: null,
     matchStatus: "needs_review",

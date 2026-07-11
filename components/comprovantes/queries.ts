@@ -613,6 +613,7 @@ interface ReviewRow {
   cnpj_cpf: string | null;
   agencia: string | null;
   conta: string | null;
+  banco: string | null;
   identificacao: string | null;
   codigo_barras: string | null;
   match_status: MatchStatus;
@@ -632,6 +633,23 @@ interface ReviewRow {
         uploaded_by_email: string | null;
       }[]
     | null;
+}
+
+/** Charge row for candidate hydration — enriched for the review confirm dialog. */
+interface CandidateChargeRow {
+  id: string;
+  station_id: number | null;
+  kind: ChargeKind;
+  competencia: string | null;
+  amount: unknown;
+  due_date: string | null;
+  status: ChargeStatus;
+  dedupe_key: string;
+  chave_pix: string | null;
+  issuer_cnpj: string | null;
+  agencia: string | null;
+  conta: string | null;
+  billing_accounts: unknown;
 }
 
 const UUID_RE =
@@ -657,7 +675,7 @@ export async function getReviewData(): Promise<ReviewData> {
     const { data } = await admin
       .from("receipts")
       .select(
-        "id, document_id, page_number, segment_index, receipt_type, amount, paid_at, chave_pix, cnpj_cpf, agencia, conta, identificacao, codigo_barras, match_status, match_notes, raw_text, documents(id, original_filename, created_at, uploaded_by_email)",
+        "id, document_id, page_number, segment_index, receipt_type, amount, paid_at, chave_pix, cnpj_cpf, agencia, conta, banco, identificacao, codigo_barras, match_status, match_notes, raw_text, documents(id, original_filename, created_at, uploaded_by_email)",
       )
       .in("match_status", ["unmatched", "needs_review"])
       .order("created_at", { ascending: false })
@@ -675,9 +693,11 @@ export async function getReviewData(): Promise<ReviewData> {
     if (allCandidateIds.size) {
       const { data: cd } = await admin
         .from("charges")
-        .select("id, station_id, kind, competencia, amount")
+        .select(
+          "id, station_id, kind, competencia, amount, due_date, status, dedupe_key, chave_pix, issuer_cnpj, agencia, conta, billing_accounts(counterparties(name))",
+        )
         .in("id", [...allCandidateIds]);
-      const charges = (cd ?? []) as unknown as ChargeOptRow[];
+      const charges = (cd ?? []) as unknown as CandidateChargeRow[];
       const stationIds = [
         ...new Set(
           charges
@@ -687,6 +707,8 @@ export async function getReviewData(): Promise<ReviewData> {
       ];
       const stationNames = await fetchStationNames(admin, stationIds);
       for (const c of charges) {
+        const ba = toOne<{ counterparties: unknown }>(c.billing_accounts);
+        const cp = toOne<{ name: string | null }>(ba?.counterparties);
         candidateMap.set(c.id, {
           id: c.id,
           kind: c.kind,
@@ -697,6 +719,14 @@ export async function getReviewData(): Promise<ReviewData> {
             c.station_id !== null
               ? (stationNames.get(c.station_id) ?? null)
               : null,
+          dueDate: c.due_date,
+          status: c.status,
+          dedupeKey: c.dedupe_key,
+          counterpartyName: cp?.name ?? null,
+          chavePix: c.chave_pix,
+          issuerCnpj: c.issuer_cnpj,
+          agencia: c.agencia,
+          conta: c.conta,
         });
       }
     }
@@ -724,6 +754,7 @@ export async function getReviewData(): Promise<ReviewData> {
         cnpjCpf: r.cnpj_cpf,
         agencia: r.agencia,
         conta: r.conta,
+        banco: r.banco,
         identificacao: r.identificacao,
         codigoBarras: r.codigo_barras,
         matchStatus: r.match_status,

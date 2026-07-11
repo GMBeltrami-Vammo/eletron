@@ -12,7 +12,17 @@ import * as React from "react";
 import Link from "next/link";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Ban, ChevronDown, ChevronRight, Layers, Link2, Trash2 } from "lucide-react";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  FileText,
+  Layers,
+  Link2,
+  Trash2,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
@@ -20,7 +30,7 @@ import { StatusBadge } from "@/components/vammo/status-badge";
 import { formatCnpjCpf } from "@/components/revisao/labels";
 import { rejectReceipt, rejectReceipts } from "@/app/actions/comprovantes";
 import { resolveReceiptGroup } from "@/app/actions/charges";
-import { CHARGE_KIND_UI, MATCH_STATUS_UI } from "@/lib/labels";
+import { CHARGE_KIND_UI, CHARGE_STATUS_UI, MATCH_STATUS_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 
 import { fetchReviewData } from "./actions";
@@ -56,12 +66,66 @@ interface ConfirmTarget {
   candidate: ReviewCandidate;
 }
 
+/** digits-only, leading-zero-insensitive equality (display-only ✓ hint). */
+function digitsEqual(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  const da = a.replace(/\D/g, "").replace(/^0+/, "");
+  const db = b.replace(/\D/g, "").replace(/^0+/, "");
+  return da.length > 0 && da === db;
+}
+
+/** Best-effort recebedor/favorecido name from the receipt's raw page text. */
+function receiverName(raw: string | null): string | null {
+  if (!raw) return null;
+  const m =
+    raw.match(/nome\s+do\s+recebedor\s*:?\s*([^\n]+)/i) ??
+    raw.match(/nome\s+do\s+favorecido\s*:?\s*([^\n]+)/i) ??
+    raw.match(/creditada:[\s\S]*?nome\s*:?\s*([^\n]+)/i);
+  const name = m?.[1]?.trim();
+  return name && name.length > 1 ? name : null;
+}
+
+/** One labeled field; `match` renders a green check, `strong` bolds the value. */
+function Field({
+  label,
+  value,
+  mono,
+  strong,
+  match,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  strong?: boolean;
+  match?: boolean;
+}) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span
+        className={[
+          "flex min-w-0 items-center gap-1 text-right",
+          mono ? "font-mono text-xs" : "text-sm",
+          strong ? "font-semibold" : "",
+        ].join(" ")}
+      >
+        <span className="truncate">{value}</span>
+        {match ? (
+          <Check className="size-3.5 shrink-0 text-success-emphasis" strokeWidth={2.5} />
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
 /**
  * One-click candidate confirmation: clicking a candidate chip opens this
- * lightweight recibo × cobrança summary; confirming records the payment
- * directly (same record_payment call the full picker makes) — no search, no
- * amount typing. Only offered when the receipt has a parsed amount; otherwise
- * the chip falls back to the full ChargePicker.
+ * recibo × cobrança comparison so a human can say yes/no at a glance — both
+ * sides' valor, chave/CNPJ, and names lined up (matched fields get a ✓), plus a
+ * "Ver página" link to the actual receipt PDF. Confirming records the payment
+ * directly (the same record_payment call the full picker makes). Only offered
+ * when the receipt has a parsed amount; otherwise the chip opens the full picker.
  */
 function ConfirmBindDialog({
   target,
@@ -78,6 +142,24 @@ function ConfirmBindDialog({
   if (!target) return null;
   const { row, candidate } = target;
   const typeUi = RECEIPT_TYPE_UI[row.receiptType];
+
+  const receiptKey = row.chavePix ?? row.cnpjCpf ?? null;
+  const chargeKey = candidate.chavePix ?? candidate.issuerCnpj ?? null;
+  const valorMatch =
+    row.amount !== null &&
+    candidate.amount !== null &&
+    Math.abs(row.amount - candidate.amount) <= 0.01;
+  const keyMatch =
+    digitsEqual(row.chavePix, candidate.chavePix) ||
+    digitsEqual(row.cnpjCpf, candidate.issuerCnpj) ||
+    digitsEqual(row.chavePix, candidate.issuerCnpj) ||
+    digitsEqual(row.cnpjCpf, candidate.chavePix) ||
+    (digitsEqual(row.agencia, candidate.agencia) &&
+      digitsEqual(row.conta, candidate.conta));
+  const agConta = (ag: string | null, ct: string | null) =>
+    ag && ct ? `ag ${ag} / cc ${ct}` : null;
+  const recebedor = receiverName(row.rawText);
+  const pageHref = `/api/files/${row.documentId}/page/${row.pageNumber}`;
 
   async function confirm() {
     if (row.amount === null) return;
@@ -97,65 +179,103 @@ function ConfirmBindDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md sm:max-w-md">
+      <DialogContent className="max-w-lg sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Confirmar conciliação</DialogTitle>
           <DialogDescription>
-            O recibo será vinculado a esta cobrança, que é marcada como paga
-            quando o valor a cobre.
+            Compare o comprovante e a cobrança. Ao confirmar, o recibo é
+            vinculado e a cobrança marcada como paga quando o valor a cobre.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
-          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Recibo
-            </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {/* ── Comprovante ── */}
+          <div className="space-y-1.5 rounded-lg border border-border bg-muted/40 p-3">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Comprovante
+              </span>
               <StatusBadge color={typeUi.color}>{typeUi.label}</StatusBadge>
-              <span className="tabular-nums">página {row.pageNumber}</span>
-              <span className="font-medium tabular-nums">{formatBRL(row.amount)}</span>
-              {row.paidAt ? (
-                <span className="tabular-nums text-muted-foreground">
-                  {formatDate(row.paidAt)}
-                </span>
-              ) : null}
-              {row.chavePix ?? row.cnpjCpf ? (
-                <span
-                  className="max-w-[180px] truncate font-mono text-xs text-muted-foreground"
-                  title={row.chavePix ?? row.cnpjCpf ?? undefined}
-                >
-                  {row.chavePix ?? formatCnpjCpf(row.cnpjCpf ?? "")}
-                </span>
-              ) : null}
+            </div>
+            <Field label="Valor" value={formatBRL(row.amount)} strong match={valorMatch} />
+            <Field label="Data" value={formatDate(row.paidAt)} />
+            <Field label="Recebedor" value={recebedor} />
+            <Field
+              label="Chave/CNPJ"
+              value={row.chavePix ?? (row.cnpjCpf ? formatCnpjCpf(row.cnpjCpf) : null)}
+              mono
+              match={keyMatch && receiptKey !== null}
+            />
+            <Field label="Ag/Conta" value={agConta(row.agencia, row.conta)} mono />
+            <Field label="Banco" value={row.banco} />
+            <Field label="Identificação" value={row.identificacao} />
+            <div className="pt-1">
+              <a
+                href={pageHref}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium underline-offset-2 hover:underline"
+              >
+                <FileText className="size-3.5" strokeWidth={2} />
+                Ver página {row.pageNumber}
+                <ExternalLink className="size-3" strokeWidth={2} />
+              </a>
             </div>
           </div>
 
-          <div className="rounded-lg border border-border p-3 text-sm">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Cobrança
-            </p>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {/* ── Cobrança ── */}
+          <div className="space-y-1.5 rounded-lg border border-border p-3">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Cobrança
+              </span>
               <StatusBadge color={CHARGE_KIND_UI[candidate.kind].color}>
                 {CHARGE_KIND_UI[candidate.kind].label}
               </StatusBadge>
-              {candidate.stationId !== null ? (
-                <span className="font-medium tabular-nums">
-                  #{candidate.stationId}
-                  {candidate.stationName ? ` — ${candidate.stationName}` : ""}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">Sem estação</span>
-              )}
-              <span className="tabular-nums text-muted-foreground">
-                {formatCompetencia(candidate.competencia)}
-              </span>
-              <span className="font-medium tabular-nums">
-                {formatBRL(candidate.amount)}
-              </span>
             </div>
+            <Field label="Valor" value={formatBRL(candidate.amount)} strong match={valorMatch} />
+            <Field label="Competência" value={formatCompetencia(candidate.competencia)} />
+            <Field label="Vencimento" value={formatDate(candidate.dueDate)} />
+            <Field
+              label="Contraparte"
+              value={candidate.counterpartyName}
+              strong
+            />
+            <Field
+              label="Estação"
+              value={
+                candidate.stationId !== null
+                  ? `#${candidate.stationId}${candidate.stationName ? ` ${candidate.stationName}` : ""}`
+                  : null
+              }
+            />
+            <Field
+              label="Chave/CNPJ"
+              value={
+                candidate.chavePix ??
+                (candidate.issuerCnpj ? formatCnpjCpf(candidate.issuerCnpj) : null)
+              }
+              mono
+              match={keyMatch && chargeKey !== null}
+            />
+            <Field label="Ag/Conta" value={agConta(candidate.agencia, candidate.conta)} mono />
+            <Field
+              label="Status"
+              value={
+                <StatusBadge color={CHARGE_STATUS_UI[candidate.status].color} outline>
+                  {CHARGE_STATUS_UI[candidate.status].label}
+                </StatusBadge>
+              }
+            />
           </div>
         </div>
+
+        {!valorMatch ? (
+          <p className="rounded-md bg-warning-subtle px-3 py-2 text-xs text-warning-emphasis">
+            Os valores não são idênticos ({formatBRL(row.amount)} × {formatBRL(candidate.amount)}) —
+            confira antes de conciliar.
+          </p>
+        ) : null}
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
