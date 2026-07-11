@@ -398,6 +398,87 @@ describe("parseComprovantePages — TED conta-corrente (data com pontos)", () =>
   });
 });
 
+// Itaú "TED C – outra titularidade" (julho, p2 real): título sem linha de tipo,
+// "Dados da TED:" como seção do favorecido e "Valor da TED:". O parser antigo
+// lia amount=null e vazava a agência/conta do PAGADOR (0742/22501-4).
+const TED_C_OUTRA_TITULARIDADE_PAGE = `Banco Itaú - Comprovante de Pagamento
+TED C – outra titularidade
+Identificação no extrato: 00000000000000030363
+Dados da conta debitada:
+Nome: VAMMO S A
+Agência: 0742 Conta corrente: 22501 - 4
+Dados da TED:
+Nome do favorecido: ELIAS LEAL DE MIRANDA
+CPF/CNPJ: 00070645337153
+Número do banco, nome e ISPB: 260 - NU PAGAMENTOS - IP - ISPB 18236120
+Agência: 0001
+Conta corrente: 0000999344606
+Valor da TED: R$ 900,00
+Finalidade: Credito em conta corrente
+Informações fornecidas pelo pagador:
+Controle: 001346125661125
+TED solicitada em 07/07/2026 às 16:45:39 via Sispag.
+Autenticação:
+47265FEB8DEAA35F905D721CF09A123056914743`;
+
+describe("parseComprovantePages — TED C outra titularidade (julho)", () => {
+  const [r] = parseComprovantePages([TED_C_OUTRA_TITULARIDADE_PAGE]);
+  it("lê o Valor da TED e classifica como TED", () => {
+    expect(r.amount).toBeCloseTo(900);
+    expect(r.receiptType).toBe("ted");
+    expect(r.paidAt).toBe("2026-07-07");
+  });
+  it("lê a agência/conta do FAVORECIDO (seção Dados da TED), nunca a do pagador", () => {
+    expect(r.agencia).toBe("0001");
+    expect(r.conta).toBe("0000999344606");
+    expect(r.conta).not.toBe("225014");
+    expect(r.cnpjCpf).toBe("00070645337153");
+  });
+});
+
+// Itaú CC→CC (julho, p40 real): "Dados da conta creditada:" SEM o "a ser" do
+// layout de junho. O parser antigo vazava a agência do pagador.
+const TED_CC_JULHO_PAGE = `Banco Itaú - Comprovante de Transferência
+de conta corrente para conta corrente
+Identificação no extrato: 00000000000000030423
+Dados da conta debitada:
+Nome da empresa: VAMMO S A
+Agência: 0742 Conta corrente: 22501 - 4
+Dados da conta creditada:
+Nome: AUTO POSTO ESTRELA DAS NACOES
+Agência: 8324 Conta corrente: 01639 - 6
+Valor: R$ 750,00
+Informações fornecidas pelo
+pagador:
+Transferência efetuada em 07/07/2026 às 16:45:35 via Sispag, CTRL 000779667090000.
+Autenticação:
+E0A8226F1A3CC5BDAF83FA00837C051390569F6E`;
+
+describe("parseComprovantePages — TED conta-corrente julho (creditada sem 'a ser')", () => {
+  const [r] = parseComprovantePages([TED_CC_JULHO_PAGE]);
+  it("lê a agência/conta da conta CREDITADA", () => {
+    expect(r.amount).toBeCloseTo(750);
+    expect(r.agencia).toBe("8324");
+    expect(r.conta).toBe("016396");
+    expect(r.agencia).not.toBe("0742");
+    expect(r.paidAt).toBe("2026-07-07");
+  });
+});
+
+describe("parseComprovantePages — página sem seção creditada nem recebedor", () => {
+  it("NUNCA vaza a agência/conta do pagador como chave", () => {
+    const page = `Comprovante de pagamento qualquer
+Dados da conta debitada:
+Nome: VAMMO S A
+Agência: 0742 Conta corrente: 22501 - 4
+Valor: R$ 100,00
+Pagamento efetuado em 07/07/2026`;
+    const [r] = parseComprovantePages([page]);
+    expect(r.agencia).toBeNull();
+    expect(r.conta).toBeNull();
+  });
+});
+
 // "Comprovante de Operação - Títulos Outros Bancos" (page 1 of the 05.06
 // comprovante). The old parser read "Valor pago:" as amount=null → type "outro".
 const TITULOS_PAGE = `Comprovante de Operação - Títulos Outros Bancos

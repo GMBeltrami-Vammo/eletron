@@ -160,16 +160,22 @@ function extractChave(text: string): string | null {
 }
 
 /**
- * Extracts the RECEBEDOR's agência / conta / banco / CNPJ. Receives the
- * recebedor-scoped text (from parsePixTedPage), so it never picks up the
- * pagador's account. Handles two layouts:
+ * Extracts the RECEBEDOR's agência / conta / banco / CNPJ. Handles the layouts:
  *   - Itaú PIX/TED combined "agência/conta: 0444/41193-8".
- *   - Bradesco "Dados da conta a ser creditada: … Agência: X Conta corrente: Y".
+ *   - Seção creditada: "Dados da conta a ser creditada:" (Bradesco/TED C junho),
+ *     "Dados da conta creditada:" (Itaú CC→CC julho) e "Dados da TED:" (TED C
+ *     "outra titularidade" julho) — separate Agência/Conta lines.
+ * `scoped` = the caller already cut the text at "dados do recebedor", so a
+ * whole-text fallback cannot see the pagador. When NOT scoped and no creditada
+ * section exists, agência/conta stay null — the only bare Agência/Conta on such
+ * pages is the PAGADOR's (VAMMO), which must never become a matching key.
  * A bank-masked CNPJ ("*****435000-**") or any non-11/14-digit partial yields
- * null — never a garbage key that could false-match (the old code leaked the
- * PAYER's agência/conta here, matching rent receipts on the wrong account).
+ * null — never a garbage key that could false-match.
  */
-function extractTedFields(text: string): {
+function extractTedFields(
+  text: string,
+  scoped: boolean,
+): {
   agencia: string | null;
   conta: string | null;
   banco: string | null;
@@ -182,18 +188,20 @@ function extractTedFields(text: string): {
   let agencia = combined ? digits(combined[1]) || null : null;
   let conta = combined ? digits(combined[2]) || null : null;
 
-  // Bradesco "Dados da conta a ser creditada:" section (separate Agência/Conta).
+  // Creditada/TED section (separate Agência/Conta lines).
   if (!agencia && !conta) {
     const sectionMatch = text.match(
-      /Dados da conta a ser creditada:([\s\S]*?)(?:Informa[çc][õo]es fornecidas|Transfer[êe]ncia realizada|Autentica[çc][ãa]o)/i,
+      /Dados da (?:conta (?:a ser )?creditada|TED)\s*:([\s\S]*?)(?:Informa[çc][õo]es fornecidas|Transfer[êe]ncia (?:realizada|efetuada)|TED solicitada|Autentica[çc][ãa]o)/i,
     );
-    const section = sectionMatch ? sectionMatch[1] : text;
-    agencia = digits(section.match(/Ag[eê]ncia\s*:?\s*([\d-]+)/i)?.[1] ?? null) || null;
-    const contaRaw =
-      section.match(/Conta\s*corrente\s*:?\s*([0-9\s-]+)/i)?.[1] ??
-      section.match(/Conta\s*:?\s*([0-9\s-]+)/i)?.[1] ??
-      null;
-    conta = digits(contaRaw) || null;
+    const section = sectionMatch ? sectionMatch[1] : scoped ? text : null;
+    if (section !== null) {
+      agencia = digits(section.match(/Ag[eê]ncia\s*:?\s*([\d-]+)/i)?.[1] ?? null) || null;
+      const contaRaw =
+        section.match(/Conta\s*corrente\s*:?\s*([0-9\s-]+)/i)?.[1] ??
+        section.match(/Conta\s*:?\s*([0-9\s-]+)/i)?.[1] ??
+        null;
+      conta = digits(contaRaw) || null;
+    }
   }
 
   const instMatch = text.match(/institui[çc][ãa]o\s*:?\s*([^\n]+)/i);
@@ -234,8 +242,15 @@ function parsePixTedPage(pageText: string, pageNumber: number): ParsedReceipt {
   if (tipoMatch) tipo = tipoMatch[1].trim();
   else if (/PIX/i.test(text)) tipo = "PIX";
   else if (/TRANSFER[ÊE]NCIA|TRANSFERENCIA/i.test(text)) tipo = "TRANSFERENCIA";
+  // Itaú "TED C – outra titularidade" has no tipo line — the title names it.
+  else if (/\bTED\b/.test(text)) tipo = "TRANSFERENCIA";
 
-  const valorMatch = text.match(/(?:Valor|Total|Quantia)\s*:?\s*R?\$?\s*([\d.,]+)/i);
+  // "Valor da TED:" / "Valor da transferência:" (qualificador exige o ":"),
+  // com o padrão n8n original como fallback (colon opcional) — zero regressão.
+  const valorMatch =
+    text.match(
+      /(?:Valor(?:\s+d[aoe]\s+[A-Za-zÀ-ú]+)?|Total|Quantia)\s*:\s*R?\$?\s*([\d.,]+)/i,
+    ) ?? text.match(/(?:Valor|Total|Quantia)\s*:?\s*R?\$?\s*([\d.,]+)/i);
   const amount = parseBrMoney(valorMatch?.[1] ?? null);
 
   const chave = extractChave(text);
@@ -244,7 +259,7 @@ function parsePixTedPage(pageText: string, pageNumber: number): ParsedReceipt {
 
   // Scope to the recebedor section so we read the RECEBEDOR's agência/conta/CNPJ,
   // never the pagador's (the pagador block precedes "dados do recebedor").
-  const ted = extractTedFields(text);
+  const ted = extractTedFields(text, markerIdx !== -1);
   // If the chave itself is a bare document, expose it for CNPJ matching too.
   const chaveDigits = chave ? chave.replace(/\D/g, "") : "";
   const cnpjFromChave =
