@@ -611,29 +611,51 @@ export async function ingestCobrancasPayload(
         stats.warnings.push("contagem de páginas falhou");
       }
     }
-    const inserted = await one<{ id: string }>(
-      admin
-        .from("documents")
-        .insert({
-          kind: DOCUMENT_KIND.boletoAluguel,
-          source: "email_ai",
-          drive_file_id: driveFileId,
-          drive_folder_kind: "other", // n8n's own archive folder
-          web_view_link: payload.web_view_link ?? payload.webViewLink ?? null,
-          original_filename: payload.nome_arquivo ?? null,
-          content_hash: v.sha256,
-          mime_type: "application/pdf",
-          byte_size: buffer.length,
-          email_message_id: gmailId,
-          page_count: pageCount,
-          processing_status: "processed",
-        })
-        .select("id")
-        .single(),
-      "documents insert",
-    );
-    if (!inserted) throw new CobrancasIngestError(500, "falha ao registrar o documento");
-    stats.documentId = inserted.id;
+    const { data: ins, error: insErr } = await admin
+      .from("documents")
+      .insert({
+        kind: DOCUMENT_KIND.boletoAluguel,
+        source: "email_ai",
+        drive_file_id: driveFileId,
+        drive_folder_kind: "other", // n8n's own archive folder
+        web_view_link: payload.web_view_link ?? payload.webViewLink ?? null,
+        original_filename: payload.nome_arquivo ?? null,
+        content_hash: v.sha256,
+        mime_type: "application/pdf",
+        byte_size: buffer.length,
+        email_message_id: gmailId,
+        page_count: pageCount,
+        processing_status: "processed",
+      })
+      .select("id")
+      .single();
+    if (insErr) {
+      // Concurrent POSTs of the same bytes (n8n fires items ~20ms apart) can
+      // both miss the SELECT and collide on the unique constraints — the loser
+      // reuses the winner's row (same fix as the comprovante upload, #41).
+      if (insErr.code === "23505") {
+        const winner = await one<{ id: string }>(
+          admin
+            .from("documents")
+            .select("id")
+            .or(`content_hash.eq.${v.sha256},drive_file_id.eq.${driveFileId}`)
+            .limit(1)
+            .maybeSingle(),
+          "documents dedup re-read",
+        );
+        if (winner) {
+          stats.documentId = winner.id;
+          stats.documentReused = true;
+        } else {
+          throw new CobrancasIngestError(500, `documents insert: ${insErr.message}`);
+        }
+      } else {
+        throw new CobrancasIngestError(500, `documents insert: ${insErr.message}`);
+      }
+    } else {
+      if (!ins) throw new CobrancasIngestError(500, "falha ao registrar o documento");
+      stats.documentId = (ins as { id: string }).id;
+    }
   }
   const documentId = stats.documentId as string;
 
