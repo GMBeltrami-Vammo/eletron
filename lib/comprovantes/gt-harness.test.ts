@@ -55,7 +55,9 @@ const MES: Record<string, string> = {
 };
 
 describe.runIf(fixturesExist)("GT harness — 05.06 comprovante vs gabarito", () => {
-  it("auto-matches the GT pages with ZERO wrong binds and ZERO wrong discards", async () => {
+  // Real 163-page PDF extraction — needs headroom when the suite runs in
+  // parallel under load (the 5s default flakes).
+  it("auto-matches the GT pages with ZERO wrong binds and ZERO wrong discards", { timeout: 60_000 }, async () => {
     const gt = JSON.parse(readFileSync(GT, "utf8")) as { payments: GtPayment[] };
     const rawPool = JSON.parse(readFileSync(POOL, "utf8")) as PoolRow[];
     const pool: PoolRow[] = rawPool.map((c) => ({
