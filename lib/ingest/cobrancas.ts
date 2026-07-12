@@ -148,7 +148,12 @@ export interface NormalizedCobranca {
   stationId: number | null;
   kind: ChargeKind;
   kindKnown: boolean;
-  /** 'YYYY-MM-01' or null (n8n already applied the day≤10 rule). */
+  /**
+   * 'YYYY-MM-01' or null. n8n's AI derives the fallback month from the
+   * vencimento with the canonical day-20 rule (decision #45 — same clock as
+   * the matcher's `pinnedCompetencia`); a competência stated in the document
+   * always wins over the fallback.
+   */
   competencia: string | null;
   valor: ParsedValorCell;
   parceiro: string | null;

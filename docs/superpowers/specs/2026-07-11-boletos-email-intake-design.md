@@ -1,8 +1,15 @@
 # Boletos por e-mail — intake, fila "A pagar" e conciliação ND↔banco
 
 Data: 2026-07-11.
-Status: design aprovado nas decisões-chave (proposta automática + confirmação humana; sem integração bancária; e-mails de teste virão com corpo); implementação aguarda os boletos de teste do Gabriel.
-Referências: decisões #27 (webhook de cobranças), #38 (aprendizado de remetente), #43/#44 (matcher GT-calibrado), n8n `boleto_aluguel` (context/boleto_aluguel.json).
+Status: design aprovado nas decisões-chave (proposta automática + confirmação humana; sem integração bancária; e-mails de teste virão com corpo; regra única de competência dia 20 — decisão #45); implementação aguarda os boletos de teste do Gabriel.
+Referências: decisões #27 (webhook de cobranças), #38 (aprendizado de remetente), #43/#44 (matcher GT-calibrado), #45 (competência dia 20), n8n `boleto_aluguel` (context/boleto_aluguel.json).
+
+## Regra de competência (decisão #45, confirmada)
+
+UMA regra para "a que mês pertence esta data": data em [20/MM, 20/MM+1) → competência MM.
+Vale para a data de pagamento (pin do matcher, #44) E para o fallback de classificação por vencimento (IA 2 do n8n, prompt v2).
+A competência declarada no documento sempre vence o fallback.
+App-side, a função canônica é `pinnedCompetencia` (lib/comprovantes/match.ts) — as Peças 1–2 reusam-na, nunca reimplementam.
 
 ## Problema
 
