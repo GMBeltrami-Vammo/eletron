@@ -262,10 +262,15 @@ export function normalizeCobranca(raw: RawCobranca): NormalizedCobranca {
  * with cadastro + competência claims the gerar_mes `pag:` key; everything else
  * gets the content-derived email key. `taken` tracks in-payload collisions —
  * the `#n` suffix is deterministic across re-deliveries of the same payload.
+ *
+ * `documentKey` MUST be the app's `documents.id` (content-hash-deduped), NEVER
+ * the payload's drive_file_id: n8n re-uploads the same PDF under a NEW Drive id
+ * on every redelivery, so a drive-based key would mint a duplicate charge per
+ * redelivery (live batch 2026-07-12: the same ORION boleto created twice).
  */
 export function cobrancaDedupeKey(
   c: NormalizedCobranca,
-  driveFileId: string,
+  documentKey: string,
   taken: Map<string, number>,
 ): string {
   const base =
@@ -274,7 +279,7 @@ export function cobrancaDedupeKey(
     c.cadastroId !== null &&
     c.competencia !== null
       ? `pag:${c.cadastroId}:${c.competencia.slice(0, 7)}:aluguel`
-      : `email:${driveFileId}:${c.kind}:${c.competencia?.slice(0, 7) ?? "na"}`;
+      : `email:${documentKey}:${c.kind}:${c.competencia?.slice(0, 7) ?? "na"}`;
   const count = (taken.get(base) ?? 0) + 1;
   taken.set(base, count);
   return count === 1 ? base : `${base}#${count}`;
@@ -668,7 +673,7 @@ export async function ingestCobrancasPayload(
       stats.warnings,
       senderStationId,
     );
-    const dedupeKey = cobrancaDedupeKey(c, driveFileId, taken);
+    const dedupeKey = cobrancaDedupeKey(c, documentId, taken);
 
     const existing = await one<ChargeRowLite>(
       admin
