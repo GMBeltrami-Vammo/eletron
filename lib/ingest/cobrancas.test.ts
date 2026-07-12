@@ -15,6 +15,7 @@ import {
   cobrancaDedupeKey,
   ingestCobrancasPayload,
   normalizeCobranca,
+  normalizeSender,
   parsePayload,
   type RawCobranca,
 } from "./cobrancas";
@@ -94,6 +95,37 @@ describe("normalizeCobranca", () => {
     );
     // genuinely off-length (5 digits) → null (keyed by name instead)
     expect(normalizeCobranca({ CNPJ: "12345" } as RawCobranca).cnpj).toBeNull();
+  });
+
+  it("parses the v2 Vencimento (ISO and pt-BR) into dueDate", () => {
+    expect(
+      normalizeCobranca({ Vencimento: "2026-07-08" } as RawCobranca).dueDate,
+    ).toBe("2026-07-08");
+    expect(
+      normalizeCobranca({ Vencimento: "8/7/2026" } as RawCobranca).dueDate,
+    ).toBe("2026-07-08");
+    expect(
+      normalizeCobranca({ Vencimento: "garbage" } as RawCobranca).dueDate,
+    ).toBeNull();
+    expect(normalizeCobranca({} as RawCobranca).dueDate).toBeNull();
+  });
+});
+
+describe("normalizeSender (multi-email + forwards internos)", () => {
+  it("takes the first EXTERNAL address from a ;-joined list", () => {
+    expect(
+      normalizeSender("cristiane@vibrapark.com.br; adm@vibrapark.com.br"),
+    ).toBe("cristiane@vibrapark.com.br");
+  });
+  it("never returns an internal @vammo.com forwarder", () => {
+    expect(normalizeSender("Gabriel <gabriel.beltrami@vammo.com>")).toBeNull();
+    expect(
+      normalizeSender("fabricio.cruz@vammo.com; locador@parceiro.com.br"),
+    ).toBe("locador@parceiro.com.br");
+  });
+  it("keeps the single-sender form working", () => {
+    expect(normalizeSender("Nome <a@b.com>")).toBe("a@b.com");
+    expect(normalizeSender("")).toBeNull();
   });
 });
 

@@ -81,6 +81,11 @@ const CobrancaSchema = z
     "Conta Corrente": strnum,
     "Chave Pix / Código do Boleto": strnum,
     "Chave Pix / Codigo do Boleto": strnum,
+    // v2 (spec 2026-07-11): due date for the "A pagar" queue + per-line ND
+    // reference for the banco proposals. Extra keys still flow into `raw`.
+    Vencimento: z.string().nullish(),
+    "Valor Documento": strnum,
+    "Referencia no Documento": z.string().nullish(),
   })
   .loose();
 
@@ -155,6 +160,8 @@ export interface NormalizedCobranca {
    * always wins over the fallback.
    */
   competencia: string | null;
+  /** Boleto due date 'YYYY-MM-DD' (v2 `Vencimento`) — drives the A-pagar queue. */
+  dueDate: string | null;
   valor: ParsedValorCell;
   parceiro: string | null;
   cnpj: string | null;
@@ -196,6 +203,17 @@ export function normalizeCobranca(raw: RawCobranca): NormalizedCobranca {
     str(raw.Ano),
   );
 
+  // v2 Vencimento: accept ISO 'YYYY-MM-DD' or pt-BR 'DD/MM/YYYY'.
+  const vencRaw = str(raw.Vencimento);
+  let dueDate: string | null = null;
+  {
+    const iso = vencRaw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const br = vencRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (iso) dueDate = vencRaw;
+    else if (br)
+      dueDate = `${br[3]}-${br[2].padStart(2, "0")}-${br[1].padStart(2, "0")}`;
+  }
+
   const payRaw = deaccent(str(raw["Tipo de Pagamento"]).toLowerCase());
   const paymentMethod: PaymentMethod | null =
     PAYMENT_METHOD_MAP[payRaw] ??
@@ -224,6 +242,7 @@ export function normalizeCobranca(raw: RawCobranca): NormalizedCobranca {
     kind,
     kindKnown: CHARGE_KIND_MAP[kindRaw] !== undefined,
     competencia,
+    dueDate,
     valor: parseValorCell(str(raw.Valor)),
     parceiro: str(raw.Parceiro) || null,
     cnpj,
@@ -287,6 +306,7 @@ interface ChargeRowLite {
   linha_digitavel: string | null;
   payment_method: string | null;
   email_sender: string | null;
+  due_date: string | null;
 }
 
 async function one<T>(
@@ -301,9 +321,19 @@ async function one<T>(
 /** "Name <a@b.com>" or a bare address → lowercased address (mirrors SQL normalize_sender). */
 export function normalizeSender(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const m = raw.match(/<([^>]+)>/);
-  const addr = (m ? m[1] : raw).trim().toLowerCase();
-  return addr || null;
+  // n8n may send a single "Name <a@b>" OR a ";/,"-joined list of the e-mails
+  // involved (body extraction). Internal forwards make @vammo.com addresses
+  // useless for sender→station matching/learning — take the FIRST external
+  // address; never store an internal one.
+  const parts = raw.split(/[;,]/);
+  for (const part of parts) {
+    const m = part.match(/<([^>]+)>/);
+    const addr = (m ? m[1] : part).trim().toLowerCase();
+    if (!addr || !addr.includes("@")) continue;
+    if (addr.endsWith("@vammo.com")) continue;
+    return addr;
+  }
+  return null;
 }
 
 /**
@@ -622,7 +652,7 @@ export async function ingestCobrancasPayload(
       admin
         .from("charges")
         .select(
-          "id, status, amount, expected_amount, flags, source_document_id, banco, agencia, conta, chave_pix, linha_digitavel, payment_method, email_sender",
+          "id, status, amount, expected_amount, flags, source_document_id, banco, agencia, conta, chave_pix, linha_digitavel, payment_method, email_sender, due_date",
         )
         .eq("dedupe_key", dedupeKey)
         .maybeSingle(),
@@ -632,15 +662,24 @@ export async function ingestCobrancasPayload(
     if (existing) {
       // CONVERGENCE (C1/H4): attach the document + fill empty payment fields;
       // only pendente advances to boleto_recebido; human amounts survive.
+      // A cloned charge may carry the sheet's combined "Chave Pix / Código do
+      // Boleto" cell in chave_pix — when that value is actually a linha
+      // digitável (≥30 digits), evict it so the boleto code lives only in
+      // linha_digitavel and chave_pix stays a real PIX key (or null).
+      const existingChaveIsLinha =
+        (existing.chave_pix ?? "").replace(/\D/g, "").length >= 30;
       const patch: Record<string, unknown> = {
         source_document_id: existing.source_document_id ?? documentId,
         banco: existing.banco ?? c.banco,
         agencia: existing.agencia ?? c.agencia,
         conta: existing.conta ?? c.conta,
-        chave_pix: existing.chave_pix ?? c.chavePix,
+        chave_pix: existingChaveIsLinha
+          ? (c.chavePix ?? null)
+          : (existing.chave_pix ?? c.chavePix),
         linha_digitavel: existing.linha_digitavel ?? c.linhaDigitavel,
         payment_method: existing.payment_method ?? c.paymentMethod,
         email_sender: existing.email_sender ?? senderEmail,
+        due_date: existing.due_date ?? c.dueDate,
       };
       // H4 idempotency (review fix): only flag needs_review on the FIRST/new
       // document attach to a non-terminal charge. A redelivery of the SAME
@@ -699,6 +738,8 @@ export async function ingestCobrancasPayload(
       linha_digitavel: c.linhaDigitavel,
       issuer_cnpj: c.cnpj,
       email_sender: senderEmail,
+      due_date: c.dueDate,
+      raw: c.raw,
       source: "email_ai",
       source_document_id: documentId,
       dedupe_key: dedupeKey,
