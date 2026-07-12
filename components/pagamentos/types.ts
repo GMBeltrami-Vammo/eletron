@@ -44,6 +44,10 @@ export interface PagamentoRow {
   status: ChargeStatus;
   paymentMethod: PaymentMethod | null;
   notaFiscal: string | null;
+  /** Boleto linha digitável — the copyable payment code of the A-pagar queue. */
+  linhaDigitavel: string | null;
+  /** PIX key — the copyable code when the charge is paid via PIX. */
+  chavePix: string | null;
   source: IngestSource;
   dedupeKey: string;
   notes: string | null;

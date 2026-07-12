@@ -124,3 +124,33 @@ export async function approveCobranca(
 ): Promise<ActionResult<string>> {
   return reclassifyCharge({ chargeId, kind });
 }
+
+export interface MergeChargesInput {
+  duplicateId: string;
+  targetId: string;
+  /** Which proposal tier fired — recorded in the audit detail. */
+  reason: string;
+}
+
+/**
+ * Unifica uma cobrança duplicada com a sobrevivente (Peça 2, spec 2026-07-11):
+ * a duplicada doa instrumento de pagamento/documento/vencimento ao alvo e vira
+ * `cancelada` (nunca deletada — trilha de auditoria + FKs RESTRICT).
+ */
+export async function mergeCharges(
+  input: MergeChargesInput,
+): Promise<ActionResult<null>> {
+  return withOperator(async (client) => {
+    unwrapRpc(
+      await client.rpc("merge_charge_into", {
+        p_duplicate_id: input.duplicateId,
+        p_target_id: input.targetId,
+        p_reason: input.reason,
+      }),
+    );
+    revalidatePath("/revisao/cobrancas");
+    revalidatePath("/pagamentos");
+    await revalidateSnapshot();
+    return null;
+  });
+}

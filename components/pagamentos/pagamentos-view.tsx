@@ -33,6 +33,7 @@ import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 import type { PagamentoRow, StationOption } from "./types";
+import { APagarPanel, isAPagar } from "./a-pagar-panel";
 import { GerarMesDialog } from "./gerar-mes-dialog";
 import { StatusActions } from "./status-actions";
 import { FlagBadges } from "./flag-badges";
@@ -516,6 +517,9 @@ export function PagamentosView({
     () => filtered.filter((r) => !isEnelEdp(r)),
     [filtered],
   );
+  // "A pagar" (spec 2026-07-11): every open charge across BOTH account types,
+  // due-date ordered inside the panel — the operational payables queue.
+  const aPagarRows = React.useMemo(() => filtered.filter(isAPagar), [filtered]);
 
   const columns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
     () => [
@@ -586,6 +590,12 @@ export function PagamentosView({
               {outrosRows.length}
             </span>
           </TabsTrigger>
+          <TabsTrigger value="a_pagar">
+            A pagar
+            <span className="rounded bg-muted px-1 text-xs tabular-nums">
+              {aPagarRows.length}
+            </span>
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="enel_edp">
           <LedgerPanel
@@ -602,6 +612,14 @@ export function PagamentosView({
             columns={columns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-aluguel-outros"
+            onRowClick={setDrawerRow}
+          />
+        </TabsContent>
+        <TabsContent value="a_pagar">
+          <APagarPanel
+            rows={aPagarRows}
+            monthLabel={monthLabel}
+            actionsColumn={columns[columns.length - 1]}
             onRowClick={setDrawerRow}
           />
         </TabsContent>

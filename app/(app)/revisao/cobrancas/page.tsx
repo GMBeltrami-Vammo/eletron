@@ -36,6 +36,7 @@ async function CobrancasContent() {
         rows={queue.rows}
         stations={queue.stations}
         cadastros={queue.cadastros}
+        mergeTargets={queue.mergeTargets}
         available={queue.available}
       />
     </div>

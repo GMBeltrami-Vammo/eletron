@@ -37,10 +37,30 @@ export interface ReviewChargeRow {
   chavePix: string | null;
   linhaDigitavel: string | null;
   notes: string | null;
+  /** Normalized sender (charges.email_sender) — merge-proposal signal (#38). */
+  emailSender: string | null;
   /** Linked email/bill document (for the PDF proxy viewer). */
   documentId: string | null;
   webViewLink: string | null;
   energyLineAmount: number | null;
+}
+
+/**
+ * A possible merge TARGET for a review-queue duplicate (spec 2026-07-11 Peça 2):
+ * an identified/settled charge sharing the duplicate's document, sender or CNPJ.
+ */
+export interface MergeTargetRow {
+  id: string;
+  dedupeKey: string;
+  kind: ChargeKind;
+  competencia: string | null;
+  amount: number | null;
+  status: ChargeStatus;
+  stationId: number | null;
+  stationName: string | null;
+  issuerCnpj: string | null;
+  emailSender: string | null;
+  sourceDocumentId: string | null;
 }
 
 export interface StationOption {
@@ -58,6 +78,8 @@ export interface ReviewQueueData {
   rows: ReviewChargeRow[];
   stations: StationOption[];
   cadastros: CadastroOption[];
+  /** Identified/settled charges that can absorb a review-queue duplicate. */
+  mergeTargets: MergeTargetRow[];
 }
 
 const EMPTY: ReviewQueueData = {
@@ -65,6 +87,7 @@ const EMPTY: ReviewQueueData = {
   rows: [],
   stations: [],
   cadastros: [],
+  mergeTargets: [],
 };
 const PAGE = 1000;
 
@@ -107,6 +130,7 @@ interface ChargeRow {
   chave_pix: string | null;
   linha_digitavel: string | null;
   notes: string | null;
+  email_sender: string | null;
   source_document_id: string | null;
 }
 
@@ -118,7 +142,7 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
       admin
         .from("charges")
         .select(
-          "id, kind, competencia, amount, expected_amount, status, match_status, due_date, source, dedupe_key, station_id, billing_account_id, issuer_cnpj, payment_method, banco, agencia, conta, chave_pix, linha_digitavel, notes, source_document_id",
+          "id, kind, competencia, amount, expected_amount, status, match_status, due_date, source, dedupe_key, station_id, billing_account_id, issuer_cnpj, payment_method, banco, agencia, conta, chave_pix, linha_digitavel, notes, email_sender, source_document_id",
         )
         .eq("match_status", "needs_review")
         .order("competencia", { ascending: false }),
@@ -247,6 +271,91 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
         parceiro: c.counterparty_id ? (cpName.get(c.counterparty_id) ?? null) : null,
       }));
 
+    // ── merge targets (spec 2026-07-11 Peça 2): identified/settled charges that
+    // share a review row's DOCUMENT, CNPJ or SENDER — candidates to absorb the
+    // duplicate. Volume is bounded by the review rows' own key sets.
+    const reviewIds = new Set(charges.map((c) => c.id));
+    const cnpjs = [
+      ...new Set(charges.map((c) => c.issuer_cnpj).filter((x): x is string => !!x)),
+    ];
+    const senders = [
+      ...new Set(charges.map((c) => c.email_sender).filter((x): x is string => !!x)),
+    ];
+    const comps = [
+      ...new Set(charges.map((c) => c.competencia).filter((x): x is string => !!x)),
+    ];
+    const targetSelect =
+      "id, dedupe_key, kind, competencia, amount, status, station_id, issuer_cnpj, email_sender, source_document_id";
+    interface TargetRow {
+      id: string;
+      dedupe_key: string;
+      kind: ChargeKind;
+      competencia: string | null;
+      amount: number | null;
+      status: ChargeStatus;
+      station_id: number | null;
+      issuer_cnpj: string | null;
+      email_sender: string | null;
+      source_document_id: string | null;
+    }
+    const targetById = new Map<string, TargetRow>();
+    const collectTargets = (rows2: TargetRow[]) => {
+      for (const t of rows2) {
+        if (!reviewIds.has(t.id)) targetById.set(t.id, t);
+      }
+    };
+    // Paginate every target read (readAll, PAGE=1000) — a common biller CNPJ or
+    // sender can map to more charges per competência than the PostgREST max-rows
+    // cap, and a silent truncation could collapse an ambiguous candidate set to
+    // a single false "confident" proposal (same discipline as scraper-feed.ts).
+    for (let i = 0; i < docIds.length; i += 200) {
+      const keys = docIds.slice(i, i + 200);
+      collectTargets(
+        await readAll<TargetRow>(() =>
+          admin.from("charges").select(targetSelect).in("source_document_id", keys),
+        ),
+      );
+    }
+    if (comps.length > 0) {
+      for (let i = 0; i < cnpjs.length; i += 200) {
+        const keys = cnpjs.slice(i, i + 200);
+        collectTargets(
+          await readAll<TargetRow>(() =>
+            admin
+              .from("charges")
+              .select(targetSelect)
+              .in("issuer_cnpj", keys)
+              .in("competencia", comps),
+          ),
+        );
+      }
+      for (let i = 0; i < senders.length; i += 200) {
+        const keys = senders.slice(i, i + 200);
+        collectTargets(
+          await readAll<TargetRow>(() =>
+            admin
+              .from("charges")
+              .select(targetSelect)
+              .in("email_sender", keys)
+              .in("competencia", comps),
+          ),
+        );
+      }
+    }
+    const mergeTargets: MergeTargetRow[] = [...targetById.values()].map((t) => ({
+      id: t.id,
+      dedupeKey: t.dedupe_key,
+      kind: t.kind,
+      competencia: t.competencia,
+      amount: t.amount,
+      status: t.status,
+      stationId: t.station_id,
+      stationName: t.station_id !== null ? (nameById.get(t.station_id) ?? null) : null,
+      issuerCnpj: t.issuer_cnpj,
+      emailSender: t.email_sender,
+      sourceDocumentId: t.source_document_id,
+    }));
+
     const rows: ReviewChargeRow[] = charges.map((c) => {
       const info = c.billing_account_id ? acctInfo.get(c.billing_account_id) : undefined;
       return {
@@ -272,6 +381,7 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
         chavePix: c.chave_pix,
         linhaDigitavel: c.linha_digitavel,
         notes: c.notes,
+        emailSender: c.email_sender,
         documentId: c.source_document_id,
         webViewLink: c.source_document_id
           ? (docLink.get(c.source_document_id) ?? null)
@@ -280,7 +390,7 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
       };
     });
 
-    return { available: true, rows, stations, cadastros };
+    return { available: true, rows, stations, cadastros, mergeTargets };
   } catch {
     return EMPTY;
   }

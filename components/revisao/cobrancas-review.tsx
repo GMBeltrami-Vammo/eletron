@@ -41,9 +41,12 @@ import type { ChargeKind, PaymentMethod } from "@/lib/domain";
 
 import type {
   CadastroOption,
+  MergeTargetRow,
   ReviewChargeRow,
   StationOption,
 } from "@/app/(app)/revisao/cobrancas/queries";
+import { buildUnifyProposals } from "./unify-proposals";
+import { UnifyProposalsPanel } from "./unify-proposals-panel";
 
 const KIND_OPTIONS: ChargeKind[] = ["aluguel", "energia", "aluguel_energia"];
 const PAYMENT_OPTIONS: PaymentMethod[] = [
@@ -66,15 +69,21 @@ export function CobrancasReview({
   rows,
   stations,
   cadastros,
+  mergeTargets,
   available,
 }: {
   rows: ReviewChargeRow[];
   stations: StationOption[];
   cadastros: CadastroOption[];
+  mergeTargets: MergeTargetRow[];
   available: boolean;
 }) {
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
   const { run, pending } = useRunAction();
+  const proposals = React.useMemo(
+    () => buildUnifyProposals(rows, mergeTargets),
+    [rows, mergeTargets],
+  );
 
   const columns = React.useMemo<ColumnDef<ReviewChargeRow, unknown>[]>(
     () => [
@@ -200,6 +209,7 @@ export function CobrancasReview({
 
   return (
     <>
+      <UnifyProposalsPanel proposals={proposals} available={available} />
       <DataTable
         columns={columns}
         data={rows}

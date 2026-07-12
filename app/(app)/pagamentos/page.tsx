@@ -92,6 +92,8 @@ function buildRows(
         status: charge.status,
         paymentMethod: charge.paymentMethod,
         notaFiscal: charge.notaFiscal,
+        linhaDigitavel: charge.linhaDigitavel,
+        chavePix: charge.chavePix,
         source: charge.source,
         dedupeKey: charge.dedupeKey,
         notes: charge.notes,
