@@ -11,12 +11,12 @@ import { DataTableSkeleton } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { getRepository } from "@/lib/data/repository.server";
-import { suggestStations, type GeoStation } from "@/lib/matching/suggest";
+import { suggestMatches, type GeoStation } from "@/lib/matching/suggest";
 
 export const metadata: Metadata = { title: "Instalações não vinculadas" };
 
 const DESCRIPTION =
-  "Instalações sem estação correspondente — sugestões geodésicas (como o match semanal) substituem o loop do Slack";
+  "Instalações sem estação correspondente — sugestões por distância (com coordenadas) ou por endereço (feed novo) substituem o loop do Slack";
 
 export default function InstalacoesPage() {
   return (
@@ -41,14 +41,18 @@ async function InstalacoesContent() {
     snapshot.utilityAccountStates.map((state) => [state.billingAccountId, state]),
   );
 
-  // station coordinates for the geodesic matcher (station lat/lon; skip nulls)
-  const geoStations: GeoStation[] = snapshot.stations.map((s) => ({
-    id: s.id,
-    name: s.name,
-    address: s.address,
-    lat: s.latitude,
-    lon: s.longitude,
-  }));
+  // suggestion pool — station coords + address; exclude hidden stations so a
+  // decluttered/decommissioned station is never proactively suggested (a human
+  // can still pick one via the "Outra" search, which keeps the full list).
+  const geoStations: GeoStation[] = snapshot.stations
+    .filter((s) => !s.hidden)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      address: s.address,
+      lat: s.latitude,
+      lon: s.longitude,
+    }));
   const stationChoices: StationChoice[] = snapshot.stations
     .map((s) => ({ id: s.id, name: s.name }))
     .sort((a, b) => a.id - b.id);
@@ -72,9 +76,12 @@ async function InstalacoesContent() {
         firstSeenAt: state?.firstSeenAt ?? null,
         scrapedAt: state?.scrapedAt ?? null,
         notes: account.notes,
-        suggestions: suggestStations(
-          state?.lat ?? null,
-          state?.lon ?? null,
+        suggestions: suggestMatches(
+          {
+            lat: state?.lat ?? null,
+            lon: state?.lon ?? null,
+            address: state?.address ?? null,
+          },
           geoStations,
           3,
         ),

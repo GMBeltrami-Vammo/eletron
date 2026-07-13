@@ -56,7 +56,7 @@ export function MatchActions({
   return (
     <div className="flex flex-col items-stretch gap-1.5">
       {suggestions.length === 0 ? (
-        <span className="text-xs text-muted-foreground">sem coordenadas</span>
+        <span className="text-xs text-muted-foreground">sem sugestão — busque a estação</span>
       ) : (
         suggestions.map((c) => (
           <button
@@ -64,6 +64,7 @@ export function MatchActions({
             type="button"
             disabled={pending}
             onClick={() => confirm(c.stationId, c.distanceM)}
+            title={c.address ?? undefined}
             className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-left text-xs hover:bg-accent disabled:opacity-50"
           >
             <MapPin className="size-3 shrink-0" strokeWidth={2} />
@@ -71,7 +72,9 @@ export function MatchActions({
               #{c.stationId} {c.stationName ?? ""}
             </span>
             <StatusBadge color={c.confidence === "high" ? "green" : "orange"}>
-              {Math.round(c.distanceM)} m
+              {c.method === "geo" && c.distanceM !== null
+                ? `${Math.round(c.distanceM)} m`
+                : `${Math.round((c.addressScore ?? 0) * 100)}%`}
             </StatusBadge>
             {c.autoMatch ? (
               <Check className="size-3 text-success-emphasis" strokeWidth={2.5} />
