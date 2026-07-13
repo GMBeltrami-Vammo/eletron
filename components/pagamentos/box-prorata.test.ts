@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeBoxDaysProrata } from "./box-prorata";
+import { computeBoxDaysProrata, inactivationFraction } from "./box-prorata";
 
 describe("computeBoxDaysProrata", () => {
   it("Gabriel's example: 3 boxes o mês todo + 3 ativados no dia 14 → 141/180", () => {
@@ -57,5 +57,20 @@ describe("computeBoxDaysProrata", () => {
     // (defensive) all present + a spurious extra → never > full price
     const r = computeBoxDaysProrata(["2026-01-01", "2026-01-01"], "2026-07")!;
     expect(r.fraction).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("inactivationFraction", () => {
+  it("day D → D/30 (active days 1..D)", () => {
+    expect(inactivationFraction(20)).toBeCloseTo(20 / 30, 6);
+    expect(inactivationFraction(1)).toBeCloseTo(1 / 30, 6);
+  });
+  it("caps at 1 for day ≥ 30", () => {
+    expect(inactivationFraction(30)).toBe(1);
+    expect(inactivationFraction(31)).toBe(1);
+  });
+  it("0 for a non-positive/invalid day", () => {
+    expect(inactivationFraction(0)).toBe(0);
+    expect(inactivationFraction(Number.NaN)).toBe(0);
   });
 });

@@ -69,3 +69,14 @@ export function computeBoxDaysProrata(
   const fraction = Math.min(1, boxDays / (PRORATA_BASE_DAYS * present));
   return { fraction, boxDays, presentBoxes: present };
 }
+
+/**
+ * Inactivation pro-rata (decisão #51): a contract inactivated on day D of its
+ * last month is billed for days 1..D → `valor_mensal × min(D/30, 1)`. Same /30
+ * base; overrides the box/station-creation pro-rata for that month. Mirrored by
+ * gerar_mes SQL (least(day/30, 1.0)).
+ */
+export function inactivationFraction(inactivationDay: number): number {
+  if (!Number.isFinite(inactivationDay) || inactivationDay <= 0) return 0;
+  return Math.min(inactivationDay / PRORATA_BASE_DAYS, 1);
+}

@@ -19,6 +19,36 @@ import { contractIntakePrefill, type ContractIntakePrefill } from "@/lib/ingest/
 import { normalizeCnpjCpf } from "@/lib/ingest/normalize";
 import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 
+/**
+ * "Contrato Ativo" toggle (#51): flip a contract ACTIVE↔INACTIVE. Inactivating
+ * records `inactivated_on` (defaults to today) so gerar_mes pro-ratas the last
+ * month. Human-only; any @vammo.com passes now (roles-per-action later).
+ */
+export async function setContractActive(input: {
+  contractId: string;
+  active: boolean;
+  /** 'YYYY-MM-DD'; only used when inactivating. Defaults to today server-side. */
+  inactivatedOn?: string | null;
+  reason?: string | null;
+  cadastroId?: number | null;
+}): Promise<ActionResult> {
+  return withOperator(async (client) => {
+    unwrapRpc(
+      await client.rpc("set_contract_active", {
+        p_contract_id: input.contractId,
+        p_active: input.active,
+        p_inactivated_on: input.active ? null : (input.inactivatedOn ?? null),
+        p_reason: input.reason ?? null,
+      }),
+    );
+    if (input.cadastroId != null) revalidatePath(`/alugueis/${input.cadastroId}`);
+    revalidatePath("/alugueis");
+    revalidatePath("/mensal");
+    revalidatePath("/pagamentos");
+    await revalidateSnapshot();
+  });
+}
+
 export async function setRentManual(input: {
   contractId: string;
   manual: boolean;
