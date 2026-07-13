@@ -16,6 +16,7 @@ import {
   Check,
   ExternalLink,
   FileText,
+  Mail,
   PencilLine,
   Send,
   Trash2,
@@ -149,7 +150,15 @@ export function EmailDocsPanel({
                       <ExternalLink className="size-3" strokeWidth={2} />
                     </a>
                   ) : null}
-                  {g.remetente ? (
+                  {g.addresses.length > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                      title={`Recebido via: ${g.addresses.join(", ")}`}
+                    >
+                      <Mail className="size-3.5 shrink-0" strokeWidth={2} />
+                      <span className="max-w-72 truncate">{g.addresses.join(", ")}</span>
+                    </span>
+                  ) : g.remetente ? (
                     <span className="max-w-56 truncate text-xs text-muted-foreground" title={g.remetente}>
                       {g.remetente}
                     </span>

@@ -83,6 +83,8 @@ export interface EmailDocGroup {
   filename: string | null;
   /** Normalized external sender of the first charge carrying one (#38). */
   remetente: string | null;
+  /** All e-mail addresses the document arrived through (#47 traceability). */
+  addresses: string[];
   /** documents.created_at — when the document entered the system. */
   receivedAt: string | null;
   /** dueDate asc, nulls last (operational urgency order). */
@@ -109,6 +111,7 @@ export function buildEmailDocGroups(rows: ReviewChargeRow[]): EmailDocGroup[] {
         documentId: r.documentId,
         filename: r.documentFilename,
         remetente: r.emailSender,
+        addresses: [...r.documentAddresses],
         receivedAt: r.documentCreatedAt,
         charges: [],
       };
@@ -117,6 +120,11 @@ export function buildEmailDocGroups(rows: ReviewChargeRow[]): EmailDocGroup[] {
     // first non-null sender wins (charges of one doc share the sender anyway)
     if (group.remetente === null && r.emailSender !== null) {
       group.remetente = r.emailSender;
+    }
+    // union addresses across the doc's charges (they share a document, so this
+    // is defensive — but keeps the header complete if rows ever disagree)
+    for (const a of r.documentAddresses) {
+      if (!group.addresses.includes(a)) group.addresses.push(a);
     }
     group.charges.push(r);
   }

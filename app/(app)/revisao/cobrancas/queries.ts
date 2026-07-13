@@ -48,6 +48,8 @@ export interface ReviewChargeRow {
   documentCreatedAt: string | null;
   /** documents.source — 'email_ai' marks an email-intake document. */
   documentSource: string | null;
+  /** All e-mail addresses the document arrived through (documents.email_context, #47). */
+  documentAddresses: string[];
   energyLineAmount: number | null;
 }
 
@@ -168,12 +170,13 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
       original_filename: string | null;
       created_at: string | null;
       source: string | null;
+      email_context: { addresses?: string[] } | null;
     }
     const docMeta = new Map<string, DocMetaRow>();
     for (let i = 0; i < docIds.length; i += 200) {
       const { data } = await admin
         .from("documents")
-        .select("id, web_view_link, original_filename, created_at, source")
+        .select("id, web_view_link, original_filename, created_at, source, email_context")
         .in("id", docIds.slice(i, i + 200));
       for (const d of (data ?? []) as DocMetaRow[]) {
         docMeta.set(d.id, d);
@@ -412,6 +415,15 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
         documentSource: c.source_document_id
           ? (docMeta.get(c.source_document_id)?.source ?? null)
           : null,
+        documentAddresses: c.source_document_id
+          ? // Array.isArray guards a hand-edited/legacy jsonb row (a non-array
+            // `addresses` would later crash .join / spread) — writers always
+            // produce string[], so this is pure defense.
+            (() => {
+              const a = docMeta.get(c.source_document_id)?.email_context?.addresses;
+              return Array.isArray(a) ? a : [];
+            })()
+          : [],
         energyLineAmount: energyByCharge.get(c.id) ?? null,
       };
     });

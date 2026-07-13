@@ -342,6 +342,92 @@ export function normalizeSender(raw: string | null | undefined): string | null {
 }
 
 /**
+ * ALL distinct addresses in the ";/,"-joined `remetente` list (sender +
+ * involved), lowercased, order-preserved — for document traceability (#47).
+ * Unlike normalizeSender this keeps @vammo.com forwards too: the point is the
+ * full provenance of who the API received the document through.
+ */
+export function parseInvolvedAddresses(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(/[;,]/)) {
+    const m = part.match(/<([^>]+)>/);
+    const addr = (m ? m[1] : part).trim().toLowerCase();
+    if (!addr || !addr.includes("@") || seen.has(addr)) continue;
+    seen.add(addr);
+    out.push(addr);
+  }
+  return out;
+}
+
+export interface DocumentEmailContext {
+  addresses: string[];
+  remetente_raw: string | null;
+}
+
+/** email_context for a document row from the webhook payload (null when no sender). */
+export function buildEmailContext(
+  remetente: string | null | undefined,
+): DocumentEmailContext | null {
+  const raw = cleanCell(remetente);
+  const addresses = parseInvolvedAddresses(raw);
+  if (addresses.length === 0 && !raw) return null;
+  return { addresses, remetente_raw: raw || null };
+}
+
+/**
+ * Pure union of an existing document email_context with an incoming one:
+ * accumulates addresses (order-preserved, deduped), keeps the first non-null
+ * remetente_raw. Returns null when there is nothing to change (so the caller
+ * can skip the UPDATE). Exported for unit testing.
+ */
+export function unionEmailContext(
+  existing: DocumentEmailContext | null,
+  incoming: DocumentEmailContext | null,
+): DocumentEmailContext | null {
+  if (!incoming) return null;
+  const base = existing?.addresses ?? [];
+  const merged = [...base];
+  const seen = new Set(base);
+  for (const a of incoming.addresses) {
+    if (!seen.has(a)) {
+      seen.add(a);
+      merged.push(a);
+    }
+  }
+  const remetente_raw = existing?.remetente_raw ?? incoming.remetente_raw ?? null;
+  const changed =
+    merged.length !== base.length || remetente_raw !== (existing?.remetente_raw ?? null);
+  if (!changed) return null;
+  return { addresses: merged, remetente_raw };
+}
+
+/**
+ * Best-effort merge of the incoming addresses into a reused document's
+ * email_context (same PDF redelivered from a new forward/address). Never fails
+ * ingest — a traceability update is not worth a 500.
+ */
+async function mergeDocumentEmailContext(
+  admin: ChargingClient,
+  documentId: string,
+  incoming: DocumentEmailContext | null,
+): Promise<void> {
+  if (!incoming) return;
+  try {
+    const row = await one<{ email_context: DocumentEmailContext | null }>(
+      admin.from("documents").select("email_context").eq("id", documentId).maybeSingle(),
+      "documents email_context read",
+    );
+    const next = unionEmailContext(row?.email_context ?? null, incoming);
+    if (!next) return;
+    await admin.from("documents").update({ email_context: next }).eq("id", documentId);
+  } catch {
+    /* traceability merge is best-effort */
+  }
+}
+
+/**
  * Resolves (or creates) the attribution account per H3. Returns nulls when
  * unattributable. `senderStationId` (feature B) is a learned sender→station
  * hint used only when the AI gave no station.
@@ -546,6 +632,8 @@ export async function ingestCobrancasPayload(
   // sender→station mapping. Stored on each charge; used to pre-fill the station
   // when the AI gave none. Mappings are LEARNED on human reclassify, never here.
   const senderEmail = normalizeSender(payload.remetente);
+  // Full involved-address list tagged to the document for traceability (#47).
+  const emailContext = buildEmailContext(payload.remetente);
   let senderStationId: number | null = null;
   if (senderEmail) {
     const senderRow = await one<{ station_id: number }>(
@@ -607,6 +695,9 @@ export async function ingestCobrancasPayload(
   if (existingDoc) {
     stats.documentId = existingDoc.id;
     stats.documentReused = true;
+    // same PDF redelivered (possibly from a new forward/address) — union the
+    // incoming addresses into the document's provenance, best-effort.
+    await mergeDocumentEmailContext(admin, existingDoc.id, emailContext);
   } else {
     let pageCount: number | null = null;
     try {
@@ -629,6 +720,7 @@ export async function ingestCobrancasPayload(
         mime_type: "application/pdf",
         byte_size: buffer.length,
         email_message_id: gmailId,
+        email_context: emailContext,
         page_count: pageCount,
         processing_status: "processed",
       })
@@ -651,6 +743,7 @@ export async function ingestCobrancasPayload(
         if (winner) {
           stats.documentId = winner.id;
           stats.documentReused = true;
+          await mergeDocumentEmailContext(admin, winner.id, emailContext);
         } else {
           throw new CobrancasIngestError(500, `documents insert: ${insErr.message}`);
         }

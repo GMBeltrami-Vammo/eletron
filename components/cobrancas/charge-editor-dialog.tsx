@@ -150,6 +150,15 @@ export function ChargeEditorDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
+        {row.documentAddresses.length > 0 ? (
+          <p
+            className="truncate text-xs text-muted-foreground"
+            title={`Recebido via: ${row.documentAddresses.join(", ")}`}
+          >
+            ✉ Recebido via: {row.documentAddresses.join(", ")}
+          </p>
+        ) : null}
+
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <Field label="Tipo de cobrança">
             <Select value={kind} onValueChange={(v) => setKind(v as ChargeKind)}>

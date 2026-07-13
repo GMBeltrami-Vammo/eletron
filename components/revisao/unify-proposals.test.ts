@@ -33,6 +33,7 @@ function dup(o: Partial<ReviewChargeRow>): ReviewChargeRow {
     documentFilename: null,
     documentCreatedAt: null,
     documentSource: "email_ai",
+    documentAddresses: [],
     energyLineAmount: null,
     ...o,
   };

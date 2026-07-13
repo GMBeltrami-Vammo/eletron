@@ -39,6 +39,7 @@ function row(o: Partial<ReviewChargeRow>): ReviewChargeRow {
     documentFilename: "boleto-junho.pdf",
     documentCreatedAt: "2026-07-12T16:33:00Z",
     documentSource: "email_ai",
+    documentAddresses: ["locador@exemplo.com"],
     energyLineAmount: null,
     ...o,
   };
@@ -153,6 +154,14 @@ describe("buildEmailDocGroups", () => {
       row({ id: "b", emailSender: "dia@dia.com.br" }),
     ]);
     expect(groups[0].remetente).toBe("dia@dia.com.br");
+  });
+
+  it("unions the involved addresses across the document's charges (#47)", () => {
+    const groups = buildEmailDocGroups([
+      row({ id: "a", documentAddresses: ["a@x.com", "shared@vammo.com"] }),
+      row({ id: "b", documentAddresses: ["b@y.com", "shared@vammo.com"] }),
+    ]);
+    expect(groups[0].addresses).toEqual(["a@x.com", "shared@vammo.com", "b@y.com"]);
   });
 });
 

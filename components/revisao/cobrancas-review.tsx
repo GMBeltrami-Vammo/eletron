@@ -93,6 +93,14 @@ export function CobrancasReview({
                   cadastro {r.cadastroId}
                 </span>
               ) : null}
+              {r.documentAddresses.length > 0 ? (
+                <span
+                  className="block truncate text-xs text-muted-foreground"
+                  title={`Recebido via: ${r.documentAddresses.join(", ")}`}
+                >
+                  ✉ {r.documentAddresses.join(", ")}
+                </span>
+              ) : null}
             </span>
           );
         },

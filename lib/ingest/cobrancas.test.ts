@@ -12,11 +12,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildEmailContext,
   cobrancaDedupeKey,
   ingestCobrancasPayload,
   normalizeCobranca,
   normalizeSender,
+  parseInvolvedAddresses,
   parsePayload,
+  unionEmailContext,
   type RawCobranca,
 } from "./cobrancas";
 
@@ -126,6 +129,56 @@ describe("normalizeSender (multi-email + forwards internos)", () => {
   it("keeps the single-sender form working", () => {
     expect(normalizeSender("Nome <a@b.com>")).toBe("a@b.com");
     expect(normalizeSender("")).toBeNull();
+  });
+});
+
+describe("parseInvolvedAddresses (#47 traceability)", () => {
+  it("keeps ALL addresses incl. @vammo.com, deduped + order-preserved", () => {
+    expect(
+      parseInvolvedAddresses(
+        "Fabricio <fabricio.cruz@vammo.com>; locador@parceiro.com.br, locador@parceiro.com.br",
+      ),
+    ).toEqual(["fabricio.cruz@vammo.com", "locador@parceiro.com.br"]);
+  });
+  it("returns [] for empty / address-less input", () => {
+    expect(parseInvolvedAddresses(null)).toEqual([]);
+    expect(parseInvolvedAddresses("sem email aqui")).toEqual([]);
+  });
+});
+
+describe("buildEmailContext", () => {
+  it("captures the full list + raw string", () => {
+    expect(buildEmailContext("a@x.com; b@y.com")).toEqual({
+      addresses: ["a@x.com", "b@y.com"],
+      remetente_raw: "a@x.com; b@y.com",
+    });
+  });
+  it("is null when there is no sender at all", () => {
+    expect(buildEmailContext(null)).toBeNull();
+    expect(buildEmailContext("   ")).toBeNull();
+  });
+});
+
+describe("unionEmailContext (redelivery provenance)", () => {
+  it("adds newly-seen addresses, keeps the original remetente_raw", () => {
+    const merged = unionEmailContext(
+      { addresses: ["a@x.com"], remetente_raw: "a@x.com" },
+      { addresses: ["a@x.com", "b@y.com"], remetente_raw: "b@y.com" },
+    );
+    expect(merged).toEqual({ addresses: ["a@x.com", "b@y.com"], remetente_raw: "a@x.com" });
+  });
+  it("returns null (skip the UPDATE) when nothing new arrives", () => {
+    expect(
+      unionEmailContext(
+        { addresses: ["a@x.com"], remetente_raw: "a@x.com" },
+        { addresses: ["a@x.com"], remetente_raw: "a@x.com" },
+      ),
+    ).toBeNull();
+  });
+  it("seeds from an empty/absent existing context", () => {
+    expect(
+      unionEmailContext(null, { addresses: ["a@x.com"], remetente_raw: "a@x.com" }),
+    ).toEqual({ addresses: ["a@x.com"], remetente_raw: "a@x.com" });
   });
 });
 
