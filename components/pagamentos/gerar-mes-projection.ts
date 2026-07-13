@@ -15,6 +15,7 @@ import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 import { num, type ChargingClient } from "@/lib/data/supabase-repository";
 import { CONTRACT_TYPE_UI } from "@/lib/labels";
 import { formatBRL } from "@/lib/format";
+import { computeBoxDaysProrata } from "./box-prorata";
 import type {
   GerarMesPreviewRow,
   GerarMesProjection,
@@ -42,6 +43,8 @@ interface StationRow {
   active_boxes: number | null;
   boxes_synced_at: string | null;
   source_created_at: string | null;
+  /** BRT activation dates of active boxes (#50) — one per box, or null. */
+  box_activations: (string | null)[] | null;
 }
 
 const PAGE = 1000;
@@ -100,7 +103,7 @@ export async function computeGerarMesProjection(
   const stationRows = await readAll<StationRow>(() =>
     admin
       .from("stations")
-      .select("id, name, active_boxes, boxes_synced_at, source_created_at")
+      .select("id, name, active_boxes, boxes_synced_at, source_created_at, box_activations")
       .order("id", { ascending: true }),
   );
   const existing = await readAll<{ dedupe_key: string }>(() =>
@@ -207,22 +210,37 @@ export async function computeGerarMesProjection(
       continue;
     }
 
-    // M5 pro-rata: station created within the competência month.
-    if (station?.source_created_at) {
-      const created = new Date(station.source_created_at);
-      if (
-        created.getUTCFullYear() === month.getUTCFullYear() &&
-        created.getUTCMonth() === month.getUTCMonth()
-      ) {
-        const createdDay = created.getUTCDate();
-        if (createdDay >= 5) {
-          const prorata = Math.max((30 - createdDay + 1) / 30, 1 / 30);
-          amount = Math.round(amount * prorata * 100) / 100;
-          flags.push("new_station", "pro_rata");
-          formulaBody += ` × (30−${createdDay}+1)/30 = ${formatBRL(amount)}`;
-        } else {
-          flags.push("new_station");
+    // new_station (informational): station created within the competência month.
+    const createdInMonth =
+      station?.source_created_at != null &&
+      new Date(station.source_created_at).getUTCFullYear() ===
+        month.getUTCFullYear() &&
+      new Date(station.source_created_at).getUTCMonth() === month.getUTCMonth();
+    if (createdInMonth) flags.push("new_station");
+
+    // box-day pro-rata (decisão #50) — box-priced contracts with box data;
+    // supersedes the station-creation pro-rata. Mirrors the SQL / box-prorata.ts.
+    let usedBoxProrata = false;
+    if (c.contract_type === "por_box" || c.contract_type === "por_box_minimo") {
+      const basis = computeBoxDaysProrata(station?.box_activations ?? null, monthYm);
+      if (basis) {
+        usedBoxProrata = true;
+        if (basis.fraction < 1) {
+          amount = Math.round(amount * basis.fraction * 100) / 100;
+          flags.push("pro_rata");
+          formulaBody += ` × ${basis.boxDays}/(30×${basis.presentBoxes}) box-dia = ${formatBRL(amount)}`;
         }
+      }
+    }
+
+    // station-creation pro-rata (M5) — fixo, or por_box without box data.
+    if (!usedBoxProrata && createdInMonth && station?.source_created_at) {
+      const createdDay = new Date(station.source_created_at).getUTCDate();
+      if (createdDay >= 5) {
+        const prorata = Math.max((30 - createdDay + 1) / 30, 1 / 30);
+        amount = Math.round(amount * prorata * 100) / 100;
+        flags.push("pro_rata");
+        formulaBody += ` × (30−${createdDay}+1)/30 = ${formatBRL(amount)}`;
       }
     }
 

@@ -35,6 +35,8 @@ interface StationCardRow {
 
 interface BoxCardRow {
   station_id?: number | string | null;
+  /** fa.first_active_ts — when this box first went active (drives box-day pro-rata). */
+  first_active_ts?: string | null;
 }
 
 export interface MetabaseSyncResult {
@@ -57,6 +59,19 @@ function toStationId(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : parseInt(String(v), 10);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * A box's first_active_ts → its BRT calendar date 'YYYY-MM-DD' (or null). We
+ * store the BRT *date* so the box-day pro-rata (gerar_mes SQL + the TS preview)
+ * is timezone-free and provably identical between the two. `en-CA` formats as
+ * YYYY-MM-DD.
+ */
+function toBrtDate(ts: string | null | undefined): string | null {
+  if (!ts) return null;
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
 
 /** POSTs a Metabase card query and returns its JSON rows. */
@@ -94,12 +109,16 @@ export async function runMetabaseSync(opts: {
       fetchCard<BoxCardRow>(BOXES_CARD_ID),
     ]);
 
-    // Boxes card = one row per installed box; count per station (A5 parity).
-    const boxesByStation = new Map<number, number>();
+    // Boxes card = one row per active box. Collect each station's box activation
+    // dates (BRT); the count is just the array length. Full-replaced each run,
+    // so removed boxes drop out (no stale entries) — decision #50.
+    const boxActivationsByStation = new Map<number, (string | null)[]>();
     for (const row of boxRows) {
       const id = toStationId(row.station_id);
       if (id === null) continue;
-      boxesByStation.set(id, (boxesByStation.get(id) ?? 0) + 1);
+      const arr = boxActivationsByStation.get(id) ?? [];
+      arr.push(toBrtDate(row.first_active_ts));
+      boxActivationsByStation.set(id, arr);
     }
 
     // Existing station ids (paginated — H3 discipline).
@@ -124,11 +143,13 @@ export async function runMetabaseSync(opts: {
     for (const row of stationRows) {
       const id = toStationId(row.station_id);
       if (id === null) continue;
+      const activations = boxActivationsByStation.get(id) ?? [];
       const patch = {
         name: row.swap_station_name ?? null,
         address: row.address ?? null,
         status: mapStatus(row.status),
-        active_boxes: boxesByStation.get(id) ?? 0,
+        active_boxes: activations.length,
+        box_activations: activations,
         boxes_synced_at: now,
         synced_at: now,
       };
