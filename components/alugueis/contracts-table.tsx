@@ -1,17 +1,32 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle, Power } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import { formatBRL } from "@/lib/format";
+import { useRunAction } from "@/components/comprovantes/write-helpers";
+import { setContractActive } from "@/app/actions/contracts";
+import { formatBRL, formatDate } from "@/lib/format";
 import {
   ALERT_TYPE_UI,
   CONTRACT_TYPE_UI,
   PAYMENT_METHOD_LABEL,
-  STATION_STATUS_UI,
 } from "@/lib/labels";
 import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 
@@ -20,6 +35,8 @@ import { type ContractEndInfo } from "./contract-utils";
 /** Plain-JSON row precomputed on the server (page.tsx). */
 export interface ContractRow {
   cadastroId: number | null;
+  /** Postgres uuid (resolved from cadastro_id); null → toggle read-only. */
+  contractId: string | null;
   stationId: number | null;
   /** stationId points at a station that exists in the snapshot. */
   stationExists: boolean;
@@ -31,6 +48,12 @@ export interface ContractRow {
   dueDay: number | null;
   paymentMethod: PaymentMethod | null;
   status: StationStatus | null;
+  /** Station's own status (for the "sugerir inativar" signal). */
+  stationStatus: StationStatus | null;
+  /** Metabase active boxes (for the reactivate/inactivate signals). */
+  activeBoxes: number | null;
+  /** contracts.inactivated_on — shown when Inativo, drives last-month pro-rata. */
+  inactivatedOn: string | null;
   startsOn: string | null;
   endsOn: string | null;
   endInfo: ContractEndInfo | null;
@@ -39,6 +62,145 @@ export interface ContractRow {
   email: string | null;
   /** Masked on the server — full document never reaches the list. */
   cnpjCpfMasked: string | null;
+}
+
+function todayIso(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Editable "Contrato Ativo" cell (#51): Ativo/Inativo badge + toggle. Only
+ * Ativos entram no gerar-mês; ao inativar, grava a data (pró-rata do último
+ * mês). Sinais: sugerir inativar (estação Decommissioned + 0 boxes) e o aviso
+ * CRÍTICO de reativar (Inativo mas com boxes ativos). Humano-only (qualquer
+ * @vammo.com por ora).
+ */
+function ContratoAtivoCell({ row }: { row: ContractRow }) {
+  const { run, pending } = useRunAction();
+  const [dialog, setDialog] = React.useState<null | "inativar" | "reativar">(null);
+  const [date, setDate] = React.useState(todayIso());
+  const [reason, setReason] = React.useState("");
+
+  const isActive = row.status === "ACTIVE";
+  const boxes = row.activeBoxes ?? 0;
+  const suggestInactivate =
+    isActive && row.stationStatus === "DECOMMISSIONED" && boxes === 0;
+  const reactivateCritical = !isActive && boxes > 0;
+  const canToggle = row.contractId !== null;
+
+  function submit(active: boolean) {
+    void run(
+      () =>
+        setContractActive({
+          contractId: row.contractId as string,
+          active,
+          inactivatedOn: active ? null : date,
+          reason: reason || null,
+          cadastroId: row.cadastroId,
+        }),
+      { success: active ? "Contrato reativado" : "Contrato inativado" },
+    ).then((ok) => {
+      if (ok) {
+        setDialog(null);
+        setReason("");
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1.5">
+        <StatusBadge color={isActive ? "green" : "grey"}>
+          {isActive ? "Ativo" : "Inativo"}
+        </StatusBadge>
+        {canToggle ? (
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              setDate(todayIso());
+              setDialog(isActive ? "inativar" : "reativar");
+            }}
+          >
+            <Power className="size-3" strokeWidth={2} />
+            {isActive ? "Inativar" : "Reativar"}
+          </Button>
+        ) : null}
+      </div>
+
+      {!isActive && row.inactivatedOn ? (
+        <span className="text-xs text-muted-foreground">
+          desde {formatDate(row.inactivatedOn)}
+        </span>
+      ) : null}
+
+      {reactivateCritical ? (
+        <span className="inline-flex items-center gap-1 rounded-md bg-error-subtle px-1.5 py-0.5 text-xs font-medium text-error-emphasis">
+          <AlertTriangle className="size-3.5" strokeWidth={2.5} />
+          Reativar — {boxes} box ativo(s)
+        </span>
+      ) : null}
+      {suggestInactivate ? (
+        <span className="inline-flex items-center gap-1 text-xs text-warning-emphasis">
+          <AlertTriangle className="size-3" strokeWidth={2} />
+          sugerir inativar (estação desativada, 0 box)
+        </span>
+      ) : null}
+
+      {dialog ? (
+        <Dialog open onOpenChange={(o) => !o && setDialog(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {dialog === "inativar" ? "Inativar contrato" : "Reativar contrato"}
+              </DialogTitle>
+              <DialogDescription>
+                {dialog === "inativar"
+                  ? "O contrato sai do gerar-mês; o último mês é cobrado pró-rata até a data de inativação."
+                  : "O contrato volta a ser cobrado no gerar-mês."}
+              </DialogDescription>
+            </DialogHeader>
+            {dialog === "inativar" ? (
+              <div className="space-y-3 py-1">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    Data de inativação
+                  </Label>
+                  <Input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Motivo (opcional)</Label>
+                  <Textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    rows={2}
+                  />
+                </div>
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialog(null)} disabled={pending}>
+                Cancelar
+              </Button>
+              <Button
+                variant={dialog === "inativar" ? "destructive" : "default"}
+                disabled={pending}
+                onClick={() => submit(dialog === "reativar")}
+              >
+                {dialog === "inativar" ? "Inativar" : "Reativar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  );
 }
 
 const columns: ColumnDef<ContractRow, unknown>[] = [
@@ -95,6 +257,12 @@ const columns: ColumnDef<ContractRow, unknown>[] = [
       row.original.parceiro ?? (
         <span className="text-muted-foreground">—</span>
       ),
+  },
+  {
+    id: "contratoAtivo",
+    header: "Contrato ativo",
+    accessorFn: (r) => (r.status === "ACTIVE" ? "Ativo" : "Inativo"),
+    cell: ({ row }) => <ContratoAtivoCell row={row.original} />,
   },
   {
     id: "tipo",
@@ -156,17 +324,6 @@ const columns: ColumnDef<ContractRow, unknown>[] = [
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
-  },
-  {
-    id: "status",
-    header: "Status",
-    accessorFn: (r) => (r.status ? STATION_STATUS_UI[r.status].label : ""),
-    cell: ({ row }) => {
-      const status = row.original.status;
-      if (!status) return <span className="text-muted-foreground">—</span>;
-      const ui = STATION_STATUS_UI[status];
-      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
-    },
   },
   {
     id: "contactName",

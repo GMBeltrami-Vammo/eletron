@@ -16,6 +16,7 @@ import {
   type ContractRow,
 } from "@/components/alugueis/contracts-table";
 import { getRepository } from "@/lib/data/repository.server";
+import { readContractRefs } from "@/lib/data/contract-refs";
 
 export const metadata = { title: "Aluguéis" };
 
@@ -41,9 +42,10 @@ export default function AlugueisPage() {
 
 async function ContractsSection() {
   const repo = getRepository();
-  const [snapshot, contracts] = await Promise.all([
+  const [snapshot, contracts, contractRefs] = await Promise.all([
     repo.getSnapshot(),
     repo.getContracts(),
+    readContractRefs(),
   ]);
   const now = new Date();
   const stationById = new Map(snapshot.stations.map((s) => [s.id, s]));
@@ -59,8 +61,11 @@ async function ContractsSection() {
     const counterparty = contract.counterpartyId
       ? (counterpartyById.get(contract.counterpartyId) ?? null)
       : null;
+    const ref =
+      contract.cadastroId !== null ? contractRefs.get(contract.cadastroId) : undefined;
     return {
       cadastroId: contract.cadastroId,
+      contractId: ref?.uuid ?? null,
       stationId: contract.stationId,
       stationExists: station !== undefined,
       stationName: station?.name ?? null,
@@ -71,6 +76,9 @@ async function ContractsSection() {
       dueDay: contract.dueDay,
       paymentMethod: contract.paymentMethod,
       status: contract.status,
+      stationStatus: station?.status ?? null,
+      activeBoxes: station?.activeBoxes ?? null,
+      inactivatedOn: ref?.inactivatedOn ?? null,
       startsOn: contract.startsOn,
       endsOn: contract.endsOn,
       endInfo: contractEndInfo(contract.endsOn, now),
