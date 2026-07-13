@@ -17,7 +17,7 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   /** key into the badge-counts object served by the layout */
-  badgeKey?: "revisao" | "alertas";
+  badgeKey?: "revisao" | "alertas" | "pagamentos";
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -25,7 +25,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/energia", label: "Energia", icon: Zap },
   { href: "/alugueis", label: "Aluguéis", icon: Home },
   { href: "/mensal", label: "Mensal", icon: CalendarRange },
-  { href: "/pagamentos", label: "Pagamentos", icon: Receipt },
+  // pagamentos badge = documentos de e-mail pendentes de análise (#47)
+  { href: "/pagamentos", label: "Pagamentos", icon: Receipt, badgeKey: "pagamentos" },
   { href: "/comprovantes", label: "Comprovantes", icon: FileCheck },
   { href: "/leituras", label: "Leituras", icon: Camera },
   { href: "/revisao", label: "Revisão", icon: Inbox, badgeKey: "revisao" },
@@ -33,4 +34,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Configurações", icon: Settings2 },
 ];
 
-export type NavBadgeCounts = Partial<Record<"revisao" | "alertas", number>>;
+export type NavBadgeCounts = Partial<
+  Record<"revisao" | "alertas" | "pagamentos", number>
+>;

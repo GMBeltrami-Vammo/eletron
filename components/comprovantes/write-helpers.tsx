@@ -29,13 +29,16 @@ export function useRunAction() {
   const run = React.useCallback(
     async <T,>(
       action: () => Promise<ActionResult<T>>,
-      opts: { success: string; invalidate?: QueryKey[] },
+      // success may derive from the action's data (e.g. "N descartadas")
+      opts: { success: string | ((data: T) => string); invalidate?: QueryKey[] },
     ): Promise<boolean> => {
       setPending(true);
       try {
         const res = await action();
         if (res.ok) {
-          toast.success(opts.success);
+          toast.success(
+            typeof opts.success === "function" ? opts.success(res.data) : opts.success,
+          );
           opts.invalidate?.forEach((queryKey) =>
             queryClient.invalidateQueries({ queryKey }),
           );

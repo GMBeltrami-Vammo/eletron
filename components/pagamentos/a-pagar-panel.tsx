@@ -54,13 +54,13 @@ export function aPagarSort(a: PagamentoRow, b: PagamentoRow): number {
   return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
 }
 
-function daysUntil(iso: string, todayIso: string): number {
+export function daysUntil(iso: string, todayIso: string): number {
   const d = new Date(`${iso}T00:00:00`);
   const t = new Date(`${todayIso}T00:00:00`);
   return Math.round((d.getTime() - t.getTime()) / 86_400_000);
 }
 
-function VencimentoCell({
+export function VencimentoCell({
   dueDate,
   todayIso,
 }: {

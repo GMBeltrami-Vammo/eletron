@@ -33,7 +33,10 @@ import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 import type { PagamentoRow, StationOption } from "./types";
+import type { ReviewQueueData } from "@/app/(app)/revisao/cobrancas/queries";
 import { APagarPanel, isAPagar } from "./a-pagar-panel";
+import { EmailDocsPanel } from "./email-docs-panel";
+import { isEmailDocRow, isStagedEmailCharge } from "./email-docs-groups";
 import { GerarMesDialog } from "./gerar-mes-dialog";
 import { StatusActions } from "./status-actions";
 import { FlagBadges } from "./flag-badges";
@@ -471,27 +474,39 @@ function LedgerPanel({
 export function PagamentosView({
   rows,
   stations,
+  review,
   canWrite,
   isAdmin,
 }: {
   rows: PagamentoRow[];
   /** Station options for the "Nova cobrança manual" picker. */
   stations: StationOption[];
+  /** needs_review queue data — feeds the "Documentos de e-mail" staging tab. */
+  review: ReviewQueueData;
   /** operator or admin — enables Gerar mês + lifecycle actions. */
   canWrite: boolean;
   /** admin — additionally enables the "Cancelada" transition. */
   isAdmin: boolean;
 }) {
+  // Staging exclusion (decisão #47): webhook-created cobranças stay OUT of the
+  // ledger tabs (Enel/EDP, Locação, A pagar) and their KPIs/month picker until
+  // a human approves them in the Documentos de e-mail tab. Single choke point —
+  // everything below derives from ledgerRows.
+  const ledgerRows = React.useMemo(
+    () => rows.filter((r) => !isStagedEmailCharge(r)),
+    [rows],
+  );
+
   const months = React.useMemo(() => {
     const set = new Set<string>();
-    for (const r of rows) {
+    for (const r of ledgerRows) {
       if (r.competencia) set.add(r.competencia.slice(0, 7));
     }
     return [...set].sort().reverse();
-  }, [rows]);
+  }, [ledgerRows]);
   const hasNoCompetencia = React.useMemo(
-    () => rows.some((r) => r.competencia === null),
-    [rows],
+    () => ledgerRows.some((r) => r.competencia === null),
+    [ledgerRows],
   );
 
   // Default to all months: energy competências are frozen (decision #25) while
@@ -502,10 +517,18 @@ export function PagamentosView({
   const [drawerRow, setDrawerRow] = React.useState<PagamentoRow | null>(null);
 
   const filtered = React.useMemo(() => {
-    if (month === "all") return rows;
-    if (month === "none") return rows.filter((r) => r.competencia === null);
-    return rows.filter((r) => r.competencia?.slice(0, 7) === month);
-  }, [rows, month]);
+    if (month === "all") return ledgerRows;
+    if (month === "none") return ledgerRows.filter((r) => r.competencia === null);
+    return ledgerRows.filter((r) => r.competencia?.slice(0, 7) === month);
+  }, [ledgerRows, month]);
+
+  // The staging tab deliberately IGNORES the month picker: it's a review queue,
+  // not a ledger slice — and its count must equal the sidebar badge
+  // (countEmailDocPending applies the same isEmailDocRow predicate).
+  const emailRows = React.useMemo(
+    () => review.rows.filter(isEmailDocRow),
+    [review.rows],
+  );
 
   const isEnelEdp = (r: PagamentoRow) =>
     r.accountType === "energy_enel" || r.accountType === "energy_edp";
@@ -596,6 +619,16 @@ export function PagamentosView({
               {aPagarRows.length}
             </span>
           </TabsTrigger>
+          <TabsTrigger value="email_docs">
+            Documentos de e-mail
+            {emailRows.length > 0 ? (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--badge-red-bg)] px-1.5 text-[11px] font-semibold leading-5 text-[var(--badge-red-text)] tabular-nums">
+                {emailRows.length > 99 ? "99+" : emailRows.length}
+              </span>
+            ) : (
+              <span className="rounded bg-muted px-1 text-xs tabular-nums">0</span>
+            )}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="enel_edp">
           <LedgerPanel
@@ -622,6 +655,9 @@ export function PagamentosView({
             actionsColumn={columns[columns.length - 1]}
             onRowClick={setDrawerRow}
           />
+        </TabsContent>
+        <TabsContent value="email_docs">
+          <EmailDocsPanel review={review} emailRows={emailRows} canWrite={canWrite} />
         </TabsContent>
       </Tabs>
 

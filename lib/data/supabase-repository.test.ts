@@ -107,10 +107,12 @@ describe("sync ↔ repository round-trip over the real fixtures", () => {
   const validStation = (id: number | null): number | null =>
     id !== null && stationIds.has(id) ? id : null;
 
+  // Explicit timeout: the xlsx fixture load flakes past the 10s hook default
+  // under OneDrive rehydration / suite load (GT-harness precedent, 76c7060).
   beforeAll(async () => {
     snapshot = normalizeSnapshot(await loadRawTabsFromFixtures());
     stationIds = new Set(snapshot.stations.map((s) => s.id));
-  });
+  }, 60_000);
 
   it("reconstructs every counterparty id from its written row", () => {
     for (const cp of snapshot.counterparties) {

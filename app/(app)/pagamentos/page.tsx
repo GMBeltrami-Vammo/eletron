@@ -17,6 +17,7 @@ import {
 import { resolveDocumentHref } from "@/lib/data/document-href";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
+import { readReviewQueue } from "@/app/(app)/revisao/cobrancas/queries";
 import { readChargeRefs, type ChargeRef } from "./charge-refs";
 
 export const metadata: Metadata = { title: "Pagamentos — Eletron" };
@@ -140,7 +141,14 @@ async function PagamentosContent() {
     );
   }
 
-  const [refs, links] = await Promise.all([readChargeRefs(), readPaymentLinks()]);
+  // review feeds the "Documentos de e-mail" staging tab (#47); it degrades to
+  // {available:false} without Supabase env — the staging exclusion reads
+  // matchStatus/source from the SNAPSHOT rows, so hidden stays hidden anyway.
+  const [refs, links, review] = await Promise.all([
+    readChargeRefs(),
+    readPaymentLinks(),
+    readReviewQueue(),
+  ]);
 
   const stations = snapshot.stations
     .map((s) => ({ id: s.id, name: s.name }))
@@ -150,6 +158,7 @@ async function PagamentosContent() {
     <PagamentosView
       rows={buildRows(snapshot, refs, links)}
       stations={stations}
+      review={review}
       canWrite={viewer.role !== null}
       isAdmin={viewer.role === "admin"}
     />

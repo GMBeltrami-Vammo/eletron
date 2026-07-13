@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { getRepository } from "@/lib/data/repository.server";
 import { IRREGULARITY_ALERT_TYPES } from "@/lib/ingest/derive";
 import { countPendingContractIntakes } from "./revisao/contratos/queries";
+import { countEmailDocPending } from "./revisao/cobrancas/queries";
 import { Providers } from "@/components/providers";
 import { AppSidebar } from "@/components/vammo/sidebar";
 import { MobileNav } from "@/components/vammo/mobile-nav";
@@ -26,11 +27,13 @@ export const dynamic = "force-dynamic";
 async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
   try {
     const repo = getRepository();
-    const [alerts, irregularities, pendingContratos] = await Promise.all([
-      repo.getAlerts(),
-      repo.getIrregularities(),
-      countPendingContractIntakes(),
-    ]);
+    const [alerts, irregularities, pendingContratos, emailDocPending] =
+      await Promise.all([
+        repo.getAlerts(),
+        repo.getIrregularities(),
+        countPendingContractIntakes(),
+        countEmailDocPending(),
+      ]);
     return {
       // Join irregularities live in /revisão, not the /alertas badge.
       alertas: alerts.filter(
@@ -41,6 +44,9 @@ async function loadBadgeCounts(): Promise<NavBadgeCounts | undefined> {
         irregularities.unmatchedAccounts.length +
         irregularities.unmatchedCharges.length +
         pendingContratos,
+      // documentos de e-mail aguardando análise (#47) — same isEmailDocRow
+      // predicate as the /pagamentos tab, so badge and tab never drift.
+      pagamentos: emailDocPending,
     };
   } catch {
     return undefined;

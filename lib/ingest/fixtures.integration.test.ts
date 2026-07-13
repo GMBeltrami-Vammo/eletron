@@ -15,10 +15,13 @@ import type { RawTabs } from "./raw-tabs";
 let raw: RawTabs;
 let snapshot: DomainSnapshot;
 
+// Explicit timeout: the xlsx fixture load flakes past the 10s hook default
+// when OneDrive is rehydrating context/ or the suite runs under load (same
+// class as the GT-harness fix, commit 76c7060).
 beforeAll(async () => {
   raw = await loadRawTabsFromFixtures();
   snapshot = normalizeSnapshot(raw);
-});
+}, 60_000);
 
 describe("fixtures loader", () => {
   it("loads all nine tabs with the expected row counts", () => {
@@ -410,12 +413,14 @@ describe("SheetSnapshotRepository over the fixtures", () => {
     () => NOW,
   );
 
+  // 60s: the FIRST repo call in this describe pays the lazy xlsx fixture load,
+  // which flakes past the 5s default under OneDrive/suite load (76c7060 class).
   it("getStations returns one rollup per station", async () => {
     const rollups = await repo.getStations();
     expect(rollups).toHaveLength(300);
     const s553 = rollups.find((r) => r.stationId === 553);
     expect(s553?.sources.enel).toBe(3);
-  });
+  }, 60_000);
 
   it("getStation(553) assembles the 360° object", async () => {
     const station360 = await repo.getStation(553);

@@ -30,6 +30,9 @@ function dup(o: Partial<ReviewChargeRow>): ReviewChargeRow {
     emailSender: null,
     documentId: "doc-1",
     webViewLink: null,
+    documentFilename: null,
+    documentCreatedAt: null,
+    documentSource: "email_ai",
     energyLineAmount: null,
     ...o,
   };

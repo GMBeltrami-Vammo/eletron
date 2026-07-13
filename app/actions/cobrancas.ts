@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 
 import { revalidateSnapshot } from "@/lib/data/repository.server";
 import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
+import type { UserClient } from "@/lib/http/guards";
 import type { ChargeKind, PaymentMethod } from "@/lib/domain";
 
 export interface ReclassifyInput {
@@ -21,6 +22,8 @@ export interface ReclassifyInput {
   kind: ChargeKind;
   /** 'YYYY-MM' or 'YYYY-MM-DD'; null = leave unchanged. */
   competencia?: string | null;
+  /** 'YYYY-MM-DD'; null = leave unchanged (RPC coalesces). */
+  dueDate?: string | null;
   amount?: number | null;
   expectedAmount?: number | null;
   /** Energia split amount → a single `energia` charge_line (null = no split). */
@@ -82,32 +85,11 @@ export async function reclassifyCharge(
         p_chave_pix: input.chavePix ?? null,
         p_codigo_boleto: input.codigoBoleto ?? null,
         p_notes: input.notes ?? null,
+        p_due_date: input.dueDate ?? null,
       }),
     ) as string;
 
-    // Teach-on-reclassify (feature B): if this cobrança carries an email sender
-    // and now resolves to a station, learn the sender→station mapping so the
-    // next boleto from that sender pre-matches. Best-effort — a teach failure
-    // must not fail the reclassify.
-    try {
-      const { data: after } = await client
-        .from("charges")
-        .select("email_sender, station_id")
-        .eq("id", chargeId)
-        .maybeSingle();
-      const row = after as {
-        email_sender: string | null;
-        station_id: number | null;
-      } | null;
-      if (row?.email_sender && row.station_id !== null) {
-        await client.rpc("set_station_sender", {
-          p_sender_email: row.email_sender,
-          p_station_id: row.station_id,
-        });
-      }
-    } catch {
-      /* teaching is best-effort */
-    }
+    await teachSenderStation(client, chargeId);
 
     revalidatePath("/revisao/cobrancas");
     revalidatePath("/pagamentos");
@@ -117,12 +99,124 @@ export async function reclassifyCharge(
   });
 }
 
+/**
+ * Teach-on-reclassify (feature B, decisão #38): if the cobrança carries an
+ * email sender and now resolves to a station, learn the sender→station mapping
+ * so the next boleto from that sender pre-matches. Best-effort — a teach
+ * failure must never fail the approve/reclassify that triggered it.
+ */
+async function teachSenderStation(client: UserClient, chargeId: string): Promise<void> {
+  try {
+    const { data: after } = await client
+      .from("charges")
+      .select("email_sender, station_id")
+      .eq("id", chargeId)
+      .maybeSingle();
+    const row = after as {
+      email_sender: string | null;
+      station_id: number | null;
+    } | null;
+    if (row?.email_sender && row.station_id !== null) {
+      await client.rpc("set_station_sender", {
+        p_sender_email: row.email_sender,
+        p_station_id: row.station_id,
+      });
+    }
+  } catch {
+    /* teaching is best-effort */
+  }
+}
+
 /** "Aprovar como está" — accept the current classification, clearing needs_review. */
 export async function approveCobranca(
   chargeId: string,
   kind: ChargeKind,
 ): Promise<ActionResult<string>> {
   return reclassifyCharge({ chargeId, kind });
+}
+
+/**
+ * Bulk approve for the Documentos de e-mail tab (#47): one JWT mint, then the
+ * same reclassify_charge the per-row "Aprovar" uses (all patch params null →
+ * approve-as-is), continuing past failures (precedent: resolveReceiptGroup,
+ * decisão #43). Sender→station teaching runs per approved charge (#38).
+ */
+export async function approveCobrancas(
+  items: { chargeId: string; kind: ChargeKind }[],
+): Promise<ActionResult<{ approved: number; failed: number; firstError: string | null }>> {
+  return withOperator(async (client) => {
+    let approved = 0;
+    let failed = 0;
+    let firstError: string | null = null;
+    for (const item of items) {
+      try {
+        unwrapRpc(
+          await client.rpc("reclassify_charge", {
+            p_charge_id: item.chargeId,
+            p_kind: item.kind,
+            p_competencia: null,
+            p_amount: null,
+            p_expected_amount: null,
+            p_lines: null,
+            p_cadastro_id: null,
+            p_station_id: null,
+            p_counterparty_name: null,
+            p_counterparty_cnpj: null,
+            p_payment_method: null,
+            p_banco: null,
+            p_agencia: null,
+            p_conta: null,
+            p_chave_pix: null,
+            p_codigo_boleto: null,
+            p_notes: null,
+            p_due_date: null,
+          }),
+        );
+        approved += 1;
+        await teachSenderStation(client, item.chargeId);
+      } catch (err) {
+        failed += 1;
+        // keep the FIRST RPC message — the pt-BR reason the human needs
+        if (firstError === null) {
+          firstError = err instanceof Error ? err.message : String(err);
+        }
+      }
+    }
+    // every charge failed → the whole action is an error (red toast with the
+    // real RPC reason), not a green success reading "0 enviadas"
+    if (approved === 0 && failed > 0) {
+      throw new Error(firstError ?? "nenhuma cobrança pôde ser enviada");
+    }
+    revalidatePath("/revisao/cobrancas");
+    revalidatePath("/pagamentos");
+    revalidatePath("/energia");
+    await revalidateSnapshot();
+    return { approved, failed, firstError };
+  });
+}
+
+/**
+ * "Descartar" (#47): retires webhook-created staging rows via the set-based
+ * discard_charges RPC (source='email_ai' only; skip-not-error). Returns how
+ * many were actually discarded — the UI warns when it's less than requested
+ * (row already resolved in another session).
+ */
+export async function discardCharges(input: {
+  chargeIds: string[];
+  reason: string;
+}): Promise<ActionResult<number>> {
+  return withOperator(async (client) => {
+    const count = unwrapRpc(
+      await client.rpc("discard_charges", {
+        p_charge_ids: input.chargeIds,
+        p_reason: input.reason,
+      }),
+    ) as number;
+    revalidatePath("/revisao/cobrancas");
+    revalidatePath("/pagamentos");
+    await revalidateSnapshot();
+    return count;
+  });
 }
 
 export interface MergeChargesInput {

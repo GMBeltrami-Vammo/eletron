@@ -12,6 +12,7 @@ import "server-only";
  */
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isEmailDocRow } from "@/components/pagamentos/email-docs-groups";
 import type { ChargeKind, ChargeStatus, MatchStatus, PaymentMethod } from "@/lib/domain";
 
 export interface ReviewChargeRow {
@@ -42,6 +43,11 @@ export interface ReviewChargeRow {
   /** Linked email/bill document (for the PDF proxy viewer). */
   documentId: string | null;
   webViewLink: string | null;
+  /** Document metadata for the Documentos de e-mail group headers (#47). */
+  documentFilename: string | null;
+  documentCreatedAt: string | null;
+  /** documents.source — 'email_ai' marks an email-intake document. */
+  documentSource: string | null;
   energyLineAmount: number | null;
 }
 
@@ -145,21 +151,32 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
           "id, kind, competencia, amount, expected_amount, status, match_status, due_date, source, dedupe_key, station_id, billing_account_id, issuer_cnpj, payment_method, banco, agencia, conta, chave_pix, linha_digitavel, notes, email_sender, source_document_id",
         )
         .eq("match_status", "needs_review")
-        .order("competencia", { ascending: false }),
+        // id tiebreaker: competencia is non-unique — without it the paginated
+        // .range() windows have unstable order and can skip/duplicate rows
+        .order("competencia", { ascending: false })
+        .order("id", { ascending: true }),
     );
 
-    // linked documents (PDF proxy) — only for charges that have one
+    // linked documents (PDF proxy + group-header metadata) — only for charges
+    // that have one
     const docIds = [
       ...new Set(charges.map((c) => c.source_document_id).filter((x): x is string => !!x)),
     ];
-    const docLink = new Map<string, string | null>();
+    interface DocMetaRow {
+      id: string;
+      web_view_link: string | null;
+      original_filename: string | null;
+      created_at: string | null;
+      source: string | null;
+    }
+    const docMeta = new Map<string, DocMetaRow>();
     for (let i = 0; i < docIds.length; i += 200) {
       const { data } = await admin
         .from("documents")
-        .select("id, web_view_link")
+        .select("id, web_view_link, original_filename, created_at, source")
         .in("id", docIds.slice(i, i + 200));
-      for (const d of (data ?? []) as { id: string; web_view_link: string | null }[]) {
-        docLink.set(d.id, d.web_view_link);
+      for (const d of (data ?? []) as DocMetaRow[]) {
+        docMeta.set(d.id, d);
       }
     }
 
@@ -384,7 +401,16 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
         emailSender: c.email_sender,
         documentId: c.source_document_id,
         webViewLink: c.source_document_id
-          ? (docLink.get(c.source_document_id) ?? null)
+          ? (docMeta.get(c.source_document_id)?.web_view_link ?? null)
+          : null,
+        documentFilename: c.source_document_id
+          ? (docMeta.get(c.source_document_id)?.original_filename ?? null)
+          : null,
+        documentCreatedAt: c.source_document_id
+          ? (docMeta.get(c.source_document_id)?.created_at ?? null)
+          : null,
+        documentSource: c.source_document_id
+          ? (docMeta.get(c.source_document_id)?.source ?? null)
           : null,
         energyLineAmount: energyByCharge.get(c.id) ?? null,
       };
@@ -393,5 +419,58 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
     return { available: true, rows, stations, cadastros, mergeTargets };
   } catch {
     return EMPTY;
+  }
+}
+
+/**
+ * Pending count for the Documentos de e-mail badge (sidebar + tab, #47).
+ * MUST count exactly what the tab lists — it applies the same `isEmailDocRow`
+ * predicate over a skinny read (the review queue is human-sized; two cheap
+ * round-trips). try/catch → 0: a badge must never break the app shell.
+ */
+export async function countEmailDocPending(): Promise<number> {
+  try {
+    const admin = supabaseAdmin();
+    const rows = await readAll<{
+      id: string;
+      source: string;
+      status: string;
+      source_document_id: string | null;
+    }>(() =>
+      admin
+        .from("charges")
+        .select("id, source, status, source_document_id")
+        .eq("match_status", "needs_review")
+        // stable pagination — unordered .range() windows can skip/duplicate
+        .order("id", { ascending: true }),
+    );
+
+    const docIds = [
+      ...new Set(rows.map((r) => r.source_document_id).filter((x): x is string => !!x)),
+    ];
+    const docSource = new Map<string, string | null>();
+    for (let i = 0; i < docIds.length; i += 200) {
+      const { data } = await admin
+        .from("documents")
+        .select("id, source")
+        .in("id", docIds.slice(i, i + 200));
+      for (const d of (data ?? []) as { id: string; source: string | null }[]) {
+        docSource.set(d.id, d.source);
+      }
+    }
+
+    return rows.filter((r) =>
+      isEmailDocRow({
+        matchStatus: "needs_review",
+        source: r.source,
+        status: r.status,
+        documentId: r.source_document_id,
+        documentSource: r.source_document_id
+          ? (docSource.get(r.source_document_id) ?? null)
+          : null,
+      }),
+    ).length;
+  } catch {
+    return 0;
   }
 }
