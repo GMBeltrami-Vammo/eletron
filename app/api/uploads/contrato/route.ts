@@ -9,6 +9,12 @@
  * → `pending`. Returns `{ intakeId, documentId, pageCount }`; the /alugueis/novo
  * page polls the intake until the extraction arrives.
  *
+ * `mode=manual` (form field) skips the AI wait entirely (#48 follow-up): the
+ * intake is staged directly as `pending` with an empty extraction so the form
+ * is editable at once — for binding a PDF to a station without processing. The
+ * PDF still lands in the same folder, so n8n may extract it too; the manual
+ * confirm ignores that (it sends the human's field values).
+ *
  * Bound by Vercel's ~4.5 MB request-body cap (a contract PDF is small); the
  * client dropzone rejects larger files before the POST.
  */
@@ -61,6 +67,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return json({ error: "arquivo ausente" }, 400);
+  // manual mode → stage the intake ready to fill (pending); default → wait for
+  // the n8n AI extraction (awaiting_extraction).
+  const desiredStatus =
+    form.get("mode") === "manual" ? "pending" : "awaiting_extraction";
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const v = validateUpload(
@@ -81,16 +91,11 @@ export async function POST(req: Request): Promise<NextResponse> {
       .maybeSingle();
     if (dup) {
       const documentId = (dup as { id: string }).id;
-      const intake = await existingIntakeFor(admin, documentId);
-      if (intake) {
-        return json(
-          { intakeId: intake.id, documentId, status: intake.status, deduplicated: true },
-          200,
-        );
-      }
-      // document exists but no intake yet — stage one against it
-      const intakeId = await stageIntake(admin, documentId, null, file.name);
-      return json({ intakeId, documentId, status: "awaiting_extraction", deduplicated: true }, 200);
+      const staged = await stageIntake(admin, documentId, null, file.name, desiredStatus);
+      return json(
+        { intakeId: staged.id, documentId, status: staged.status, deduplicated: true },
+        200,
+      );
     }
 
     let pageCount: number | null = null;
@@ -139,11 +144,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           .maybeSingle();
         if (won) {
           const documentId = (won as { id: string }).id;
-          const intake =
-            (await existingIntakeFor(admin, documentId)) ??
-            ({ id: await stageIntake(admin, documentId, null, file.name), status: "awaiting_extraction" } as const);
+          const staged = await stageIntake(admin, documentId, null, file.name, desiredStatus);
           return json(
-            { intakeId: intake.id, documentId, status: intake.status, deduplicated: true },
+            { intakeId: staged.id, documentId, status: staged.status, deduplicated: true },
             200,
           );
         }
@@ -151,9 +154,16 @@ export async function POST(req: Request): Promise<NextResponse> {
       return json({ error: `falha ao registrar o contrato: ${error.message}` }, 500);
     }
     const documentId = (docIns as { id: string }).id;
-    const intakeId = await stageIntake(admin, documentId, uploaded.fileId, file.name, uploaded.webViewLink);
+    const staged = await stageIntake(
+      admin,
+      documentId,
+      uploaded.fileId,
+      file.name,
+      desiredStatus,
+      uploaded.webViewLink,
+    );
 
-    return json({ intakeId, documentId, status: "awaiting_extraction", pageCount }, 201);
+    return json({ intakeId: staged.id, documentId, status: staged.status, pageCount }, 201);
   } catch (err) {
     return json(
       { error: err instanceof Error ? err.message : "falha no upload do contrato" },
@@ -163,18 +173,32 @@ export async function POST(req: Request): Promise<NextResponse> {
 }
 
 /**
- * Stages an `awaiting_extraction` intake for a freshly-uploaded contract, unless
- * one already exists for the document (idempotent). Returns the intake id.
+ * Stages an intake for a freshly-uploaded contract, unless one already exists
+ * for the document (idempotent — the unique index on document_id makes the
+ * insert race safe). `desiredStatus` is 'awaiting_extraction' (wait for n8n) or
+ * 'pending' (manual mode, fillable now). If the doc already has an awaiting
+ * intake and manual is requested, it is promoted to pending so it can be
+ * filled without the AI. Returns the intake id + its effective status.
  */
 async function stageIntake(
   admin: ReturnType<typeof supabaseAdmin>,
   documentId: string,
   driveFileId: string | null,
   nomeArquivo: string,
+  desiredStatus: "awaiting_extraction" | "pending",
   webViewLink: string | null = null,
-): Promise<string> {
+): Promise<{ id: string; status: string }> {
   const existing = await existingIntakeFor(admin, documentId);
-  if (existing) return existing.id;
+  if (existing) {
+    if (desiredStatus === "pending" && existing.status === "awaiting_extraction") {
+      await admin
+        .from("contract_intake")
+        .update({ status: "pending" })
+        .eq("id", existing.id);
+      return { id: existing.id, status: "pending" };
+    }
+    return { id: existing.id, status: existing.status };
+  }
   const { data, error } = await admin
     .from("contract_intake")
     .insert({
@@ -182,16 +206,16 @@ async function stageIntake(
       drive_file_id: driveFileId,
       web_view_link: webViewLink,
       nome_arquivo: nomeArquivo,
-      ai_extraction: {}, // filled by the n8n POST; awaiting until then
-      status: "awaiting_extraction",
+      ai_extraction: {}, // manual fills it by hand; awaiting-mode by the n8n POST
+      status: desiredStatus,
     })
     .select("id")
     .single();
   if (error) {
-    // a concurrent stage (double-submit / n8n-first) won the document_id — reuse it
+    // lost the document_id unique race (double-submit / n8n-first) — reuse winner
     const won = await existingIntakeFor(admin, documentId);
-    if (won) return won.id;
+    if (won) return { id: won.id, status: won.status };
     throw new Error(`contract_intake stage: ${error.message}`);
   }
-  return (data as { id: string }).id;
+  return { id: (data as { id: string }).id, status: desiredStatus };
 }

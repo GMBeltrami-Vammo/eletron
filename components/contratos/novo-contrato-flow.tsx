@@ -54,16 +54,25 @@ type Phase =
   | { kind: "done" }
   | { kind: "error"; message: string };
 
+export type ContratoMode = "extract" | "manual";
+
 export function NovoContratoFlow({
   stations,
   canWrite,
+  initialMode = "extract",
+  initialStationId = null,
 }: {
   stations: StationOption[];
   canWrite: boolean;
+  /** 'manual' = fill the form immediately (skip the AI extraction wait). */
+  initialMode?: ContratoMode;
+  /** Pre-select this station in manual mode (e.g. deep-linked from a station). */
+  initialStationId?: number | null;
 }) {
   const [phase, setPhase] = React.useState<Phase>({ kind: "idle" });
   const [item, setItem] = React.useState<UploadItem | null>(null);
   const [slow, setSlow] = React.useState(false);
+  const [mode, setMode] = React.useState<ContratoMode>(initialMode);
 
   async function upload(file: File) {
     setItem({ id: file.name, file, state: { status: "uploading", progress: 0 } });
@@ -71,6 +80,7 @@ export function NovoContratoFlow({
     try {
       const body = new FormData();
       body.set("file", file);
+      body.set("mode", mode);
       const res = await fetch("/api/uploads/contrato", { method: "POST", body });
       const data = (await res.json()) as {
         intakeId?: string;
@@ -126,7 +136,9 @@ export function NovoContratoFlow({
           kind: "ready",
           intakeId: awaitingIntakeId as string,
           documentId: r.documentId,
-          prefill: r.prefill,
+          // manual mode arrives with an empty prefill — seed the deep-linked
+          // station so the human starts on the right one
+          prefill: { ...r.prefill, swapStationId: r.prefill.swapStationId ?? initialStationId },
           nomeArquivo: r.nomeArquivo,
         });
       } else if (r.status === "confirmed") {
@@ -144,7 +156,7 @@ export function NovoContratoFlow({
       cancelled = true;
       clearInterval(id);
     };
-  }, [awaitingIntakeId, awaitingSince]);
+  }, [awaitingIntakeId, awaitingSince, initialStationId]);
 
   if (!canWrite) {
     return (
@@ -222,16 +234,45 @@ export function NovoContratoFlow({
   }
 
   // idle / uploading / awaiting / error — the drop + progress card
+  const isManual = mode === "manual";
   return (
     <Card className="max-w-2xl">
       <CardHeader>
         <CardTitle>Enviar contrato</CardTitle>
         <CardDescription>
-          Solte o PDF do contrato. Ele vai para o Drive e é extraído
-          automaticamente; em seguida você revisa e confirma aqui mesmo.
+          {isManual
+            ? "Solte o PDF e preencha os dados do contrato na hora, sem esperar a extração — para vincular rápido um contrato a uma estação."
+            : "Solte o PDF do contrato. Ele vai para o Drive e é extraído automaticamente; em seguida você revisa e confirma aqui mesmo."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {phase.kind === "idle" ? (
+          <div className="inline-flex rounded-lg border border-border p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setMode("extract")}
+              className={
+                mode === "extract"
+                  ? "rounded-md bg-accent px-3 py-1.5 font-medium text-vammo-blue"
+                  : "rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground"
+              }
+            >
+              Extrair com IA
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("manual")}
+              className={
+                mode === "manual"
+                  ? "rounded-md bg-accent px-3 py-1.5 font-medium text-vammo-blue"
+                  : "rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground"
+              }
+            >
+              Preencher manualmente
+            </button>
+          </div>
+        ) : null}
+
         <ol className="space-y-3">
           <Step
             icon={FileUp}
@@ -240,7 +281,7 @@ export function NovoContratoFlow({
           />
           <Step
             icon={ScanText}
-            title="Extração por IA"
+            title={isManual ? "Preencher os dados" : "Extração por IA"}
             state={
               phase.kind === "awaiting"
                 ? "current"
@@ -249,7 +290,7 @@ export function NovoContratoFlow({
                   : "done"
             }
             hint={
-              phase.kind === "awaiting"
+              phase.kind === "awaiting" && !isManual
                 ? slow
                   ? "Está demorando mais que o normal — pode deixar aberto ou conferir depois em Revisão › Contratos."
                   : "Processando o documento…"
@@ -272,7 +313,11 @@ export function NovoContratoFlow({
         {phase.kind === "uploading" || phase.kind === "awaiting" ? (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-3 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" strokeWidth={2} />
-            {phase.kind === "uploading" ? "Enviando o PDF…" : "Aguardando a extração da IA…"}
+            {phase.kind === "uploading"
+              ? "Enviando o PDF…"
+              : isManual
+                ? "Preparando o formulário…"
+                : "Aguardando a extração da IA…"}
           </div>
         ) : null}
 

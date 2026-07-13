@@ -10,7 +10,16 @@ import type { StationOption } from "@/app/(app)/revisao/contratos/queries";
 
 export const metadata = { title: "Novo contrato" };
 
-export default async function NovoContratoPage() {
+export default async function NovoContratoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string; station?: string }>;
+}) {
+  const sp = await searchParams;
+  const initialMode = sp.mode === "manual" ? "manual" : "extract";
+  const stationParam = sp.station ? Number.parseInt(sp.station, 10) : NaN;
+  const initialStationId = Number.isInteger(stationParam) ? stationParam : null;
+
   const viewer = await getViewer();
   // Station picker options come from the cached snapshot (canonical station
   // list, decision #28 — the app attaches to existing stations, never creates).
@@ -36,7 +45,12 @@ export default async function NovoContratoPage() {
           </Button>
         }
       />
-      <NovoContratoFlow stations={stations} canWrite={viewer.role !== null} />
+      <NovoContratoFlow
+        stations={stations}
+        canWrite={viewer.role !== null}
+        initialMode={initialMode}
+        initialStationId={initialStationId}
+      />
     </div>
   );
 }
