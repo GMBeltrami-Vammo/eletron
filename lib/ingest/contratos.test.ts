@@ -280,6 +280,31 @@ describe("ingestContratoPayload", () => {
     expect(store.contract_intake[0].contract_id).toBe("contract-1");
   });
 
+  it("promotes an app-staged awaiting_extraction intake to pending (#48 app-drop flow)", async () => {
+    const store: Record<string, Row[]> = {
+      documents: [],
+      contract_intake: [],
+      audit_events: [],
+    };
+    // simulate the app upload: a document + an empty awaiting_extraction intake
+    // already exist for this content when n8n's extraction POST arrives.
+    await ingestContratoPayload(fakeClient(store), payload(), DOWNLOAD);
+    const docId = store.documents[0].id;
+    store.contract_intake[0].status = "awaiting_extraction";
+    store.contract_intake[0].ai_extraction = {};
+
+    const r2 = await ingestContratoPayload(fakeClient(store), payload(), DOWNLOAD);
+
+    expect(store.contract_intake).toHaveLength(1); // same document → reused
+    expect(r2.intakeReused).toBe(true);
+    expect(r2.status).toBe("pending"); // flipped by the extraction
+    const intake = store.contract_intake[0];
+    expect(intake.status).toBe("pending");
+    expect(intake.document_id).toBe(docId);
+    // the extraction now fills what the app left empty
+    expect((intake.ai_extraction as Row).parceiro_locador).toBe("Imobiliária Teste");
+  });
+
   it("throws a 422 when drive_file_id is missing", async () => {
     const store: Record<string, Row[]> = { documents: [], contract_intake: [], audit_events: [] };
     await expect(

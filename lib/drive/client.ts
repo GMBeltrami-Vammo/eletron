@@ -36,6 +36,9 @@ export function driveFolderId(kind: DriveFolderKind): string {
     meter_photos: "DRIVE_METER_PHOTOS_FOLDER_ID",
     comprovantes: "DRIVE_COMPROVANTES_FOLDER_ID",
     bills: "DRIVE_BILLS_FOLDER_ID",
+    // env lookup only — documents.drive_folder_kind still stores 'other' (the
+    // DB enum has no 'contratos' value; #48 avoids an enum migration).
+    contratos: "DRIVE_CONTRATOS_FOLDER_ID",
     other: "",
   };
   const envName = envByKind[kind];

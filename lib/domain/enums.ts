@@ -244,6 +244,7 @@ export const DRIVE_FOLDER_KIND = {
   meterPhotos: "meter_photos",
   comprovantes: "comprovantes",
   bills: "bills",
+  contratos: "contratos",
   other: "other",
 } as const;
 export type DriveFolderKind = (typeof DRIVE_FOLDER_KIND)[keyof typeof DRIVE_FOLDER_KIND];

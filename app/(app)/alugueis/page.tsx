@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,10 @@ export default function AlugueisPage() {
         title="Aluguéis"
         description="Contratos de locação das estações de troca"
         actions={
-          <span title="Disponível na fase 3">
-            <Button disabled>
-              <Plus className="size-4" strokeWidth={2} />
-              Novo contrato
-            </Button>
-          </span>
+          <Button render={<Link href="/alugueis/novo" />}>
+            <Plus className="size-4" strokeWidth={2} />
+            Novo contrato
+          </Button>
         }
       />
       <Suspense fallback={<DataTableSkeleton />}>

@@ -265,7 +265,7 @@ export interface ContratoIngestStats {
   documentReused: boolean;
   intakeId: string | null;
   intakeReused: boolean;
-  status: "pending" | "confirmed" | "rejected" | null;
+  status: "awaiting_extraction" | "pending" | "confirmed" | "rejected" | null;
   warnings: string[];
 }
 
@@ -386,9 +386,14 @@ export async function ingestContratoPayload(
     stats.intakeId = existingIntake.id;
     stats.intakeReused = true;
     stats.status = existingIntake.status;
-    if (existingIntake.status === "pending") {
-      // refresh the raw extraction + document link with the latest delivery;
-      // a confirmed/rejected intake is left untouched (never reopened).
+    // `awaiting_extraction` = the app pre-created the intake on the drop-PDF
+    // upload (#48) and is waiting for THIS extraction — fill it and promote to
+    // `pending`. A still-`pending` intake (n8n-first) is likewise refreshed. A
+    // confirmed/rejected intake is left untouched (never reopened).
+    if (
+      existingIntake.status === "pending" ||
+      existingIntake.status === "awaiting_extraction"
+    ) {
       const { error } = await admin
         .from("contract_intake")
         .update({
@@ -396,11 +401,13 @@ export async function ingestContratoPayload(
           document_id: documentId,
           web_view_link: payload.webViewLink ?? null,
           nome_arquivo: payload.nomeArquivo ?? null,
+          status: "pending",
         })
         .eq("id", existingIntake.id);
       if (error) {
         throw new ContratoIngestError(500, `contract_intake update: ${error.message}`);
       }
+      stats.status = "pending";
     }
   } else {
     const inserted = await one<{ id: string }>(

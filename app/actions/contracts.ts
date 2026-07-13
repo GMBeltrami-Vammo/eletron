@@ -13,6 +13,9 @@ import { revalidatePath } from "next/cache";
 
 import { revalidateSnapshot } from "@/lib/data/repository.server";
 import { unwrapRpc, withOperator, type ActionResult } from "@/lib/http/actions";
+import { getSessionEmail } from "@/lib/http/guards";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { contractIntakePrefill, type ContractIntakePrefill } from "@/lib/ingest/contratos";
 import { normalizeCnpjCpf } from "@/lib/ingest/normalize";
 import type { ContractType, PaymentMethod, StationStatus } from "@/lib/domain";
 
@@ -104,6 +107,58 @@ export async function confirmContractIntake(
     await revalidateSnapshot();
     return contractId;
   });
+}
+
+export interface ContractIntakePoll {
+  available: boolean;
+  status: "awaiting_extraction" | "pending" | "confirmed" | "rejected" | null;
+  prefill: ContractIntakePrefill | null;
+  documentId: string | null;
+  nomeArquivo: string | null;
+}
+
+/**
+ * Poll target for the /alugueis/novo drop-PDF flow (#48): reads a single intake
+ * by id so the client can wait for `awaiting_extraction` → `pending` (n8n's AI
+ * arrived) and then prefill the form. Session-gated (@vammo.com); returns a
+ * benign empty result on any failure so the poll loop never throws.
+ */
+export async function pollContractIntake(intakeId: string): Promise<ContractIntakePoll> {
+  const empty: ContractIntakePoll = {
+    available: false,
+    status: null,
+    prefill: null,
+    documentId: null,
+    nomeArquivo: null,
+  };
+  try {
+    const email = await getSessionEmail();
+    if (!email) return empty;
+    const admin = supabaseAdmin();
+    const { data, error } = await admin
+      .from("contract_intake")
+      .select("status, ai_extraction, document_id, nome_arquivo")
+      .eq("id", intakeId)
+      .maybeSingle();
+    if (error || !data) return empty;
+    const row = data as {
+      status: ContractIntakePoll["status"];
+      ai_extraction: Record<string, unknown> | null;
+      document_id: string | null;
+      nome_arquivo: string | null;
+    };
+    return {
+      available: true,
+      status: row.status,
+      // only prefill once the extraction has actually landed (pending)
+      prefill:
+        row.status === "pending" ? contractIntakePrefill(row.ai_extraction ?? {}) : null,
+      documentId: row.document_id,
+      nomeArquivo: row.nome_arquivo,
+    };
+  } catch {
+    return empty;
+  }
 }
 
 /** Reject a staged intake (not a real contract). */
