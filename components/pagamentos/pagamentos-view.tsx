@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 
 import type { PagamentoRow, StationOption } from "./types";
 import type { ReviewQueueData } from "@/app/(app)/revisao/cobrancas/queries";
-import { APagarPanel, isAPagar } from "./a-pagar-panel";
+import { isAPagar } from "./a-pagar-panel";
 import { EmailDocsPanel } from "./email-docs-panel";
 import { isEmailDocRow, isStagedEmailCharge } from "./email-docs-groups";
 import { GerarMesDialog } from "./gerar-mes-dialog";
@@ -433,31 +433,61 @@ function LedgerPanel({
   csvFilename: string;
   onRowClick?: (row: PagamentoRow) => void;
 }) {
-  const summary = summarize(rows);
+  // "A pagar" is now a per-tab FILTER (decisão #46 amended): toggle to show only
+  // open payables within this tab, instead of a separate tab. Each LedgerPanel
+  // instance (Enel/EDP, Locação) keeps its own toggle.
+  const [onlyAPagar, setOnlyAPagar] = React.useState(false);
+  const payablesCount = React.useMemo(() => rows.filter(isAPagar).length, [rows]);
+  const shown = React.useMemo(
+    () => (onlyAPagar ? rows.filter(isAPagar) : rows),
+    [rows, onlyAPagar],
+  );
+  const summary = summarize(shown);
   return (
     <>
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOnlyAPagar((v) => !v)}
+          aria-pressed={onlyAPagar}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium",
+            onlyAPagar
+              ? "border-warning-emphasis bg-warning-subtle text-warning-emphasis"
+              : "border-border text-muted-foreground hover:bg-muted",
+          )}
+        >
+          A pagar
+          <span className="tabular-nums">{payablesCount}</span>
+        </button>
+        {onlyAPagar ? (
+          <span className="text-xs text-muted-foreground">
+            mostrando só contas em aberto (a pagar)
+          </span>
+        ) : null}
+      </div>
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
           label={`Total previsto (${monthLabel})`}
           value={formatBRL(summary.previstoSum)}
-          sub={`${rows.length} cobranças`}
+          sub={`${shown.length} cobranças`}
         />
         <StatCard
           label="Pago"
           value={formatBRL(summary.pagoSum)}
-          sub={`${summary.pagoCount} de ${rows.length} cobranças`}
+          sub={`${summary.pagoCount} de ${shown.length} cobranças`}
           tone="success"
         />
         <StatCard
           label="Pendente"
           value={formatBRL(summary.pendenteSum)}
-          sub={`${summary.pendenteCount} de ${rows.length} cobranças`}
+          sub={`${summary.pendenteCount} de ${shown.length} cobranças`}
           tone={summary.pendenteCount > 0 ? "warning" : "default"}
         />
       </div>
       <DataTable
         columns={columns}
-        data={rows}
+        data={shown}
         searchPlaceholder="Buscar estação, parceiro…"
         csvFilename={csvFilename}
         initialSorting={[{ id: "estacao", desc: false }]}
@@ -540,9 +570,6 @@ export function PagamentosView({
     () => filtered.filter((r) => !isEnelEdp(r)),
     [filtered],
   );
-  // "A pagar" (spec 2026-07-11): every open charge across BOTH account types,
-  // due-date ordered inside the panel — the operational payables queue.
-  const aPagarRows = React.useMemo(() => filtered.filter(isAPagar), [filtered]);
 
   const columns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
     () => [
@@ -613,12 +640,6 @@ export function PagamentosView({
               {outrosRows.length}
             </span>
           </TabsTrigger>
-          <TabsTrigger value="a_pagar">
-            A pagar
-            <span className="rounded bg-muted px-1 text-xs tabular-nums">
-              {aPagarRows.length}
-            </span>
-          </TabsTrigger>
           <TabsTrigger value="email_docs">
             Documentos de e-mail
             {emailRows.length > 0 ? (
@@ -645,14 +666,6 @@ export function PagamentosView({
             columns={columns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-aluguel-outros"
-            onRowClick={setDrawerRow}
-          />
-        </TabsContent>
-        <TabsContent value="a_pagar">
-          <APagarPanel
-            rows={aPagarRows}
-            monthLabel={monthLabel}
-            actionsColumn={columns[columns.length - 1]}
             onRowClick={setDrawerRow}
           />
         </TabsContent>
