@@ -3,6 +3,9 @@
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 
+import { Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import type { ContractType, StationStatus } from "@/lib/domain";
@@ -96,11 +99,23 @@ const stationColumns: ColumnDef<StationWithoutContractRow, unknown>[] = [
     id: "acoes",
     enableSorting: false,
     enableHiding: false,
-    cell: () => (
-      <div className="flex justify-end">
-        <Phase2Button size="xs">Criar contrato</Phase2Button>
-      </div>
-    ),
+    cell: ({ row }) => {
+      const { stationId } = row.original;
+      // Deep-link to Novo contrato with the station already resolved — drop the
+      // PDF (or fill manually) with the estação pré-selecionada.
+      const href =
+        stationId !== null
+          ? `/alugueis/novo?station=${stationId}`
+          : "/alugueis/novo";
+      return (
+        <div className="flex justify-end">
+          <Button size="xs" variant="outline" render={<Link href={href} />}>
+            <Plus className="size-3.5" strokeWidth={2} />
+            Criar contrato
+          </Button>
+        </div>
+      );
+    },
   },
 ];
 

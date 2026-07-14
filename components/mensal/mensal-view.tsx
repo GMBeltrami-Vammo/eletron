@@ -40,6 +40,7 @@ const SIDE_UI: Record<SideState, { label: string; color: BadgeColor }> = {
   em_aberto: { label: "Em aberto", color: "red" },
   sem_cobranca: { label: "Sem cobrança", color: "red" },
   cobranca_manual: { label: "Cobrança manual", color: "blue" },
+  gratuito: { label: "Gratuito", color: "green" },
   na: { label: "—", color: "grey" },
 };
 

@@ -32,6 +32,7 @@ export type SideState =
   | "em_aberto"
   | "sem_cobranca"
   | "cobranca_manual"
+  | "gratuito"
   | "na";
 
 export interface SideResult {
@@ -109,6 +110,7 @@ function kwhForCharge(
 
 /** Best (most-complete) of two side states, by rank. */
 const RANK: Record<SideState, number> = {
+  gratuito: 8, // satisfied (free) — outranks all, no charge competes
   paga: 7,
   conciliada: 6,
   aguardando_da: 5,
@@ -183,6 +185,20 @@ function rentStateFrom(
   charges: Charge[],
   contract: Contract | undefined,
 ): SideResult {
+  // casa_vammo / gratuito: rent is free — satisfied automatically, so a "só
+  // energia" month means a MISSED rent, not a free contract (Gabriel). Takes
+  // precedence over any (anomalous) charge for these types.
+  if (
+    contract?.contractType === "casa_vammo" ||
+    contract?.contractType === "gratuito"
+  ) {
+    return {
+      state: "gratuito",
+      paid: true,
+      applies: true,
+      detail: "contrato gratuito / casa Vammo — sem cobrança de aluguel",
+    };
+  }
   const manual = contract?.rentManual === true;
   if (charges.length === 0) {
     if (manual) {

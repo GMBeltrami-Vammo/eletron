@@ -228,6 +228,33 @@ describe("deriveMonthlyMatrix — decision table", () => {
     expect(m.rows[0].rent.detail).toContain("pix");
   });
 
+  it("casa_vammo/gratuito: rent is free → energy paid = ambas, not so_energia", () => {
+    for (const t of ["casa_vammo", "gratuito"] as const) {
+      const s = empty();
+      s.stations = [station(1)];
+      s.contracts = [contract(1, { contractType: t })];
+      s.billingAccounts = [account("e1", 1, "energy_enel")];
+      s.charges = [
+        charge({ id: "en", kind: "energia", stationId: 1, billingAccountId: "e1", status: "pago" }),
+      ];
+      const row = deriveMonthlyMatrix(s, MONTH).rows[0];
+      expect(row.rent.state).toBe("gratuito");
+      expect(row.rent.paid).toBe(true);
+      expect(row.group).toBe("ambas"); // NOT so_energia — free rent is satisfied
+    }
+  });
+
+  it("casa_vammo with energy OPEN → so_aluguel (energy is the gap, rent is free)", () => {
+    const s = empty();
+    s.stations = [station(1)];
+    s.contracts = [contract(1, { contractType: "casa_vammo" })];
+    s.billingAccounts = [account("e1", 1, "energy_enel")];
+    s.charges = [
+      charge({ id: "en", kind: "energia", stationId: 1, billingAccountId: "e1", status: "pendente" }),
+    ];
+    expect(deriveMonthlyMatrix(s, MONTH).rows[0].group).toBe("so_aluguel");
+  });
+
   it("rent paid, energy open → so_aluguel", () => {
     const s = empty();
     s.stations = [station(1)];
