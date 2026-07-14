@@ -111,6 +111,39 @@ export function ChargeEditorDialog({
   const isRentBearing = kind === "aluguel" || kind === "aluguel_energia";
   const paymentFields = visiblePaymentFields(method as PaymentMethod | "");
 
+  // Station↔contrato auto-fill (Gabriel): pick a station → fill its cadastro,
+  // and vice-versa. If there's no link, don't block — just alert below.
+  const cadastroByStation = React.useMemo(() => {
+    const m = new Map<string, CadastroOption>();
+    for (const c of cadastros) if (c.stationId != null) m.set(String(c.stationId), c);
+    return m;
+  }, [cadastros]);
+  const cadastroById = React.useMemo(() => {
+    const m = new Map<string, CadastroOption>();
+    for (const c of cadastros) m.set(String(c.cadastroId), c);
+    return m;
+  }, [cadastros]);
+
+  function onStationChange(v: string | null) {
+    const sid = v && v !== "none" ? v : "";
+    setStationId(sid);
+    const c = sid ? cadastroByStation.get(sid) : undefined;
+    if (c) {
+      setCadastroId(String(c.cadastroId));
+      if (!cpName && c.parceiro) setCpName(c.parceiro);
+    }
+  }
+  function onCadastroChange(v: string | null) {
+    const cid = v && v !== "none" ? v : "";
+    setCadastroId(cid);
+    const c = cid ? cadastroById.get(cid) : undefined;
+    if (c?.stationId != null) setStationId(String(c.stationId));
+  }
+
+  // Non-blocking: a rent charge points at a station that has no cadastro/contract.
+  const stationLacksCadastro =
+    isRentBearing && stationId !== "" && !cadastroByStation.has(stationId);
+
   async function save() {
     const ok = await run(
       () =>
@@ -211,10 +244,7 @@ export function ChargeEditorDialog({
           ) : null}
 
           <Field label="Estação">
-            <Select
-              value={stationId || "none"}
-              onValueChange={(v) => setStationId(v === "none" ? "" : (v as string))}
-            >
+            <Select value={stationId || "none"} onValueChange={onStationChange}>
               <SelectTrigger>
                 <SelectValue placeholder="sem estação" />
               </SelectTrigger>
@@ -231,10 +261,7 @@ export function ChargeEditorDialog({
 
           {isRentBearing ? (
             <Field label="Cadastro (contrato)">
-              <Select
-                value={cadastroId || "none"}
-                onValueChange={(v) => setCadastroId(v === "none" ? "" : (v as string))}
-              >
+              <Select value={cadastroId || "none"} onValueChange={onCadastroChange}>
                 <SelectTrigger>
                   <SelectValue placeholder="sem cadastro" />
                 </SelectTrigger>
@@ -330,6 +357,15 @@ export function ChargeEditorDialog({
               />
             </Field>
           </div>
+
+          {stationLacksCadastro ? (
+            <p className="rounded-md bg-warning-subtle px-3 py-2 text-xs text-warning-emphasis sm:col-span-2">
+              A estação #{stationId} não tem um cadastro/contrato de aluguel. Você
+              pode salvar assim mesmo, mas o ideal é criar/corrigir o Cadastro
+              primeiro (Revisão › Instalações → Criar contrato) e depois editar a
+              cobrança.
+            </p>
+          ) : null}
 
           <p className="text-xs text-muted-foreground sm:col-span-2">
             Campos deixados em branco mantêm o valor atual da cobrança.
