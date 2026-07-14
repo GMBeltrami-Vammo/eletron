@@ -3,18 +3,13 @@
 /**
  * "Conferir manual" (decision #42) — the manual-handling window for faturas the
  * auto-send skips: 2026, WITHOUT débito automático, not yet "Enviado ao fiscal".
- * Opens the FISCAL spreadsheet in a new window to check/add them by hand, lists
- * the pending ones (with the PDF), and marks each done once handled.
+ * Lists the pending ones (with the PDF) and marks each done once handled. The
+ * FISCAL sheet URL/id is intentionally NOT surfaced — the sheet must not be
+ * clickable/redirectable from the app (Gabriel).
  */
 
 import * as React from "react";
-import {
-  ExternalLink,
-  FileText,
-  ListChecks,
-  Loader2,
-  ScanLine,
-} from "lucide-react";
+import { FileText, ListChecks, Loader2, ScanLine } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -37,7 +32,6 @@ import {
 export function FiscalManualDialog({ canWrite }: { canWrite: boolean }) {
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [sheetUrl, setSheetUrl] = React.useState<string | null>(null);
   const [rows, setRows] = React.useState<ManualFaturaRow[]>([]);
   const [marking, setMarking] = React.useState<string | null>(null);
 
@@ -46,7 +40,6 @@ export function FiscalManualDialog({ canWrite }: { canWrite: boolean }) {
     try {
       const res = await getFiscalManualQueue();
       if (res.ok) {
-        setSheetUrl(res.data.sheetUrl);
         setRows(res.data.faturas);
       } else {
         toast.error(res.error);
@@ -97,22 +90,7 @@ export function FiscalManualDialog({ canWrite }: { canWrite: boolean }) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center justify-between gap-2">
-          {sheetUrl ? (
-            <a
-              href={sheetUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium underline-offset-2 hover:underline"
-            >
-              Abrir planilha fiscal
-              <ExternalLink className="size-3.5" strokeWidth={2} />
-            </a>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              FISCAL_SPREADSHEET_ID não configurado
-            </span>
-          )}
+        <div className="flex items-center justify-end gap-2">
           <span className="text-xs tabular-nums text-muted-foreground">
             {rows.length} pendente(s)
           </span>

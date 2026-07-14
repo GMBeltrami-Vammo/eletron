@@ -163,8 +163,6 @@ export interface ManualFaturaRow {
 }
 
 interface FiscalManualQueue {
-  /** Google Sheets URL to open + check by hand (null when the id is unset). */
-  sheetUrl: string | null;
   /** Faturas the auto-send skips (2026, sem débito automático, ainda sem check). */
   faturas: ManualFaturaRow[];
 }
@@ -181,10 +179,8 @@ export async function getFiscalManualQueue(): Promise<
   const email = await getSessionEmail();
   if (!email) return { ok: false, error: "não autenticado" };
   try {
-    const id = process.env.FISCAL_SPREADSHEET_ID;
-    const sheetUrl = id
-      ? `https://docs.google.com/spreadsheets/d/${id}/edit`
-      : null;
+    // The FISCAL sheet URL/id is deliberately NOT surfaced to the UI (Gabriel):
+    // the sheet must not be clickable/redirectable from the app.
     const all = await loadEnergyFaturas(supabaseAdmin());
     const faturas = all
       .filter(
@@ -204,7 +200,7 @@ export async function getFiscalManualQueue(): Promise<
         driveUrl: f.driveUrl,
       }))
       .sort((a, b) => (a.dueDate < b.dueDate ? 1 : -1));
-    return { ok: true, data: { sheetUrl, faturas } };
+    return { ok: true, data: { faturas } };
   } catch (err) {
     return {
       ok: false,
