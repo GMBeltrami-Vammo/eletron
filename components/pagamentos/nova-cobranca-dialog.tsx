@@ -66,26 +66,45 @@ function currentMonth(): string {
 export function NovaCobrancaDialog({
   canWrite,
   stations,
+  documentId = null,
+  defaultCompetencia,
+  defaultStationId = null,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   canWrite: boolean;
   stations: StationOption[];
+  /** Bind the created charge to this source document (e.g. add a missing ND line). */
+  documentId?: string | null;
+  /** 'YYYY-MM' — seeds competência when opened (e.g. the document's month). */
+  defaultCompetencia?: string;
+  defaultStationId?: number | null;
+  /** Controlled mode: when onOpenChange is provided, the internal trigger button
+   *  is hidden and the parent drives visibility (used to add to a document). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const controlled = onOpenChange !== undefined;
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setOpen = controlled ? onOpenChange : setInternalOpen;
   const [pending, startTransition] = React.useTransition();
 
   const [kind, setKind] = React.useState<ChargeKind>("aluguel");
-  const [stationId, setStationId] = React.useState<number | null>(null);
+  const [stationId, setStationId] = React.useState<number | null>(defaultStationId);
   const [stationPickerOpen, setStationPickerOpen] = React.useState(false);
-  const [competencia, setCompetencia] = React.useState(currentMonth);
+  const [competencia, setCompetencia] = React.useState(
+    defaultCompetencia ?? currentMonth(),
+  );
   const [dueDate, setDueDate] = React.useState("");
   const [valor, setValor] = React.useState("");
   const [method, setMethod] = React.useState<string>("");
 
   function reset() {
     setKind("aluguel");
-    setStationId(null);
-    setCompetencia(currentMonth());
+    setStationId(defaultStationId);
+    setCompetencia(defaultCompetencia ?? currentMonth());
     setDueDate("");
     setValor("");
     setMethod("");
@@ -105,6 +124,7 @@ export function NovaCobrancaDialog({
         amount,
         dueDate: dueDate || null,
         paymentMethod: (method || null) as PaymentMethod | null,
+        documentId,
       });
       if (res.ok) {
         toast.success("Cobrança criada.");
@@ -118,6 +138,7 @@ export function NovaCobrancaDialog({
   }
 
   if (!canWrite) {
+    if (controlled) return null; // parent gates it; nothing to render
     return (
       <span title="Requer papel operador/admin">
         <Button variant="outline" disabled>
@@ -130,10 +151,12 @@ export function NovaCobrancaDialog({
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <CirclePlus className="size-4" strokeWidth={2} />
-        Nova cobrança
-      </Button>
+      {controlled ? null : (
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          <CirclePlus className="size-4" strokeWidth={2} />
+          Nova cobrança
+        </Button>
+      )}
       <Dialog
         open={open}
         onOpenChange={(o) => {

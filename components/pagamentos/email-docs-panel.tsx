@@ -14,6 +14,7 @@
 import * as React from "react";
 import {
   Check,
+  CirclePlus,
   ExternalLink,
   FileText,
   Mail,
@@ -32,6 +33,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatCard } from "@/components/vammo/stat-card";
@@ -46,6 +52,7 @@ import { CHARGE_KIND_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
 
 import { VencimentoCell } from "./a-pagar-panel";
+import { NovaCobrancaDialog } from "./nova-cobranca-dialog";
 import {
   buildEmailDocGroups,
   chargeReadiness,
@@ -73,6 +80,7 @@ export function EmailDocsPanel({
   const { run, pending } = useRunAction();
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
   const [discarding, setDiscarding] = React.useState<DiscardTarget | null>(null);
+  const [addingTo, setAddingTo] = React.useState<EmailDocGroup | null>(null);
 
   // client BRT wall clock for the vencimento urgency badges (a-pagar pattern)
   const todayIso = React.useMemo(() => {
@@ -140,15 +148,31 @@ export function EmailDocsPanel({
                     {g.filename ?? "Documento sem nome"}
                   </span>
                   {g.documentId ? (
-                    <a
-                      href={`/api/files/${g.documentId}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-medium text-info-emphasis underline-offset-2 hover:underline"
-                    >
-                      Ver PDF
-                      <ExternalLink className="size-3" strokeWidth={2} />
-                    </a>
+                    <HoverCard>
+                      <HoverCardTrigger
+                        render={
+                          <a
+                            href={`/api/files/${g.documentId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-info-emphasis underline-offset-2 hover:underline"
+                          />
+                        }
+                      >
+                        Ver PDF
+                        <ExternalLink className="size-3" strokeWidth={2} />
+                      </HoverCardTrigger>
+                      <HoverCardContent className="w-[360px] max-w-[90vw]">
+                        <iframe
+                          src={`/api/files/${g.documentId}/page/1`}
+                          title="Prévia do documento"
+                          className="h-[460px] w-full rounded-md border-0 bg-white"
+                        />
+                        <p className="mt-1 text-center text-xs text-muted-foreground">
+                          Página 1 · clique para abrir o PDF completo
+                        </p>
+                      </HoverCardContent>
+                    </HoverCard>
                   ) : null}
                   {g.addresses.length > 0 ? (
                     <span
@@ -169,6 +193,18 @@ export function EmailDocsPanel({
                     </span>
                   ) : null}
                   <span className="ml-auto inline-flex items-center gap-2">
+                    {g.documentId ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={disabled}
+                        title="Cria uma cobrança faltante (ex.: linha de uma ND) já vinculada a este documento"
+                        onClick={() => setAddingTo(g)}
+                      >
+                        <CirclePlus className="size-3.5" strokeWidth={2} />
+                        Adicionar cobrança
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       disabled={disabled}
@@ -325,6 +361,24 @@ export function EmailDocsPanel({
           onClose={() => setEditing(null)}
           title="Editar cobrança"
           description="Ajuste os campos extraídos do documento. Ao salvar, a cobrança é enviada para Pagamentos."
+        />
+      ) : null}
+
+      {addingTo && addingTo.documentId ? (
+        // controlled + document-bound: creates a manual charge already linked to
+        // this PDF (e.g. a missing ND line). Keyed by documentId so re-opening
+        // for another document remounts with that document's defaults.
+        <NovaCobrancaDialog
+          key={addingTo.documentId}
+          canWrite={canWrite}
+          stations={review.stations}
+          documentId={addingTo.documentId}
+          defaultCompetencia={addingTo.charges[0]?.competencia?.slice(0, 7)}
+          defaultStationId={addingTo.charges[0]?.stationId ?? null}
+          open
+          onOpenChange={(o) => {
+            if (!o) setAddingTo(null);
+          }}
         />
       ) : null}
 
