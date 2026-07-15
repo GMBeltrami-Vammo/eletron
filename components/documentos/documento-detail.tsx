@@ -13,6 +13,8 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   CirclePlus,
   Download,
   ExternalLink,
@@ -61,11 +63,19 @@ export function DocumentoDetail({
   stations,
   cadastros,
   canWrite,
+  prevId,
+  nextId,
+  position,
 }: {
   data: DocumentDeepDive;
   stations: StationOption[];
   cadastros: CadastroOption[];
   canWrite: boolean;
+  /** Adjacent documents in the "Documentos de e-mail" list (null = none). */
+  prevId?: string | null;
+  nextId?: string | null;
+  /** 1-based position in that list, for "3 / 12" (null when not in the list). */
+  position?: { current: number; total: number } | null;
 }) {
   const { run, pending } = useRunAction();
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
@@ -100,6 +110,46 @@ export function DocumentoDetail({
 
   return (
     <>
+      {prevId || nextId || position ? (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {prevId ? (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={`/documentos/${prevId}`} />}
+            >
+              <ChevronLeft className="size-4" strokeWidth={2} />
+              Anterior
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled>
+              <ChevronLeft className="size-4" strokeWidth={2} />
+              Anterior
+            </Button>
+          )}
+          {position ? (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {position.current} / {position.total} documentos
+            </span>
+          ) : null}
+          {nextId ? (
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={`/documentos/${nextId}`} />}
+            >
+              Próximo pagamento
+              <ChevronRight className="size-4" strokeWidth={2} />
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled>
+              Próximo pagamento
+              <ChevronRight className="size-4" strokeWidth={2} />
+            </Button>
+          )}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,45%)_minmax(0,1fr)]">
         <div className="lg:sticky lg:top-6 lg:self-start">
           <PdfViewer documentId={doc.id} page={1} />

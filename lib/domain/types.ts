@@ -133,6 +133,13 @@ export interface BillingAccount {
    * `3p:{cnpj_digits|name-slug}:{station_id|'unmatched'}`.
    */
   id: string;
+  /**
+   * DB uuid (billing_accounts.id) — present only on Supabase-backed reads; null
+   * in the ingest/sheets path (where the row has no uuid yet). Needed by RPCs
+   * that take a real uuid (e.g. assign_station_to_account); the synthetic `id`
+   * above is NOT a uuid.
+   */
+  accountUuid?: string | null;
   /** station_id — NULLABLE: 'Unidentified' scraper rows live here unmatched. */
   stationId: number | null;
   accountType: AccountType;

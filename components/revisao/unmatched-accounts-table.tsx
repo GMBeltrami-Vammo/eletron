@@ -24,6 +24,8 @@ import { MatchActions, type StationChoice } from "./match-actions";
 /** Unmatched billing account joined to its scraper state (server-built). */
 export interface UnmatchedAccountRow {
   id: string;
+  /** DB uuid — what the assign RPC needs (the `id` above is a synthetic key). */
+  accountUuid: string | null;
   accountType: AccountType;
   externalKey: string;
   matchStatus: MatchStatus;
@@ -134,7 +136,7 @@ export function UnmatchedAccountsTable({
         enableHiding: false,
         cell: ({ row }) => (
           <MatchActions
-            billingAccountId={row.original.id}
+            billingAccountId={row.original.accountUuid}
             suggestions={row.original.suggestions}
             stations={stations}
           />

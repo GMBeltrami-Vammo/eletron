@@ -35,17 +35,29 @@ export function MatchActions({
   suggestions,
   stations,
 }: {
-  billingAccountId: string;
+  /** billing_accounts.id (DB uuid). Null in the sheets backend → matching off. */
+  billingAccountId: string | null;
   suggestions: MatchCandidate[];
   stations: StationChoice[];
 }) {
   const { run, pending } = useRunAction();
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
-  const confirm = (stationId: number, distanceM: number | null) =>
-    run(() => confirmStationMatch({ billingAccountId, stationId, distanceM }), {
-      success: `Vinculado à estação #${stationId}`,
-    });
+  const confirm = (stationId: number, distanceM: number | null) => {
+    if (!billingAccountId) return;
+    return run(
+      () => confirmStationMatch({ billingAccountId, stationId, distanceM }),
+      { success: `Vinculado à estação #${stationId}` },
+    );
+  };
+
+  if (!billingAccountId) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        indisponível — requer Supabase
+      </span>
+    );
+  }
 
   return (
     <div className="flex flex-col items-stretch gap-1.5">

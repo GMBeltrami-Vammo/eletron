@@ -507,6 +507,7 @@ export async function loadChargingWorld(
 
   const billingAccounts: BillingAccount[] = accountRows.map((r) => ({
     id: accountStringIdByUuid.get(r.id) as string,
+    accountUuid: r.id,
     stationId: r.station_id,
     accountType: r.account_type,
     enelId: r.enel_id,

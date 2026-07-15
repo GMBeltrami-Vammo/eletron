@@ -73,6 +73,7 @@ async function InstalacoesContent() {
       const state = stateByAccount.get(account.id);
       return {
         id: account.id,
+        accountUuid: account.accountUuid ?? null,
         accountType: account.accountType,
         externalKey:
           account.enelId ?? account.edpUc ?? account.externalRef ?? account.id,
