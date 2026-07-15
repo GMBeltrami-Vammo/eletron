@@ -12,6 +12,7 @@
  */
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Check,
   CirclePlus,
@@ -144,9 +145,19 @@ export function EmailDocsPanel({
               <div key={g.documentId ?? "sem-doc"} className="rounded-lg border border-border bg-card">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-2">
                   <FileText className="size-4 shrink-0 text-muted-foreground" strokeWidth={2} />
-                  <span className="text-sm font-medium">
-                    {g.filename ?? "Documento sem nome"}
-                  </span>
+                  {g.documentId ? (
+                    <Link
+                      href={`/documentos/${g.documentId}`}
+                      className="text-sm font-medium underline-offset-2 hover:underline"
+                      title="Abrir documento (PDF + cobranças)"
+                    >
+                      {g.filename ?? "Documento sem nome"}
+                    </Link>
+                  ) : (
+                    <span className="text-sm font-medium">
+                      {g.filename ?? "Documento sem nome"}
+                    </span>
+                  )}
                   {g.documentId ? (
                     <HoverCard>
                       <HoverCardTrigger
