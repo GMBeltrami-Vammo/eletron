@@ -218,7 +218,7 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
   const select =
     "id, status, amount, competencia, due_date, chave_pix, issuer_cnpj, agencia, conta, linha_digitavel, " +
     "billing_accounts(auto_debit_registration, counterparties(value_tolerance)), " +
-    "charge_energy_details(auto_debit_registration)";
+    "charge_energy_details(auto_debit_registration, auto_debit)";
   const statuses = [...OPEN_STATUSES, "pago"];
   const openSet = new Set<string>(OPEN_STATUSES);
   const PAGE = 1000;
@@ -247,7 +247,10 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
       // 2026-07-10 rent exclusion collapsed matching to 19/148 and is reverted.
       if (!isOpen && receipted.has(r.id)) continue;
       const cp = toOne<{ value_tolerance: number | string | null }>(ba?.counterparties);
-      const ed = toOne<{ auto_debit_registration: string | null }>(r.charge_energy_details);
+      const ed = toOne<{
+        auto_debit_registration: string | null;
+        auto_debit: string | null;
+      }>(r.charge_energy_details);
       out.push({
         chargeId: r.id,
         amount: num(r.amount),
@@ -260,6 +263,7 @@ async function loadCandidates(admin: ChargingClient): Promise<OpenChargeCandidat
         linhaDigitavel: r.linha_digitavel,
         autoDebitRegistration:
           ed?.auto_debit_registration ?? ba?.auto_debit_registration ?? null,
+        billAutoDebit: ed?.auto_debit ?? null,
         valueTolerance: num(cp?.value_tolerance) ?? 0.01,
         isOpen,
       });

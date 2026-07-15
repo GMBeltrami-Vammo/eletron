@@ -38,6 +38,7 @@ function candidate(overrides: Partial<OpenChargeCandidate>): OpenChargeCandidate
     conta: null,
     linhaDigitavel: null,
     autoDebitRegistration: null,
+    billAutoDebit: null,
     valueTolerance: 0.01,
     isOpen: true,
     ...overrides,
@@ -320,5 +321,108 @@ describe("pinnedCompetencia", () => {
     expect(pinnedCompetencia("2026-01-10")).toBe("2025-12"); // January wraps
     expect(pinnedCompetencia(null)).toBeNull();
     expect(pinnedCompetencia("garbage")).toBeNull();
+  });
+});
+
+describe("payment-type gate (DA vs manual, Gabriel 2026-07-14)", () => {
+  const BARCODE = "83650000000249490048100810754907461800243965709";
+
+  it("manual receipt does NOT auto-bind a DA bill — directed review instead", () => {
+    const r = receipt({
+      receiptType: "boleto_barcode",
+      codigoBarras: BARCODE,
+      amount: 49.49,
+      paidAt: "2026-06-19",
+    });
+    const cands = [
+      candidate({
+        chargeId: "da-bill",
+        linhaDigitavel: BARCODE,
+        amount: 49.49,
+        competencia: "2026-07-01",
+        billAutoDebit: "cadastrado",
+      }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.chargeId).toBeUndefined();
+    expect(res.candidateIds).toContain("da-bill");
+  });
+
+  it("DA receipt does NOT auto-bind a non-DA bill — directed review instead", () => {
+    const r = receipt({
+      receiptType: "debito_automatico",
+      codigoBarras: "42142385",
+      amount: 1628.07,
+      paidAt: "2026-06-22",
+    });
+    const cands = [
+      candidate({
+        chargeId: "manual-bill",
+        autoDebitRegistration: "10042142385999",
+        amount: 1628.07,
+        competencia: "2026-06-01",
+        billAutoDebit: "nao_cadastrado",
+      }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.candidateIds).toContain("manual-bill");
+  });
+
+  it("DA receipt auto-binds a DA bill (via DA code ⊂ auto_debit_registration)", () => {
+    const r = receipt({
+      receiptType: "debito_automatico",
+      codigoBarras: "42142385",
+      amount: 1628.07,
+      paidAt: "2026-06-22",
+    });
+    const cands = [
+      candidate({
+        chargeId: "da",
+        autoDebitRegistration: "10042142385999",
+        amount: 1628.07,
+        competencia: "2026-06-01",
+        billAutoDebit: "cadastrado",
+      }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.chargeId).toBe("da");
+  });
+
+  it("manual receipt auto-binds a non-DA bill (via barcode = linha digitável)", () => {
+    const r = receipt({
+      receiptType: "boleto_barcode",
+      codigoBarras: BARCODE,
+      amount: 49.49,
+      paidAt: "2026-06-19",
+    });
+    const cands = [
+      candidate({
+        chargeId: "manual",
+        linhaDigitavel: BARCODE,
+        amount: 49.49,
+        billAutoDebit: "nao_cadastrado",
+      }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.chargeId).toBe("manual");
+  });
+
+  it("unknown bill DA (null/desconhecido, e.g. rent) is NOT gated — binds as before", () => {
+    const r = receipt({
+      receiptType: "boleto_barcode",
+      codigoBarras: BARCODE,
+      amount: 49.49,
+      paidAt: "2026-06-19",
+    });
+    const cands = [
+      candidate({ chargeId: "unk", linhaDigitavel: BARCODE, amount: 49.49, billAutoDebit: null }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.chargeId).toBe("unk");
   });
 });

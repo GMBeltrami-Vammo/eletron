@@ -65,6 +65,9 @@ describe.runIf(fixturesExist)("GT harness — 05.06 comprovante vs gabarito", ()
       amount: c.amount === null ? null : Number(c.amount),
       valueTolerance: Number(c.valueTolerance ?? 0.01),
       isOpen: Boolean(c.isOpen),
+      // GT is a rent batch — no per-bill DA flag; unknown → the type gate never
+      // fires, so the GT floors (146/0/0) are unaffected by it.
+      billAutoDebit: c.billAutoDebit ?? null,
     }));
 
     // expected chargeId per GT page, via the rent dedupe key (#20)

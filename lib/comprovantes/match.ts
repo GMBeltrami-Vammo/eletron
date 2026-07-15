@@ -19,6 +19,7 @@
  * Exactly one survivor ⇒ `auto`; ≥2 ⇒ `ambiguous`; 0 key-hits ⇒ `none`.
  */
 
+import { RECEIPT_TYPE } from "@/lib/domain";
 import { digitKeysEqual, pixKeysMatch } from "./normalize-pix";
 import type {
   MatchResult,
@@ -129,6 +130,66 @@ function buildRanks(
   ];
 }
 
+/** The bill's DA snapshot is decisive only when known (not desconhecido/null). */
+function billTypeKnown(c: OpenChargeCandidate): boolean {
+  return c.billAutoDebit === "cadastrado" || c.billAutoDebit === "nao_cadastrado";
+}
+
+/**
+ * Does the candidate's payment TYPE match the receipt's? (Gabriel 2026-07-14.)
+ * A débito-automático receipt belongs to a `cadastrado` bill; a manual receipt
+ * (boleto/pix/ted/outro) to a `nao_cadastrado` bill. When the bill's DA flag is
+ * unknown (desconhecido/null — e.g. rent, or a fatura not yet sent to fiscal)
+ * the gate does NOT fire, so behaviour degrades to the pre-gate matcher.
+ */
+function samePaymentType(c: OpenChargeCandidate, receiptIsDA: boolean): boolean {
+  if (!billTypeKnown(c)) return true;
+  return (c.billAutoDebit === "cadastrado") === receiptIsDA;
+}
+
+/**
+ * Payment-type gate over the ranked matcher (Gabriel 2026-07-14): a DA comprovante
+ * only auto-binds a DA bill and a manual comprovante only a non-DA bill — the
+ * immutable per-bill flag (charge_energy_details.auto_debit) is the authority,
+ * NOT the station's mutable enrollment. A wrong-type match is NOT bound; instead
+ * it is surfaced as a DIRECTED review ("provavelmente destes pagamentos, mas o
+ * tipo de pagamento diverge"). Unknown-type bills (rent, not-yet-fiscal) are not
+ * gated. Fixes the page-253 case: a manual concessionária receipt no longer
+ * auto-binds a DA fatura.
+ */
+export function matchReceipt(
+  receipt: ParsedReceipt,
+  candidates: OpenChargeCandidate[],
+  fullPool: OpenChargeCandidate[] = candidates,
+): MatchResult {
+  const receiptIsDA = receipt.receiptType === RECEIPT_TYPE.debitoAutomatico;
+  const sameType = candidates.filter((c) => samePaymentType(c, receiptIsDA));
+  const crossType = candidates.filter((c) => !samePaymentType(c, receiptIsDA));
+
+  const res = rankMatch(receipt, sameType, fullPool);
+  if (res.outcome === "auto" || res.outcome === "ambiguous") return res;
+
+  // No same-type bind. If the WRONG payment type would have matched (value/key),
+  // do NOT bind — hand it to a human as a directed suggestion.
+  if (crossType.length > 0) {
+    const cross = rankMatch(receipt, crossType, fullPool);
+    if (cross.outcome === "auto" || cross.outcome === "ambiguous") {
+      const ids =
+        cross.candidateIds ?? (cross.chargeId ? [cross.chargeId] : []);
+      return {
+        outcome: "ambiguous",
+        rule: cross.rule,
+        candidateIds: ids,
+        reasons: [
+          ...cross.reasons,
+          "tipo de pagamento diverge (débito automático × manual) — não vinculado; provavelmente referente a estas cobranças (validação humana)",
+        ],
+      };
+    }
+  }
+  return res;
+}
+
 /**
  * Ranks `candidates` for one `receipt` and decides the outcome. Never mutates
  * its inputs. `fullPool` is the UNSPLICED candidate list (matchAndBind shrinks
@@ -136,7 +197,7 @@ function buildRanks(
  * must be judged against everything, or a same-value receipt later in the batch
  * would be discarded just because an earlier receipt consumed the charge.
  */
-export function matchReceipt(
+function rankMatch(
   receipt: ParsedReceipt,
   candidates: OpenChargeCandidate[],
   fullPool: OpenChargeCandidate[] = candidates,

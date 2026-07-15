@@ -70,6 +70,14 @@ export interface OpenChargeCandidate {
   conta: string | null;
   linhaDigitavel: string | null;
   autoDebitRegistration: string | null;
+  /**
+   * Immutable per-bill débito-automático flag ('cadastrado' | 'nao_cadastrado' |
+   * 'desconhecido' | null) — charge_energy_details.auto_debit, frozen at
+   * send-to-fiscal. Gates the payment-type match: a DA receipt only binds a
+   * 'cadastrado' bill, a manual receipt only a 'nao_cadastrado' bill; unknown
+   * (desconhecido/null, e.g. rent) never gates. (Gabriel 2026-07-14.)
+   */
+  billAutoDebit: string | null;
   /** Per-counterparty amount tolerance (default 0.01; Kitchen Central 1.00). */
   valueTolerance: number;
   /** true = an OPEN charge; false = a `pago`-without-comprovante charge (energy
