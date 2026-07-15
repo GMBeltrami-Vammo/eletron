@@ -162,15 +162,31 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
   },
   {
     // Vencimento (faturas-sheet due_date) — populated for energy; rent charges
-    // carry no due_date on the charge, so they read "—".
+    // carry no due_date on the charge (by design), so they read "—". An ENERGY
+    // fatura with NO due date is an anomaly → tagged as vencida (Gabriel
+    // 2026-07-14): a boleto should always have a vencimento.
     id: "vencimento",
-    header: "Vencimento",
+    // empty string sorts first (ascending) → no-due-date energy faturas float
+    // to the top of the Enel/EDP tab.
     accessorFn: (r) => r.dueDate ?? "",
-    cell: ({ row }) => (
-      <span className="tabular-nums text-muted-foreground">
-        {row.original.dueDate ? formatDate(row.original.dueDate) : "—"}
-      </span>
-    ),
+    header: "Vencimento",
+    cell: ({ row }) => {
+      const r = row.original;
+      if (r.dueDate) {
+        return (
+          <span className="tabular-nums text-muted-foreground">
+            {formatDate(r.dueDate)}
+          </span>
+        );
+      }
+      const isEnergy =
+        r.accountType === "energy_enel" || r.accountType === "energy_edp";
+      return isEnergy ? (
+        <StatusBadge color="red">Vencida · sem data</StatusBadge>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
+    },
   },
   {
     // Débito automático (faturas-sheet auto_debit) — energy account only.
@@ -572,6 +588,7 @@ function LedgerPanel({
   monthLabel,
   csvFilename,
   hiddenByDefault,
+  initialSorting = [{ id: "estacao", desc: false }],
   onRowClick,
 }: {
   rows: PagamentoRow[];
@@ -580,6 +597,9 @@ function LedgerPanel({
   csvFilename: string;
   /** Column ids to hide by default (the tab's "suggestion" columns). */
   hiddenByDefault: Record<string, boolean>;
+  /** Default sort. Enel/EDP passes [] so the pre-sorted row order (no-due-date
+   *  faturas first) is respected on load. */
+  initialSorting?: { id: string; desc: boolean }[];
   onRowClick?: (row: PagamentoRow) => void;
 }) {
   // "A pagar" is now a per-tab FILTER (decisão #46 amended): toggle to show only
@@ -639,7 +659,7 @@ function LedgerPanel({
         data={shown}
         searchPlaceholder="Buscar estação, parceiro…"
         csvFilename={csvFilename}
-        initialSorting={[{ id: "estacao", desc: false }]}
+        initialSorting={initialSorting}
         initialColumnVisibility={hiddenByDefault}
         filterableColumnIds="all"
         pinnedRightColumnIds={["acoes"]}
@@ -711,8 +731,18 @@ export function PagamentosView({
 
   const isEnelEdp = (r: PagamentoRow) =>
     r.accountType === "energy_enel" || r.accountType === "energy_edp";
+  // Pre-sort so an ENERGY fatura with NO due date (an anomaly — a boleto should
+  // always have a vencimento) floats to the FIRST line (Gabriel 2026-07-14);
+  // the rest keep station order. The Enel/EDP panel passes initialSorting=[] so
+  // this array order is what shows on load.
   const enelEdpRows = React.useMemo(
-    () => filtered.filter(isEnelEdp),
+    () =>
+      [...filtered.filter(isEnelEdp)].sort((a, b) => {
+        const an = a.dueDate === null ? 0 : 1;
+        const bn = b.dueDate === null ? 0 : 1;
+        if (an !== bn) return an - bn;
+        return (a.stationId ?? -1) - (b.stationId ?? -1);
+      }),
     [filtered],
   );
   const outrosRows = React.useMemo(
@@ -800,6 +830,7 @@ export function PagamentosView({
             monthLabel={monthLabel}
             csvFilename="pagamentos-enel-edp"
             hiddenByDefault={ENERGY_HIDDEN}
+            initialSorting={[]}
             onRowClick={setDrawerRow}
           />
         </TabsContent>
