@@ -10,10 +10,16 @@ import {
   Minus,
   Paperclip,
   SearchCheck,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { sendToFiscal, verifyFaturasOnFiscal } from "@/app/actions/fiscal";
+import {
+  sendFaturaToFiscal,
+  sendToFiscal,
+  verifyFaturasOnFiscal,
+} from "@/app/actions/fiscal";
+import type { SendOneOutcome } from "@/lib/fiscal/send-fiscal";
 import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import {
   HoverCard,
@@ -401,6 +407,89 @@ const orderedColumns = COLUMN_ORDER.map((id) =>
   columns.find((c) => c.id === id),
 ).filter((c): c is ColumnDef<FaturaRow, unknown> => Boolean(c));
 
+/** Per-bill send outcome → toast copy + tone. */
+const SEND_ONE_UI: Record<
+  SendOneOutcome,
+  { message: string; tone: "success" | "info" | "error" }
+> = {
+  sent: { message: "Enviada ao fiscal", tone: "success" },
+  registered: { message: "Já estava na planilha fiscal", tone: "info" },
+  zero: { message: "Valor 0 — marcada como paga e conferida", tone: "success" },
+  noValor: { message: "Sem valor — não enviada", tone: "info" },
+  ignoredPast: { message: "Vencimento ≤ 2025 — ignorada", tone: "info" },
+  blockedFuture: { message: "2027+ bloqueado — rever função", tone: "error" },
+  pastDue: { message: "Vencida — não enviada", tone: "info" },
+  naoCadastrado: {
+    message: "Sem débito automático — use o fluxo manual (não enviada)",
+    tone: "info",
+  },
+  semAba: { message: "Mês sem aba na planilha fiscal", tone: "info" },
+  verifyFailed: {
+    message: "Formato inválido (self-verify) — não enviada",
+    tone: "error",
+  },
+  appendFailed: { message: "Falha ao gravar na planilha", tone: "error" },
+  notFound: { message: "Fatura não encontrada", tone: "error" },
+};
+
+/**
+ * Per-row "Enviar ao fiscal" (Gabriel 2026-07-14) — sends THIS fatura with the
+ * same rules as the batch; the outcome (sent / já na planilha / sem DA / …) is
+ * reported by a toast. No link to the sheet is ever exposed. Disabled once the
+ * fatura is already fiscal-exported.
+ */
+function FaturaFiscalSendButton({
+  row,
+  canWrite,
+}: {
+  row: FaturaRow;
+  canWrite: boolean;
+}) {
+  const [pending, setPending] = React.useState(false);
+  const run = async () => {
+    setPending(true);
+    try {
+      const res = await sendFaturaToFiscal(row.chargeId);
+      if (res.ok) {
+        const ui = SEND_ONE_UI[res.data.outcome];
+        if (ui.tone === "success") toast.success(ui.message);
+        else if (ui.tone === "error") toast.error(ui.message);
+        else toast.info(ui.message);
+      } else {
+        toast.error(res.error);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao enviar ao fiscal",
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+      <Button
+        variant="ghost"
+        size="xs"
+        disabled={pending || !canWrite || row.fiscalExported}
+        onClick={run}
+        title={
+          row.fiscalExported
+            ? "Já enviada ao fiscal"
+            : "Enviar esta fatura ao fiscal (mesmas regras do envio em lote)"
+        }
+      >
+        {pending ? (
+          <Loader2 className="size-3.5 animate-spin" strokeWidth={2} />
+        ) : (
+          <Send className="size-3.5" strokeWidth={2} />
+        )}
+        Enviar
+      </Button>
+    </div>
+  );
+}
+
 export function FaturasTable({
   rows,
   accounts,
@@ -495,12 +584,30 @@ export function FaturasTable({
     [rows, provider, month, missingOnly],
   );
 
+  // Append the per-row "Enviar ao fiscal" action (closes over canWrite).
+  const tableColumns = React.useMemo<ColumnDef<FaturaRow, unknown>[]>(
+    () => [
+      ...orderedColumns,
+      {
+        id: "acoes",
+        header: "",
+        enableSorting: false,
+        enableHiding: false,
+        cell: ({ row }) => (
+          <FaturaFiscalSendButton row={row.original} canWrite={canWrite} />
+        ),
+      },
+    ],
+    [canWrite],
+  );
+
   return (
     <DataTable
-      columns={orderedColumns}
+      columns={tableColumns}
       data={filtered}
       searchPlaceholder="Buscar fatura, NF, instalação…"
       csvFilename="faturas-energia"
+      pinnedRightColumnIds={["acoes"]}
       initialSorting={[{ id: "vencimento", desc: true }]}
       filterableColumnIds="all"
       emptyMessage="Nenhuma fatura encontrada."

@@ -188,3 +188,101 @@ export async function sendFaturasToFiscal(
 
   return summary;
 }
+
+/** Per-bill send outcome — the classifier cases + the terminal states. */
+export type SendOneOutcome =
+  | "sent"
+  | "registered"
+  | "zero"
+  | "noValor"
+  | "ignoredPast"
+  | "blockedFuture"
+  | "pastDue"
+  | "naoCadastrado"
+  | "semAba"
+  | "verifyFailed"
+  | "appendFailed"
+  | "notFound";
+
+export interface SendOneFaturaResult {
+  outcome: SendOneOutcome;
+  fiscalTrueIds: string[];
+  fiscalFalseIds: string[];
+  zeroValueIds: string[];
+}
+
+/**
+ * Send ONE specific fatura to the FISCAL sheet (Gabriel 2026-07-14). Applies the
+ * EXACT SAME rules as the batch (`classifyFaturaForSend`) — chosen over a manual
+ * override so a single send can never write something the batch wouldn't. Same
+ * locale guard, same self-verify round-trip. The caller applies the id sets via
+ * the audited RPCs (identical to the batch).
+ */
+export async function sendOneFaturaToFiscal(
+  admin: ChargingClient,
+  sheets: SheetsClient,
+  spreadsheetId: string,
+  chargeId: string,
+  now: Date,
+): Promise<SendOneFaturaResult> {
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: "properties.locale",
+  });
+  const locale = (meta.data.properties?.locale ?? "").toLowerCase();
+  if (!locale.startsWith("pt")) {
+    throw new Error(
+      `planilha fiscal não está em pt-BR (locale=${locale || "?"}) — envio bloqueado, rever formato`,
+    );
+  }
+  const sep = ";" as const;
+  const timestamp = nowFiscalTimestamp(now);
+  const todayIso = fiscalTodayISO(now);
+
+  const { results } = await checkFaturasOnFiscal(admin, sheets, spreadsheetId);
+  const f = results.find((r) => r.chargeId === chargeId);
+  const empty: SendOneFaturaResult = {
+    outcome: "notFound",
+    fiscalTrueIds: [],
+    fiscalFalseIds: [],
+    zeroValueIds: [],
+  };
+  if (!f) return empty;
+
+  switch (classifyFaturaForSend(f, todayIso)) {
+    case "registered":
+      return { ...empty, outcome: "registered", fiscalTrueIds: [chargeId] };
+    case "zero":
+      return { ...empty, outcome: "zero", zeroValueIds: [chargeId] };
+    case "noValor":
+      return { ...empty, outcome: "noValor", fiscalFalseIds: [chargeId] };
+    case "ignoredPast":
+      return { ...empty, outcome: "ignoredPast", fiscalFalseIds: [chargeId] };
+    case "blockedFuture":
+      return { ...empty, outcome: "blockedFuture", fiscalFalseIds: [chargeId] };
+    case "pastDue":
+      return { ...empty, outcome: "pastDue", fiscalFalseIds: [chargeId] };
+    case "naoCadastrado":
+      return { ...empty, outcome: "naoCadastrado", fiscalFalseIds: [chargeId] };
+    case "semAba":
+      return { ...empty, outcome: "semAba", fiscalFalseIds: [chargeId] };
+    case "send": {
+      const row = buildFiscalRow(f, timestamp, sep);
+      if (!selfVerifyRow(row, f)) {
+        return { ...empty, outcome: "verifyFailed", fiscalFalseIds: [chargeId] };
+      }
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId,
+          range: `'${f.tab}'`,
+          valueInputOption: "USER_ENTERED",
+          insertDataOption: "INSERT_ROWS",
+          requestBody: { values: [row] },
+        });
+        return { ...empty, outcome: "sent", fiscalTrueIds: [chargeId] };
+      } catch {
+        return { ...empty, outcome: "appendFailed", fiscalFalseIds: [chargeId] };
+      }
+    }
+  }
+}

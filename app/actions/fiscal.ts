@@ -21,7 +21,9 @@ import { checkFaturasOnFiscal, loadEnergyFaturas } from "@/lib/fiscal/check-fatu
 import { SENDABLE_YEAR } from "@/lib/fiscal/fiscal-row";
 import {
   sendFaturasToFiscal,
+  sendOneFaturaToFiscal,
   type SendFiscalSummary,
+  type SendOneFaturaResult,
 } from "@/lib/fiscal/send-fiscal";
 
 interface FiscalVerifyResult {
@@ -147,6 +149,63 @@ export async function sendToFiscal(): Promise<ActionResult<SendFiscalSummary>> {
     await revalidateSnapshot();
 
     return summary;
+  });
+}
+
+/**
+ * Send ONE specific fatura to the FISCAL sheet (Gabriel 2026-07-14) — the
+ * per-bill button on /energia › Faturas. Same rules as the batch (no override).
+ * Applies the resulting fiscal_exported / settle via the audited RPCs.
+ */
+export async function sendFaturaToFiscal(
+  chargeId: string,
+): Promise<ActionResult<SendOneFaturaResult>> {
+  return withOperator(async (client) => {
+    const spreadsheetId = process.env.FISCAL_SPREADSHEET_ID;
+    if (!spreadsheetId) {
+      throw new Error(
+        "FISCAL_SPREADSHEET_ID não configurado. Defina no Vercel e conceda Editor ao service account na planilha fiscal.",
+      );
+    }
+
+    const result = await sendOneFaturaToFiscal(
+      supabaseAdmin(),
+      createSheetsWriteClient(),
+      spreadsheetId,
+      chargeId,
+      new Date(),
+    );
+
+    if (result.fiscalTrueIds.length > 0) {
+      unwrapRpc(
+        await client.rpc("set_fiscal_exported", {
+          p_charge_ids: result.fiscalTrueIds,
+          p_value: true,
+        }),
+      );
+    }
+    if (result.fiscalFalseIds.length > 0) {
+      unwrapRpc(
+        await client.rpc("set_fiscal_exported", {
+          p_charge_ids: result.fiscalFalseIds,
+          p_value: false,
+        }),
+      );
+    }
+    if (result.zeroValueIds.length > 0) {
+      unwrapRpc(
+        await client.rpc("settle_zero_value_faturas", {
+          p_charge_ids: result.zeroValueIds,
+        }),
+      );
+    }
+
+    revalidatePath("/energia");
+    revalidatePath("/mensal");
+    revalidatePath("/pagamentos");
+    await revalidateSnapshot();
+
+    return result;
   });
 }
 
