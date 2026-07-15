@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { Lock, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -44,8 +44,10 @@ import { reclassifyCharge } from "@/app/actions/cobrancas";
 import type { ChargeKind, ChargeStatus, PaymentMethod } from "@/lib/domain";
 import { CHARGE_KIND_UI, CHARGE_STATUS_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL } from "@/lib/format";
+import { isFiscalLocked } from "@/lib/permissions/fiscal-lock";
 import type { PagamentoRow } from "./types";
 import { DocumentPicker } from "./document-picker";
+import { FiscalLockDialog } from "./fiscal-lock-dialog";
 
 /** update_charge_status targets (never pago/conciliado/atrasado — RPC forbids). */
 const STATUS_TARGETS: { status: ChargeStatus; adminOnly?: boolean }[] = [
@@ -118,6 +120,15 @@ export function StatusActions({
   // Reclassify (tipo) dialog + document picker.
   const [reclassKind, setReclassKind] = React.useState<ChargeKind>(row.kind);
   const [docPickerOpen, setDocPickerOpen] = React.useState(false);
+  // Fiscal-lock (#24): an edit on a charge already "enviada ao fiscal" is
+  // intercepted by a warning first; on "prosseguir" the held action runs.
+  const locked = isFiscalLocked(row);
+  const [fiscalGate, setFiscalGate] = React.useState<(() => void) | null>(null);
+  /** Run `fn` now, or (when fiscal-locked) after the head-approval warning. */
+  const guard = (fn: () => void) => {
+    if (locked) setFiscalGate(() => fn);
+    else fn();
+  };
 
   const uuid = row.chargeUuid;
   const disabledReason = !canWrite
@@ -309,33 +320,39 @@ export function StatusActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-52">
           <DropdownMenuLabel>Ações da cobrança</DropdownMenuLabel>
+          {locked ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-warning-emphasis">
+              <Lock className="size-3 shrink-0" strokeWidth={2} />
+              Enviado ao fiscal — alteração requer aprovação
+            </div>
+          ) : null}
           <DropdownMenuSeparator />
           {isConciliado ? (
-            <DropdownMenuItem onClick={() => setMode({ kind: "confirm" })}>
+            <DropdownMenuItem onClick={() => guard(() => setMode({ kind: "confirm" }))}>
               Confirmar pagamento
             </DropdownMenuItem>
           ) : null}
           {canPay ? (
-            <DropdownMenuItem onClick={() => setMode({ kind: "pago" })}>
+            <DropdownMenuItem onClick={() => guard(() => setMode({ kind: "pago" }))}>
               Registrar pagamento…
             </DropdownMenuItem>
           ) : null}
           {canAdjust ? (
-            <DropdownMenuItem onClick={openAdjust}>
+            <DropdownMenuItem onClick={() => guard(openAdjust)}>
               Ajustar valor/vencimento…
             </DropdownMenuItem>
           ) : null}
           {canReclassify ? (
-            <DropdownMenuItem onClick={openReclassify}>
+            <DropdownMenuItem onClick={() => guard(openReclassify)}>
               Reclassificar tipo…
             </DropdownMenuItem>
           ) : null}
           {hasEditActions ? <DropdownMenuSeparator /> : null}
-          <DropdownMenuItem onClick={() => setDocPickerOpen(true)}>
+          <DropdownMenuItem onClick={() => guard(() => setDocPickerOpen(true))}>
             Vincular documento…
           </DropdownMenuItem>
           {row.sourceDocumentId ? (
-            <DropdownMenuItem onClick={runUnbindDocument}>
+            <DropdownMenuItem onClick={() => guard(runUnbindDocument)}>
               Desvincular documento
             </DropdownMenuItem>
           ) : null}
@@ -346,7 +363,9 @@ export function StatusActions({
                 <DropdownMenuItem
                   key={t.status}
                   variant={t.status === "cancelada" ? "destructive" : "default"}
-                  onClick={() => setMode({ kind: "status", target: t.status })}
+                  onClick={() =>
+                    guard(() => setMode({ kind: "status", target: t.status }))
+                  }
                 >
                   {CHARGE_STATUS_UI[t.status].label}
                 </DropdownMenuItem>
@@ -355,6 +374,20 @@ export function StatusActions({
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Fiscal-lock warning (#24) — gates every edit on a fiscal-exported charge */}
+      <FiscalLockDialog
+        open={fiscalGate !== null}
+        onOpenChange={(o) => {
+          if (!o) setFiscalGate(null);
+        }}
+        pending={pending}
+        onConfirm={() => {
+          const fn = fiscalGate;
+          setFiscalGate(null);
+          fn?.();
+        }}
+      />
 
       {/* Confirm (conciliado → pago) */}
       <Dialog
