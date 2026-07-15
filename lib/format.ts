@@ -23,6 +23,22 @@ export function formatNumber(value: number | null | undefined): string {
   return numberPtBr.format(value);
 }
 
+/**
+ * Digits-only CNPJ (14) or CPF (11) → masked display
+ * (XX.XXX.XXX/XXXX-XX or XXX.XXX.XXX-XX). Anything else is returned as-is.
+ */
+export function formatCnpjCpf(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = value.replace(/\D/g, "");
+  if (d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  if (d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  return value;
+}
+
 /** ISO 'YYYY-MM-DD' (or full ISO) → 'dd/mm/aaaa'. */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";

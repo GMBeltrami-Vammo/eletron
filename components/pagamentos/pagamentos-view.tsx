@@ -24,11 +24,13 @@ import {
   AUTO_DEBIT_UI,
   CHARGE_KIND_UI,
   CHARGE_STATUS_UI,
+  CICLO_UI,
   FISCAL_EXPORT_UI,
   MATCH_STATUS_UI,
   PAYMENT_METHOD_LABEL,
+  UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
-import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
+import { formatBRL, formatCnpjCpf, formatCompetencia, formatDate } from "@/lib/format";
 import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -389,7 +391,151 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
       </span>
     ),
   },
+  {
+    // Provedor (Enel/EDP) — energy tab only; derived from the account type.
+    id: "provedor",
+    header: "Provedor",
+    accessorFn: (r) =>
+      r.accountType === "energy_enel" || r.accountType === "energy_edp"
+        ? ACCOUNT_TYPE_UI[r.accountType].label
+        : "",
+    cell: ({ row }) => {
+      const at = row.original.accountType;
+      if (at !== "energy_enel" && at !== "energy_edp") {
+        return <span className="text-muted-foreground">—</span>;
+      }
+      const ui = ACCOUNT_TYPE_UI[at];
+      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+    },
+  },
+  {
+    // Status provedor — the portal's bill status (scraper billStatus, #33).
+    id: "statusProvedor",
+    header: "Status provedor",
+    accessorFn: (r) => (r.billStatus ? UTILITY_BILL_STATUS_UI[r.billStatus].label : ""),
+    cell: ({ row }) => {
+      const bs = row.original.billStatus;
+      if (!bs) return <span className="text-muted-foreground">—</span>;
+      const ui = UTILITY_BILL_STATUS_UI[bs];
+      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+    },
+  },
+  {
+    // Status Vammo (Ciclo, #33): 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
+    id: "ciclo",
+    header: "Status Vammo",
+    accessorFn: (r) => r.ciclo ?? 0,
+    cell: ({ row }) => {
+      const c = row.original.ciclo;
+      if (!c) return <span className="text-muted-foreground">—</span>;
+      const ui = CICLO_UI[c];
+      return (
+        <StatusBadge color={ui.color}>
+          {c} · {ui.label}
+        </StatusBadge>
+      );
+    },
+    meta: csvMeta((r) => (r.ciclo ? `${r.ciclo} ${CICLO_UI[r.ciclo].label}` : "")),
+  },
+  {
+    id: "cnpj",
+    header: "CNPJ",
+    accessorFn: (r) => r.cnpj ?? "",
+    cell: ({ row }) =>
+      row.original.cnpj ? (
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {formatCnpjCpf(row.original.cnpj)}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    meta: csvMeta((r) => r.cnpj ?? ""),
+  },
 ];
+
+/** All column defs keyed by id, so each tab can compose an ordered subset. */
+const COL = Object.fromEntries(
+  baseColumns.map((c) => [c.id as string, c]),
+) as Record<string, ColumnDef<PagamentoRow, unknown>>;
+
+/** The pinned-right per-row action menu (depends on the caller's write role). */
+function acoesColumn(
+  canWrite: boolean,
+  isAdmin: boolean,
+): ColumnDef<PagamentoRow, unknown> {
+  return {
+    id: "acoes",
+    enableSorting: false,
+    enableHiding: false,
+    cell: ({ row }) => (
+      <StatusActions row={row.original} canWrite={canWrite} isAdmin={isAdmin} />
+    ),
+  };
+}
+
+// Enel/EDP tab — energy installations. Columns Gabriel specified (2026-07-14),
+// then "suggestion" extras appended hidden-by-default (reachable via the menu).
+const ENERGY_COLUMN_IDS = [
+  "estacao",
+  "instalacao",
+  "competencia",
+  "vencimento",
+  "debitoAutomatico",
+  "provedor",
+  "valor",
+  "statusProvedor",
+  "ciclo",
+  "documento",
+  "fiscal",
+  "comprovante",
+  "notaFiscal",
+  // hidden by default
+  "previsto",
+  "status",
+  "pagamento",
+  "origem",
+  "observacoes",
+  "dedupe",
+];
+const ENERGY_HIDDEN: Record<string, boolean> = {
+  previsto: false,
+  status: false,
+  pagamento: false,
+  origem: false,
+  observacoes: false,
+  dedupe: false,
+};
+
+// Locação tab — rent + third-party (Aluguel e outros).
+const LOCACAO_COLUMN_IDS = [
+  "estacao",
+  "flags",
+  "competencia",
+  "vencimento",
+  "tipo",
+  "parceiro",
+  "valor",
+  "cnpj",
+  "previsto",
+  "ciclo",
+  "documento",
+  "fiscal",
+  "comprovante",
+  "origem",
+  // hidden by default
+  "status",
+  "pagamento",
+  "notaFiscal",
+  "observacoes",
+  "dedupe",
+];
+const LOCACAO_HIDDEN: Record<string, boolean> = {
+  status: false,
+  pagamento: false,
+  notaFiscal: false,
+  observacoes: false,
+  dedupe: false,
+};
 
 interface LedgerSummary {
   previstoSum: number;
@@ -425,12 +571,15 @@ function LedgerPanel({
   columns,
   monthLabel,
   csvFilename,
+  hiddenByDefault,
   onRowClick,
 }: {
   rows: PagamentoRow[];
   columns: ColumnDef<PagamentoRow, unknown>[];
   monthLabel: string;
   csvFilename: string;
+  /** Column ids to hide by default (the tab's "suggestion" columns). */
+  hiddenByDefault: Record<string, boolean>;
   onRowClick?: (row: PagamentoRow) => void;
 }) {
   // "A pagar" is now a per-tab FILTER (decisão #46 amended): toggle to show only
@@ -491,7 +640,7 @@ function LedgerPanel({
         searchPlaceholder="Buscar estação, parceiro…"
         csvFilename={csvFilename}
         initialSorting={[{ id: "estacao", desc: false }]}
-        initialColumnVisibility={{ dedupe: false }}
+        initialColumnVisibility={hiddenByDefault}
         filterableColumnIds="all"
         pinnedRightColumnIds={["acoes"]}
         onRowClick={onRowClick}
@@ -571,22 +720,15 @@ export function PagamentosView({
     [filtered],
   );
 
-  const columns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
-    () => [
-      ...baseColumns,
-      {
-        id: "acoes",
-        enableSorting: false,
-        enableHiding: false,
-        cell: ({ row }) => (
-          <StatusActions
-            row={row.original}
-            canWrite={canWrite}
-            isAdmin={isAdmin}
-          />
-        ),
-      },
-    ],
+  // Two distinct column sets (Gabriel 2026-07-14): Enel/EDP shows Provedor +
+  // Status provedor; Locação shows Sinalizações + Parceiro + CNPJ. Each tab's
+  // extras ride along hidden-by-default. `acoes` is pinned right on both.
+  const energyColumns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
+    () => [...ENERGY_COLUMN_IDS.map((id) => COL[id]), acoesColumn(canWrite, isAdmin)],
+    [canWrite, isAdmin],
+  );
+  const locacaoColumns = React.useMemo<ColumnDef<PagamentoRow, unknown>[]>(
+    () => [...LOCACAO_COLUMN_IDS.map((id) => COL[id]), acoesColumn(canWrite, isAdmin)],
     [canWrite, isAdmin],
   );
 
@@ -654,18 +796,20 @@ export function PagamentosView({
         <TabsContent value="enel_edp">
           <LedgerPanel
             rows={enelEdpRows}
-            columns={columns}
+            columns={energyColumns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-enel-edp"
+            hiddenByDefault={ENERGY_HIDDEN}
             onRowClick={setDrawerRow}
           />
         </TabsContent>
         <TabsContent value="outros">
           <LedgerPanel
             rows={outrosRows}
-            columns={columns}
+            columns={locacaoColumns}
             monthLabel={monthLabel}
             csvFilename="pagamentos-aluguel-outros"
+            hiddenByDefault={LOCACAO_HIDDEN}
             onRowClick={setDrawerRow}
           />
         </TabsContent>

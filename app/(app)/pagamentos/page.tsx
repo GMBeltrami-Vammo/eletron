@@ -15,6 +15,8 @@ import {
   type PaymentLinkIndex,
 } from "@/lib/data/payment-links";
 import { resolveDocumentHref } from "@/lib/data/document-href";
+import { energyCicloStage } from "@/lib/energia/ciclo";
+import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
 import { readReviewQueue } from "@/app/(app)/revisao/cobrancas/queries";
@@ -65,10 +67,38 @@ function buildRows(
         counterpartyId =
           contractById.get(account.contractId)?.counterpartyId ?? null;
       }
+      const counterparty =
+        counterpartyId !== null ? counterpartyById.get(counterpartyId) : undefined;
+      const cpName = counterparty?.name ?? null;
+      const cpCnpj = counterparty?.cnpjCpf ?? null;
+      // The ingest stores the CNPJ digits as `name` when the razão social was
+      // empty (normalize.ts upsertCounterparty). Detect that fallback and drop
+      // it so the Parceiro column shows a real name or nothing — the digits go
+      // to the dedicated CNPJ column instead.
+      const onlyDigits = (s: string) => s.replace(/\D/g, "");
       const parceiro =
-        counterpartyId !== null
-          ? (counterpartyById.get(counterpartyId)?.name ?? null)
+        cpName && !(cpCnpj && onlyDigits(cpName) === onlyDigits(cpCnpj))
+          ? cpName
           : null;
+
+      const state =
+        charge.billingAccountId !== null
+          ? stateByAccount.get(charge.billingAccountId)
+          : undefined;
+      const payment = summarizeLinks(
+        links.byDedupeKey.get(charge.dedupeKey) ??
+          links.byChargeUuid.get(charge.id),
+      );
+      const ciclo = energyCicloStage({
+        hasBillSignal: true,
+        hasParsedCharge: charge.amount !== null,
+        fiscalExported:
+          (charge.fiscalExported ?? false) ||
+          (detailsByCharge.get(charge.id)?.fiscalExported ?? false),
+        isPaid:
+          SETTLED_CHARGE_STATUSES.has(charge.status) ||
+          payment?.documentId != null,
+      });
 
       return {
         chargeId: charge.id,
@@ -80,12 +110,12 @@ function buildRows(
         matchStatus: charge.matchStatus,
         competencia: charge.competencia,
         dueDate: charge.dueDate,
-        autoDebit:
-          charge.billingAccountId !== null
-            ? (stateByAccount.get(charge.billingAccountId)?.autoDebit ?? null)
-            : null,
+        autoDebit: state?.autoDebit ?? null,
         kind: charge.kind,
         parceiro,
+        cnpj: cpCnpj,
+        billStatus: state?.billStatus ?? null,
+        ciclo,
         accountType: account?.accountType ?? null,
         installationKey: account?.enelId ?? account?.edpUc ?? null,
         amount: charge.amount,
@@ -104,10 +134,7 @@ function buildRows(
         statusSource: charge.statusSource ?? null,
         lastActorEmail: ref?.lastActorEmail ?? null,
         lastActorAt: ref?.lastActorAt ?? null,
-        payment: summarizeLinks(
-          links.byDedupeKey.get(charge.dedupeKey) ??
-            links.byChargeUuid.get(charge.id),
-        ),
+        payment,
         documentHref: resolveDocumentHref(
           charge.sourceDocumentId ?? null,
           detailsByCharge.get(charge.id)?.faturaDriveUrl ?? null,

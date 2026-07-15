@@ -12,7 +12,9 @@ import type {
   IngestSource,
   MatchStatus,
   PaymentMethod,
+  UtilityBillStatus,
 } from "@/lib/domain";
+import type { CicloStage } from "@/lib/energia/ciclo";
 import type { PaymentLinkSummary } from "@/lib/data/payment-links.shared";
 
 export interface PagamentoRow {
@@ -27,8 +29,20 @@ export interface PagamentoRow {
   /** Débito automático of the energy account (null for rent/third-party). */
   autoDebit: AutoDebitStatus | null;
   kind: ChargeKind;
-  /** Counterparty resolved via billing account → contract/counterparty. */
+  /**
+   * Counterparty razão social resolved via billing account → contract/
+   * counterparty. NULL when the counterparty has no real name (the ingest
+   * stores the CNPJ digits as `name` when the razão social cell was empty — that
+   * fallback is detected and dropped so the Parceiro column never shows a CNPJ;
+   * the digits live in `cnpj` instead).
+   */
   parceiro: string | null;
+  /** Counterparty CNPJ/CPF (digits only) — its own column, distinct from Parceiro. */
+  cnpj: string | null;
+  /** Portal bill status (scraper billStatus) — "Status provedor" on the Enel/EDP tab. */
+  billStatus: UtilityBillStatus | null;
+  /** OUR lifecycle stage (Ciclo, decision #33): 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga. */
+  ciclo: CicloStage | null;
   /**
    * Billing-account type (energy_enel/energy_edp/rent/third_party) — drives the
    * Enel/EDP vs "Aluguel e outros" tab split and the provider-label fallback
