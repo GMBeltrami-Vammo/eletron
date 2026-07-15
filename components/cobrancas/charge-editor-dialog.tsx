@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -311,11 +312,7 @@ export function ChargeEditorDialog({
             </Select>
           </Field>
           <Field label="Vencimento">
-            <Input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+            <DateField value={dueDate} onValueChange={setDueDate} />
           </Field>
 
           {paymentFields.includes("banco_agencia_conta") ? (

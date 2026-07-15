@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -217,11 +217,10 @@ export function AlertActionDialog({
             {duration === "custom" ? (
               <div className="grid gap-1.5">
                 <Label htmlFor="mute-date">Até</Label>
-                <Input
+                <DateField
                   id="mute-date"
-                  type="date"
                   value={customDate}
-                  onChange={(e) => setCustomDate(e.target.value)}
+                  onValueChange={setCustomDate}
                 />
               </div>
             ) : null}

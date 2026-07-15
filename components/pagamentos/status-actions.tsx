@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -429,11 +430,10 @@ export function StatusActions({
           <div className="grid gap-3">
             <div className="grid gap-1.5">
               <Label htmlFor="pago-data">Data do pagamento</Label>
-              <Input
+              <DateField
                 id="pago-data"
-                type="date"
                 value={paidAt}
-                onChange={(e) => setPaidAt(e.target.value)}
+                onValueChange={setPaidAt}
               />
             </div>
             <div className="grid gap-1.5">
@@ -487,11 +487,10 @@ export function StatusActions({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="adj-venc">Novo vencimento</Label>
-              <Input
+              <DateField
                 id="adj-venc"
-                type="date"
                 value={adjDue}
-                onChange={(e) => setAdjDue(e.target.value)}
+                onValueChange={setAdjDue}
               />
             </div>
             <div className="grid gap-1.5">

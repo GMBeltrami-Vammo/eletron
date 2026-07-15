@@ -26,6 +26,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -706,12 +707,11 @@ export function NovaLeituraFlow({
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="leitura-data">Data da leitura</Label>
-            <Input
+            <DateField
               id="leitura-data"
-              type="date"
               value={readingDate}
               max={saoPauloToday()}
-              onChange={(e) => setReadingDate(e.target.value)}
+              onValueChange={setReadingDate}
               className="h-11 tabular-nums"
             />
           </div>

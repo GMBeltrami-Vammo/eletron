@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -260,11 +261,10 @@ export function NovaCobrancaDialog({
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="nc-venc">Vencimento (opcional)</Label>
-                <Input
+                <DateField
                   id="nc-venc"
-                  type="date"
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
+                  onValueChange={setDueDate}
                 />
               </div>
             </div>

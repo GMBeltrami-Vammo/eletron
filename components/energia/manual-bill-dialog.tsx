@@ -33,6 +33,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -409,12 +410,11 @@ function ManualBillForm({
           {/* Vencimento */}
           <div className="space-y-1.5">
             <Label htmlFor="mb-vencimento">Vencimento</Label>
-            <Input
+            <DateField
               id="mb-vencimento"
-              type="date"
               value={vencimento}
-              onChange={(e) => setVencimento(e.target.value)}
-              aria-invalid={Boolean(errors.vencimento)}
+              onValueChange={setVencimento}
+              invalid={Boolean(errors.vencimento)}
               className="tabular-nums"
             />
             {errors.vencimento ? (

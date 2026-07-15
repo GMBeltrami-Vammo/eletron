@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/vammo/data-table";
@@ -168,11 +168,7 @@ function ContratoAtivoCell({ row }: { row: ContractRow }) {
                   <Label className="text-xs text-muted-foreground">
                     Data de inativação
                   </Label>
-                  <Input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                  />
+                  <DateField value={date} onValueChange={setDate} />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Motivo (opcional)</Label>
