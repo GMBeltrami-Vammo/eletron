@@ -83,6 +83,13 @@ interface Rank {
 function buildRanks(
   receipt: ParsedReceipt,
   candidates: OpenChargeCandidate[],
+  /**
+   * Value-narrowed subset for the WEAK keys (pix/cnpj/ag+conta) — Gabriel
+   * 2026-07-14: "o valor reduz a janela para agilizar". The barcode/DA rank
+   * keeps the FULL set, so a key match with a divergent value is still surfaced
+   * as a strong suggestion (never silently dropped).
+   */
+  weakCandidates: OpenChargeCandidate[] = candidates,
 ): Rank[] {
   const rc = digits(receipt.codigoBarras);
   const rCnpj = digits(receipt.cnpjCpf);
@@ -107,7 +114,7 @@ function buildRanks(
       rule: "chave_pix",
       applicable: !!receipt.chavePix,
       dateExempt: false,
-      hits: candidates.filter((c) => pixKeysMatch(receipt.chavePix, c.chavePix)),
+      hits: weakCandidates.filter((c) => pixKeysMatch(receipt.chavePix, c.chavePix)),
     },
     {
       rule: "cnpj_cpf",
@@ -115,19 +122,34 @@ function buildRanks(
       dateExempt: false,
       // leading-zero-insensitive: the clone lost leading zeros (numeric cells)
       // and banks zero-pad ("000228202278-56" is CPF 22820227856).
-      hits: candidates.filter((c) => digitKeysEqual(digits(c.issuerCnpj), rCnpj)),
+      hits: weakCandidates.filter((c) => digitKeysEqual(digits(c.issuerCnpj), rCnpj)),
     },
     {
       rule: "agencia_conta",
       applicable: rAg.length > 0 && rConta.length > 0,
       dateExempt: false,
-      hits: candidates.filter(
+      hits: weakCandidates.filter(
         (c) =>
           digitKeysEqual(digits(c.agencia), rAg) &&
           digitKeysEqual(digits(c.conta), rConta),
       ),
     },
   ];
+}
+
+/**
+ * Coarse value window used to NARROW candidates for the weak keys before ranking
+ * (speed) — Gabriel 2026-07-14: "o valor reduz a janela para agilizar". It never
+ * loosens the LOCK: the final bind still requires the value within the
+ * per-candidate tolerance (identical, cents). Widened to the candidate's own
+ * tolerance when that is larger (Kitchen Central 1.00, GT-calibrated) so a
+ * legitimately-bindable charge is never pre-filtered out.
+ */
+const VALUE_FILTER_WINDOW = 0.5;
+
+function withinValueWindow(amount: number, c: OpenChargeCandidate): boolean {
+  if (c.amount === null) return false;
+  return Math.abs(amount - c.amount) <= Math.max(VALUE_FILTER_WINDOW, c.valueTolerance);
 }
 
 /** The bill's DA snapshot is decisive only when known (not desconhecido/null). */
@@ -203,7 +225,13 @@ function rankMatch(
   fullPool: OpenChargeCandidate[] = candidates,
 ): MatchResult {
   const reasons: string[] = [];
-  const ranks = buildRanks(receipt, candidates);
+  // Value narrows the WEAK-key pool for speed (barcode/DA keeps the full set so
+  // a divergent-value key match still surfaces as a strong suggestion).
+  const weakCandidates =
+    receipt.amount === null
+      ? candidates
+      : candidates.filter((c) => withinValueWindow(receipt.amount as number, c));
+  const ranks = buildRanks(receipt, candidates, weakCandidates);
   const applicable = ranks.filter((r) => r.applicable && r.hits.length > 0);
 
   // Rule 1 (Gabriel, general): a receipt that matches NOTHING — no key hit AND
@@ -213,7 +241,15 @@ function rankMatch(
   // even when the amount diverges (juros/multa, stale amount): a wrong discard
   // is an invisible loss. A null amount never discards (parser failure ≠ alien).
   if (applicable.length === 0) {
+    // #44 preserved under value-narrowing: a KEY hit (even one the ±0,50 window
+    // filtered out for the weak ranks) must NEVER be discarded — it goes to a
+    // human. Only a receipt with NO key hit at all AND a value that matches
+    // nothing in the pool is alien → discard.
+    const anyKeyHit = buildRanks(receipt, candidates).some(
+      (r) => r.applicable && r.hits.length > 0,
+    );
     if (
+      !anyKeyHit &&
       receipt.amount !== null &&
       !amountMatchesSomewhere(receipt.amount, fullPool)
     ) {
@@ -247,12 +283,13 @@ function rankMatch(
       // barcode — that conflict is a human call, not a fall-through.
       if (rank.dateExempt) {
         reasons.push(
-          "código de barras identifica a cobrança mas o valor não bate — revisão manual",
+          "FORTE SUGESTÃO: o código de barras / débito automático identifica esta fatura, mas o valor diverge — NÃO vinculado (validação humana)",
         );
         return {
           outcome: "ambiguous",
           rule: rank.rule,
           candidateIds: rank.hits.map((c) => c.chargeId),
+          strongSuggestion: true,
           reasons,
         };
       }

@@ -426,3 +426,49 @@ describe("payment-type gate (DA vs manual, Gabriel 2026-07-14)", () => {
     expect(res.chargeId).toBe("unk");
   });
 });
+
+describe("value window + strong suggestion (Gabriel 2026-07-14)", () => {
+  it("barcode/DA identifies the bill but value diverges → strong suggestion, NOT bound", () => {
+    const r = receipt({
+      receiptType: "boleto_barcode",
+      codigoBarras: "999888777666",
+      amount: 50.0,
+      paidAt: "2026-06-19",
+    });
+    const cands = [
+      candidate({
+        chargeId: "bc",
+        linhaDigitavel: "999888777666",
+        amount: 75.0, // diverges > R$0,50
+        billAutoDebit: "nao_cadastrado",
+      }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("ambiguous");
+    expect(res.strongSuggestion).toBe(true);
+    expect(res.candidateIds).toContain("bc");
+    expect(res.chargeId).toBeUndefined();
+  });
+
+  it("weak key (PIX) to a far-value charge is narrowed out → never auto-bound", () => {
+    const r = receipt({ receiptType: "pix", chavePix: "a@b.com", amount: 100, paidAt: "2026-05-28" });
+    const cands = [
+      candidate({ chargeId: "far", chavePix: "a@b.com", amount: 200, competencia: "2026-05-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).not.toBe("auto");
+    expect(res.chargeId).toBeUndefined();
+  });
+
+  it("weak key within ±0,50 still auto-binds (window does not block a near value)", () => {
+    const r = receipt({ receiptType: "pix", chavePix: "a@b.com", amount: 100, paidAt: "2026-05-28" });
+    // identical value → locks; a 0,30 sibling would be inside the window but the
+    // lock (tolerance) still requires identical, so only the exact one binds.
+    const cands = [
+      candidate({ chargeId: "exact", chavePix: "a@b.com", amount: 100, competencia: "2026-05-01" }),
+    ];
+    const res = matchReceipt(r, cands);
+    expect(res.outcome).toBe("auto");
+    expect(res.chargeId).toBe("exact");
+  });
+});

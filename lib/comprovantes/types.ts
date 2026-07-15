@@ -109,6 +109,11 @@ export interface MatchResult {
   rule?: MatchRule;
   /** All candidates that survived (≥2 ⇒ ambiguous). */
   candidateIds?: string[];
+  /**
+   * A barcode/DA key identified THE fatura but the value diverged (Gabriel
+   * 2026-07-14): not bound, but flagged as a STRONG suggestion for the human.
+   */
+  strongSuggestion?: boolean;
   /** pt-BR explanation lines (stored in `receipts.match_notes`). */
   reasons: string[];
 }
