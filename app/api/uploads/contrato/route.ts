@@ -30,7 +30,7 @@ import {
 } from "@/lib/http/guards";
 import { pdfPageCount, PdfEncryptedError } from "@/lib/comprovantes/extract";
 import { deleteFile, driveFolderId, uploadFile } from "@/lib/drive/client";
-import { sanitizeDriveName } from "@/lib/drive/naming";
+import { buildUploadDriveName } from "@/lib/drive/naming";
 import { validateUpload } from "@/lib/uploads/validate";
 import { DOCUMENT_KIND } from "@/lib/domain";
 
@@ -106,7 +106,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const folderId = driveFolderId("contratos");
-    const name = `${v.sha256.slice(0, 8)}_${sanitizeDriveName(file.name)}`;
+    const name = buildUploadDriveName(file.name, v.sha256);
     const uploaded = await uploadFile({
       folderId,
       name,

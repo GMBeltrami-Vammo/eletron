@@ -18,6 +18,21 @@ export function sanitizeDriveName(name: string): string {
     .trim();
 }
 
+/**
+ * Drive object name for a user upload (comprovante / contrato): the sanitized
+ * ORIGINAL filename — the meaningful name a human recognizes when browsing
+ * Drive. No hash prefix (Gabriel 2026-07-14: "vinha com um nome estranho"): the
+ * app tracks the file by `drive_file_id` + `content_hash`, so the Drive name is
+ * cosmetic and Drive tolerates duplicate names. Falls back to a short
+ * hash-based name only when the original sanitizes to nothing, and always keeps
+ * a `.pdf` extension.
+ */
+export function buildUploadDriveName(originalName: string, sha256: string): string {
+  const cleaned = sanitizeDriveName(originalName);
+  const base = cleaned.length > 0 ? cleaned : `documento-${sha256.slice(0, 8)}`;
+  return /\.pdf$/i.test(base) ? base : `${base}.pdf`;
+}
+
 /** `YYYY-MM-DD` (ISO or full ISO) -> `YYYY-MM`; '' when unparseable. */
 export function monthTag(dueDateIso: string | null | undefined): string {
   if (!dueDateIso) return "";
