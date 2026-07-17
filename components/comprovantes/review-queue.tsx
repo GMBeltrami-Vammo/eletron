@@ -506,6 +506,14 @@ function NoMatchSection({
   );
 }
 
+/** pt-BR money string → number for the value filter (null when empty/invalid). */
+function parseValorFilter(raw: string): number | null {
+  const t = raw.trim().replace(/[r$\s]/gi, "");
+  if (t === "") return null;
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function ReviewQueue({
   initialData,
   viewer,
@@ -515,6 +523,10 @@ export function ReviewQueue({
 }) {
   const [target, setTarget] = React.useState<PickerTarget | null>(null);
   const [confirmTarget, setConfirmTarget] = React.useState<ConfirmTarget | null>(null);
+  // Value filter (Gabriel 2026-07-14): type a value to see only the receipts at
+  // ≈ that amount (±R$0,50) — for cross-checking against charges of the same
+  // value whose keys diverge.
+  const [valor, setValor] = React.useState("");
 
   const { data = initialData } = useQuery({
     queryKey: REVIEW_KEY,
@@ -522,16 +534,24 @@ export function ReviewQueue({
     initialData,
   });
 
+  const valorNum = parseValorFilter(valor);
+  const filteredRows = React.useMemo(() => {
+    if (valorNum === null) return data.rows;
+    return data.rows.filter(
+      (r) => r.amount !== null && Math.abs(r.amount - valorNum) <= 0.5,
+    );
+  }, [data.rows, valorNum]);
+
   // Split: receipts with ranked candidates (a human should pick) vs receipts
   // that matched nothing (candidateIds empty → "sem correspondência", hidden).
   const { withCandidates, noMatch } = React.useMemo(() => {
     const withCandidates: ReviewReceiptRow[] = [];
     const noMatch: ReviewReceiptRow[] = [];
-    for (const r of data.rows) {
+    for (const r of filteredRows) {
       (r.candidateIds.length > 0 ? withCandidates : noMatch).push(r);
     }
     return { withCandidates, noMatch };
-  }, [data.rows]);
+  }, [filteredRows]);
 
   // Symmetric N↔N ambiguous groups (one landlord, N same-value charges) — the
   // one-click resolver. Built from the with-candidates set.
@@ -734,6 +754,29 @@ export function ReviewQueue({
           comprovantes estiver configurado.
         </p>
       ) : null}
+
+      <div className="flex items-center gap-2">
+        <input
+          inputMode="decimal"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder="Filtrar por valor…"
+          aria-label="Filtrar comprovantes por valor"
+          className="h-8 w-40 rounded-md border border-border bg-card px-2 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        {valorNum !== null ? (
+          <span className="text-xs text-muted-foreground">
+            {filteredRows.length} comprovante(s) a ±R$0,50 de {formatBRL(valorNum)}
+            <button
+              type="button"
+              onClick={() => setValor("")}
+              className="ml-1.5 underline underline-offset-2 hover:text-foreground"
+            >
+              limpar
+            </button>
+          </span>
+        ) : null}
+      </div>
 
       <ResolvableGroups
         groups={resolvableGroups}

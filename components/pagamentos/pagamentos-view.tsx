@@ -71,6 +71,14 @@ function csvMeta(
   return { csvValue } as ColumnDef<PagamentoRow, unknown>["meta"];
 }
 
+/** pt-BR money string → number for the value filter (or null when empty/invalid). */
+function parseMoneyFilter(raw: string): number | null {
+  const t = raw.trim().replace(/[r$\s]/gi, "");
+  if (t === "") return null;
+  const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(n) ? n : null;
+}
+
 function hasMismatch(row: PagamentoRow): boolean {
   return (
     row.amount !== null &&
@@ -606,11 +614,19 @@ function LedgerPanel({
   // open payables within this tab, instead of a separate tab. Each LedgerPanel
   // instance (Enel/EDP, Locação) keeps its own toggle.
   const [onlyAPagar, setOnlyAPagar] = React.useState(false);
+  // Value filter (Gabriel 2026-07-14): type a value to see every charge at ≈
+  // that amount (±R$0,50) — for cross-checking a comprovante against charges
+  // whose keys differ (e.g. a rent payment where the PIX key diverges).
+  const [valor, setValor] = React.useState("");
+  const valorNum = parseMoneyFilter(valor);
   const payablesCount = React.useMemo(() => rows.filter(isAPagar).length, [rows]);
-  const shown = React.useMemo(
-    () => (onlyAPagar ? rows.filter(isAPagar) : rows),
-    [rows, onlyAPagar],
-  );
+  const shown = React.useMemo(() => {
+    let r = onlyAPagar ? rows.filter(isAPagar) : rows;
+    if (valorNum !== null) {
+      r = r.filter((x) => x.amount !== null && Math.abs(x.amount - valorNum) <= 0.5);
+    }
+    return r;
+  }, [rows, onlyAPagar, valorNum]);
   const summary = summarize(shown);
   return (
     <>
@@ -634,6 +650,28 @@ function LedgerPanel({
             mostrando só contas em aberto (a pagar)
           </span>
         ) : null}
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            inputMode="decimal"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            placeholder="Filtrar por valor…"
+            aria-label="Filtrar por valor"
+            className="h-8 w-40 rounded-md border border-border bg-card px-2 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          {valorNum !== null ? (
+            <span className="text-xs text-muted-foreground">
+              {shown.length} a ±R$0,50 de {formatBRL(valorNum)}
+              <button
+                type="button"
+                onClick={() => setValor("")}
+                className="ml-1.5 underline underline-offset-2 hover:text-foreground"
+              >
+                limpar
+              </button>
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
