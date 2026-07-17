@@ -21,6 +21,8 @@ import {
 export interface StationOption {
   id: number;
   name: string | null;
+  /** Boxes ativos no Metabase (card 28556) — p/ comparar com o contrato (#67). */
+  activeBoxes: number | null;
 }
 
 export interface ContratoIntakeRow extends ContractIntakePrefill {
@@ -81,10 +83,16 @@ export async function readContratoQueue(): Promise<ContratoQueueData> {
         .order("created_at", { ascending: false }),
     );
 
-    const stationRows = await readAll<{ id: number; name: string | null }>(() =>
-      admin.from("stations").select("id, name").order("id"),
-    );
-    const stations: StationOption[] = stationRows.map((s) => ({ id: s.id, name: s.name }));
+    const stationRows = await readAll<{
+      id: number;
+      name: string | null;
+      active_boxes: number | null;
+    }>(() => admin.from("stations").select("id, name, active_boxes").order("id"));
+    const stations: StationOption[] = stationRows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      activeBoxes: s.active_boxes ?? null,
+    }));
 
     const rows: ContratoIntakeRow[] = intakes.map((i) => ({
       ...contractIntakePrefill(i.ai_extraction ?? {}),

@@ -27,7 +27,7 @@ export default async function NovoContratoPage({
   try {
     const snapshot = await getRepository().getSnapshot();
     stations = snapshot.stations
-      .map((s) => ({ id: s.id, name: s.name }))
+      .map((s) => ({ id: s.id, name: s.name, activeBoxes: s.activeBoxes ?? null }))
       .sort((a, b) => a.id - b.id);
   } catch {
     stations = [];

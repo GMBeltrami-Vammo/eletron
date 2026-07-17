@@ -123,6 +123,15 @@ export function ContractIntakeFields({
   const isPerBox = contractType === "por_box" || contractType === "por_box_minimo";
   const isFixed = contractType === "fixo";
 
+  // Boxes do Metabase da estação vinculada, para comparar com o contrato (#67):
+  // com box no contrato → mostra os dois + se conferem; sem box no contrato →
+  // mostra só o Metabase.
+  const selectedStation = stationId
+    ? (stations.find((s) => String(s.id) === stationId) ?? null)
+    : null;
+  const metabaseBoxes = selectedStation?.activeBoxes ?? null;
+  const contractBoxes = intOrNull(boxCount);
+
   async function save() {
     const result = await run(
       () =>
@@ -206,6 +215,33 @@ export function ContractIntakeFields({
               ))}
             </SelectContent>
           </Select>
+          {selectedStation ? (
+            metabaseBoxes != null ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Boxes no Metabase:{" "}
+                <span className="font-medium tabular-nums text-foreground">
+                  {metabaseBoxes}
+                </span>
+                {contractBoxes != null ? (
+                  metabaseBoxes === contractBoxes ? (
+                    <span className="text-success-emphasis">
+                      {" "}
+                      · confere com o contrato ({contractBoxes})
+                    </span>
+                  ) : (
+                    <span className="text-warning-emphasis">
+                      {" "}
+                      · diverge do contrato ({contractBoxes})
+                    </span>
+                  )
+                ) : null}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sem dado de boxes no Metabase para esta estação.
+              </p>
+            )
+          ) : null}
         </Field>
         <Field label="Nº da conexão (Enel)">
           <Input value={numeroConexao} onChange={(e) => setNumeroConexao(e.target.value)} />
