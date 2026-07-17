@@ -18,7 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
+import { ComprovanteCell } from "@/components/vammo/comprovante-cell";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import {
   ACCOUNT_TYPE_UI,
@@ -136,7 +136,11 @@ function DrawerBody({
           {row.paymentMethod ? PAYMENT_METHOD_LABEL[row.paymentMethod] : "—"}
         </Field>
         <Field label="Comprovante">
-          {row.payment ? <ComprovanteChip summary={row.payment} /> : "—"}
+          <ComprovanteCell
+            dedupeKey={row.chargeId}
+            amount={row.amount}
+            summary={row.payment}
+          />
         </Field>
         <Field label="Documento de origem">
           {row.documentHref ? (

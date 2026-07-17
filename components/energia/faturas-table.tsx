@@ -20,7 +20,7 @@ import {
   verifyFaturasOnFiscal,
 } from "@/app/actions/fiscal";
 import type { SendOneOutcome } from "@/lib/fiscal/send-fiscal";
-import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
+import { ComprovanteCell } from "@/components/vammo/comprovante-cell";
 import {
   HoverCard,
   HoverCardContent,
@@ -330,31 +330,33 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     accessorFn: (r) =>
       r.payment ? "Vinculado" : r.hasComprovante ? "Planilha" : "Não",
     cell: ({ row }) => {
-      const { payment, hasComprovante, comprovanteDate } = row.original;
-      // R1: linked charging payment wins — deep-links the deep-dive page
-      if (payment) {
+      const { payment, hasComprovante, comprovanteDate, chargeId, amount } =
+        row.original;
+      // sheet-era installation-level receipt (no charging payment) — historical
+      // fallback, not a blank cell, so it doesn't offer manual binding.
+      if (!payment && hasComprovante) {
         return (
-          <span className="flex justify-center">
-            <ComprovanteChip summary={payment} />
+          <span
+            className="flex items-center justify-center gap-1 text-muted-foreground"
+            title="Último comprovante registrado na instalação (era da planilha)"
+          >
+            <Paperclip className="size-3.5" strokeWidth={2} />
+            {comprovanteDate ? (
+              <span className="text-xs tabular-nums">
+                {formatDate(comprovanteDate)}
+              </span>
+            ) : null}
           </span>
         );
       }
-      if (!hasComprovante) {
-        return <span className="block text-center text-muted-foreground">—</span>;
-      }
-      // sheet-era installation-level receipt — historical fallback
+      // Linked → chip; blank → "Vincular" (charge-first matcher).
       return (
-        <span
-          className="flex items-center justify-center gap-1 text-muted-foreground"
-          title="Último comprovante registrado na instalação (era da planilha)"
-        >
-          <Paperclip className="size-3.5" strokeWidth={2} />
-          {comprovanteDate ? (
-            <span className="text-xs tabular-nums">
-              {formatDate(comprovanteDate)}
-            </span>
-          ) : null}
-        </span>
+        <ComprovanteCell
+          dedupeKey={chargeId}
+          amount={amount}
+          summary={payment}
+          align="center"
+        />
       );
     },
   },

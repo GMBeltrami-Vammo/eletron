@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditByline } from "@/components/vammo/audit-byline";
-import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
+import { ComprovanteCell } from "@/components/vammo/comprovante-cell";
 import { DataTable } from "@/components/vammo/data-table";
 import { PageHeader } from "@/components/vammo/page-header";
 import { StatCard } from "@/components/vammo/stat-card";
@@ -315,12 +315,13 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
     id: "comprovante",
     header: "Comprovante",
     accessorFn: (r) => (r.payment ? "Vinculado" : ""),
-    cell: ({ row }) =>
-      row.original.payment ? (
-        <ComprovanteChip summary={row.original.payment} />
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
+    cell: ({ row }) => (
+      <ComprovanteCell
+        dedupeKey={row.original.chargeId}
+        amount={row.original.amount}
+        summary={row.original.payment}
+      />
+    ),
     meta: csvMeta((r) => (r.payment ? "vinculado" : "")),
   },
   {

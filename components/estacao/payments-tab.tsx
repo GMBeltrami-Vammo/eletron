@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
+import { ComprovanteCell } from "@/components/vammo/comprovante-cell";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { CHARGE_KIND_UI, CHARGE_STATUS_UI } from "@/lib/labels";
@@ -145,12 +145,13 @@ const paymentColumns: ColumnDef<PaymentRow, unknown>[] = [
     id: "comprovante",
     header: "Comprovante",
     accessorFn: (r) => (r.payment ? "Vinculado" : ""),
-    cell: ({ row }) =>
-      row.original.payment ? (
-        <ComprovanteChip summary={row.original.payment} />
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
+    cell: ({ row }) => (
+      <ComprovanteCell
+        dedupeKey={row.original.charge.dedupeKey}
+        amount={row.original.charge.amount}
+        summary={row.original.payment}
+      />
+    ),
     meta: { csvValue: (r: PaymentRow) => (r.payment ? "vinculado" : "") },
   },
   {
