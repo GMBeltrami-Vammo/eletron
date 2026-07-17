@@ -138,3 +138,33 @@ describe("findFaturaRows", () => {
     expect(matches[0].supplier).toContain("EDP");
   });
 });
+
+// Gabriel 2026-07-14: "Verificar no fiscal" must work regardless of DA. A
+// non-DA fatura is written with column B = "Boletos outros bancos" and NO " DA"
+// suffix on the description — the check must still find it (id + due date;
+// column B is never read by the matcher).
+describe("findFaturaRows — works for non-DA (Boletos outros bancos) rows", () => {
+  const NAO_DA_ROW = [
+    "10/07/2026 09:00:00",
+    "Boletos outros bancos", // column B — NOT "DA"
+    "EDP São Paulo Distribuição de Energia S/A",
+    "312,45",
+    "88990011",
+    "Consumo de energia - 151999888", // no " DA" suffix
+    "20/07/2026",
+    "401: Charging Infra/Energy: Electricity",
+    "COGS - 401: Charging Infra/Energy: Electricity",
+    "",
+    "Upload de Fatura via Eletron - Aguardando Fiscal",
+    "Ver Fatura",
+  ];
+  it("finds a non-DA fatura by installation id + due date", () => {
+    const matches = findFaturaRows([NAO_DA_ROW], {
+      installationId: "151999888",
+      dueDate: "2026-07-20",
+    });
+    expect(matches).toHaveLength(1);
+    expect(matches[0].installationId).toBe("151999888");
+    expect(matches[0].autoDebit).toBe(false); // parsed, but not used to match
+  });
+});
