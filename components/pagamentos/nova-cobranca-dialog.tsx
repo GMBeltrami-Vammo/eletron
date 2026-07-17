@@ -15,7 +15,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { CirclePlus, Check, ChevronsUpDown } from "lucide-react";
+import { CirclePlus, Check, ChevronsUpDown, Info } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -179,6 +179,7 @@ export function NovaCobrancaDialog({
     amount !== null &&
     amount > 0 &&
     metodo !== "" &&
+    nf.trim() !== "" &&
     file !== null &&
     file.size <= MAX_PDF_BYTES;
   const valid = isFatura ? faturaValid : genericValid;
@@ -418,15 +419,22 @@ export function NovaCobrancaDialog({
                   </div>
                 </div>
 
+                <p className="flex items-start gap-1.5 rounded-md bg-info-subtle/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+                  <Info className="mt-0.5 size-3.5 shrink-0 text-info-emphasis" strokeWidth={2} />
+                  Para escolher entre DA e Boleto, veja o que está escrito na
+                  própria fatura (PDF).
+                </p>
+
                 <div className="grid gap-1.5">
                   <Label htmlFor="nc-nf">
-                    Nota fiscal{" "}
-                    <span className="font-normal text-muted-foreground">(opcional)</span>
+                    Nota fiscal <span className="text-error-emphasis">*</span>
                   </Label>
                   <Input
                     id="nc-nf"
                     value={nf}
                     onChange={(e) => setNf(e.target.value)}
+                    placeholder="obrigatória"
+                    aria-invalid={nf.trim() === ""}
                     className="tabular-nums"
                   />
                 </div>
