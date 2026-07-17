@@ -24,7 +24,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRunAction } from "@/components/comprovantes/write-helpers";
-import { confirmContractIntake } from "@/app/actions/contracts";
+import {
+  confirmContractIntake,
+  type ConfirmContractIntakeInput,
+} from "@/app/actions/contracts";
+import type { ActionResult } from "@/lib/http/actions";
 import {
   CONTRACT_TYPE_UI,
   PAYMENT_METHOD_LABEL,
@@ -79,6 +83,7 @@ export function ContractIntakeFields({
   onCancel,
   cancelLabel = "Cancelar",
   confirmLabel = "Confirmar e criar contrato",
+  submit,
 }: {
   intakeId: string;
   prefill: ContractIntakePrefill;
@@ -87,6 +92,14 @@ export function ContractIntakeFields({
   onCancel?: () => void;
   cancelLabel?: string;
   confirmLabel?: string;
+  /**
+   * Override the confirm call (Casa Vammo no-PDF path, #68): given the form
+   * values (no intakeId), create the contract. Defaults to confirming the
+   * staged intake `intakeId`.
+   */
+  submit?: (
+    values: Omit<ConfirmContractIntakeInput, "intakeId">,
+  ) => Promise<ActionResult<string>>;
 }) {
   const { run, pending } = useRunAction();
   const [contractType, setContractType] = React.useState<string>(prefill.contractType ?? "");
@@ -133,32 +146,31 @@ export function ContractIntakeFields({
   const contractBoxes = intOrNull(boxCount);
 
   async function save() {
+    const values: Omit<ConfirmContractIntakeInput, "intakeId"> = {
+      swapStationId: stationId ? Number(stationId) : null,
+      status,
+      contractType: contractType as ContractType,
+      counterpartyName: cpName.trim() || null,
+      counterpartyCnpj: cpCnpj.trim() || null,
+      numeroConexao: numeroConexao.trim() || null,
+      endereco: endereco.trim() || null,
+      contato: contato.trim() || null,
+      telefone: telefone.trim() || null,
+      email: email.trim() || null,
+      boxCount: intOrNull(boxCount),
+      minBox: intOrNull(minBox),
+      valorPorBox: moneyToNumber(valorPorBox),
+      valorMensal: moneyToNumber(valorMensal),
+      dueDay: intOrNull(dueDay),
+      paymentMethod: (method || null) as PaymentMethod | null,
+      banco: banco.trim() || null,
+      agencia: agencia.trim() || null,
+      conta: conta.trim() || null,
+      chavePix: chavePix.trim() || null,
+      observacoes: observacoes.trim() || null,
+    };
     const result = await run(
-      () =>
-        confirmContractIntake({
-          intakeId,
-          swapStationId: stationId ? Number(stationId) : null,
-          status,
-          contractType: contractType as ContractType,
-          counterpartyName: cpName.trim() || null,
-          counterpartyCnpj: cpCnpj.trim() || null,
-          numeroConexao: numeroConexao.trim() || null,
-          endereco: endereco.trim() || null,
-          contato: contato.trim() || null,
-          telefone: telefone.trim() || null,
-          email: email.trim() || null,
-          boxCount: intOrNull(boxCount),
-          minBox: intOrNull(minBox),
-          valorPorBox: moneyToNumber(valorPorBox),
-          valorMensal: moneyToNumber(valorMensal),
-          dueDay: intOrNull(dueDay),
-          paymentMethod: (method || null) as PaymentMethod | null,
-          banco: banco.trim() || null,
-          agencia: agencia.trim() || null,
-          conta: conta.trim() || null,
-          chavePix: chavePix.trim() || null,
-          observacoes: observacoes.trim() || null,
-        }),
+      () => (submit ? submit(values) : confirmContractIntake({ intakeId, ...values })),
       { success: "Contrato criado" },
     );
     // useRunAction returns boolean; the created id is fetched via router refresh

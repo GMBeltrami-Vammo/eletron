@@ -32,7 +32,7 @@ import {
 } from "@/components/vammo/upload-dropzone";
 import { PdfViewer } from "@/components/comprovantes/pdf-viewer";
 import { ContractIntakeFields } from "@/components/contratos/contract-intake-fields";
-import { pollContractIntake } from "@/app/actions/contracts";
+import { createCasaVammoContract, pollContractIntake } from "@/app/actions/contracts";
 import type { ContractIntakePrefill } from "@/lib/ingest/contratos";
 import type { StationOption } from "@/app/(app)/revisao/contratos/queries";
 
@@ -50,11 +50,40 @@ type Phase =
       documentId: string | null;
       prefill: ContractIntakePrefill;
       nomeArquivo: string | null;
+      /** Casa Vammo (#68): no PDF; confirm via createCasaVammoContract. */
+      casaVammo?: boolean;
     }
   | { kind: "done" }
   | { kind: "error"; message: string };
 
-export type ContratoMode = "extract" | "manual";
+export type ContratoMode = "extract" | "manual" | "casa_vammo";
+
+/** Empty prefill for a Casa Vammo (gratuito, no PDF) — seeds the deep-linked station. */
+function casaVammoPrefill(stationId: number | null): ContractIntakePrefill {
+  return {
+    swapStationId: stationId,
+    status: "ACTIVE",
+    contractType: "casa_vammo",
+    counterpartyName: null,
+    counterpartyCnpj: null,
+    numeroConexao: null,
+    endereco: null,
+    contato: null,
+    telefone: null,
+    email: null,
+    boxCount: null,
+    minBox: null,
+    valorPorBox: null,
+    valorMensal: null,
+    dueDay: null,
+    paymentMethod: null,
+    banco: null,
+    agencia: null,
+    conta: null,
+    chavePix: null,
+    observacoes: null,
+  };
+}
 
 export function NovoContratoFlow({
   stations,
@@ -177,6 +206,14 @@ export function NovoContratoFlow({
         <div className="lg:sticky lg:top-6 lg:self-start">
           {phase.documentId ? (
             <PdfViewer documentId={phase.documentId} page={1} />
+          ) : phase.casaVammo ? (
+            <div className="rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Casa Vammo — sem PDF</p>
+              <p className="mt-1">
+                Casas Vammo são gratuitas e não têm contrato de locação em PDF.
+                Preencha os dados ao lado e confirme.
+              </p>
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">PDF indisponível.</p>
           )}
@@ -185,9 +222,9 @@ export function NovoContratoFlow({
           <CardHeader>
             <CardTitle>Revisar e confirmar</CardTitle>
             <CardDescription>
-              Confira cada campo extraído pela IA com o contrato ao lado. Ao
-              confirmar, o contrato, o parceiro locador e a conta de aluguel são
-              criados.
+              {phase.casaVammo
+                ? "Preencha os dados da Casa Vammo (gratuito). Ao confirmar, o contrato é criado — sem PDF."
+                : "Confira cada campo extraído pela IA com o contrato ao lado. Ao confirmar, o contrato, o parceiro locador e a conta de aluguel são criados."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -198,6 +235,7 @@ export function NovoContratoFlow({
               // ContractIntakeFields already toasts "Contrato criado" via
               // useRunAction — just advance the flow here (no double toast).
               onConfirmed={() => setPhase({ kind: "done" })}
+              submit={phase.casaVammo ? createCasaVammoContract : undefined}
             />
           </CardContent>
         </Card>
@@ -235,14 +273,17 @@ export function NovoContratoFlow({
 
   // idle / uploading / awaiting / error — the drop + progress card
   const isManual = mode === "manual";
+  const isCasaVammo = mode === "casa_vammo";
   return (
     <Card className="max-w-2xl">
       <CardHeader>
         <CardTitle>Enviar contrato</CardTitle>
         <CardDescription>
-          {isManual
-            ? "Solte o PDF e preencha os dados do contrato na hora, sem esperar a extração — para vincular rápido um contrato a uma estação."
-            : "Solte o PDF do contrato. Ele vai para o Drive e é extraído automaticamente; em seguida você revisa e confirma aqui mesmo."}
+          {isCasaVammo
+            ? "Casa Vammo é gratuita e não tem contrato em PDF — vincule a estação, preencha os dados e confirme."
+            : isManual
+              ? "Solte o PDF e preencha os dados do contrato na hora, sem esperar a extração — para vincular rápido um contrato a uma estação."
+              : "Solte o PDF do contrato. Ele vai para o Drive e é extraído automaticamente; em seguida você revisa e confirma aqui mesmo."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -270,9 +311,44 @@ export function NovoContratoFlow({
             >
               Preencher manualmente
             </button>
+            <button
+              type="button"
+              onClick={() => setMode("casa_vammo")}
+              className={
+                mode === "casa_vammo"
+                  ? "rounded-md bg-accent px-3 py-1.5 font-medium text-vammo-blue"
+                  : "rounded-md px-3 py-1.5 text-muted-foreground hover:text-foreground"
+              }
+            >
+              Casa Vammo (sem PDF)
+            </button>
           </div>
         ) : null}
 
+        {isCasaVammo && phase.kind === "idle" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Casas Vammo são gratuitas e não têm contrato de locação em PDF.
+              Nada é enviado ao Drive — você vincula a estação e preenche os
+              dados na próxima tela.
+            </p>
+            <Button
+              onClick={() =>
+                setPhase({
+                  kind: "ready",
+                  intakeId: "",
+                  documentId: null,
+                  prefill: casaVammoPrefill(initialStationId),
+                  nomeArquivo: null,
+                  casaVammo: true,
+                })
+              }
+            >
+              Continuar
+            </Button>
+          </div>
+        ) : (
+          <>
         <ol className="space-y-3">
           <Step
             icon={FileUp}
@@ -338,6 +414,8 @@ export function NovoContratoFlow({
             </Button>
           </div>
         ) : null}
+          </>
+        )}
       </CardContent>
     </Card>
   );

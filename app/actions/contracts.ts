@@ -93,42 +93,48 @@ export interface ConfirmContractIntakeInput {
   observacoes: string | null;
 }
 
+/** Maps the confirm input → the `confirm_contract_intake` RPC args (shared by
+ *  the intake-confirm and the Casa Vammo no-PDF path). CPF/CNPJ is normalized
+ *  right before the RPC (restores stripped leading zeros; nulls real garbage). */
+function buildConfirmArgs(
+  intakeId: string,
+  input: Omit<ConfirmContractIntakeInput, "intakeId">,
+) {
+  return {
+    p_intake_id: intakeId,
+    p_swap_station_id: input.swapStationId,
+    p_status: input.status,
+    p_contract_type: input.contractType,
+    p_counterparty_name: input.counterpartyName,
+    p_counterparty_cnpj: input.counterpartyCnpj
+      ? normalizeCnpjCpf(input.counterpartyCnpj)
+      : null,
+    p_numero_conexao: input.numeroConexao,
+    p_endereco: input.endereco,
+    p_contato: input.contato,
+    p_telefone: input.telefone,
+    p_email: input.email,
+    p_box_count: input.boxCount,
+    p_min_box: input.minBox,
+    p_valor_por_box: input.valorPorBox,
+    p_valor_mensal: input.valorMensal,
+    p_due_day: input.dueDay,
+    p_payment_method: input.paymentMethod,
+    p_banco: input.banco,
+    p_agencia: input.agencia,
+    p_conta: input.conta,
+    p_chave_pix: input.chavePix,
+    p_observacoes: input.observacoes,
+  };
+}
+
 /** Confirm a staged intake → creates the contract. Returns the new contract id. */
 export async function confirmContractIntake(
   input: ConfirmContractIntakeInput,
 ): Promise<ActionResult<string>> {
   return withOperator(async (client) => {
-    // CPF/CNPJ is normalized right before the RPC (restores stripped leading
-    // zeros; nulls real garbage) so it passes the counterparties.cnpj_cpf CHECK.
-    const cnpj = input.counterpartyCnpj
-      ? normalizeCnpjCpf(input.counterpartyCnpj)
-      : null;
-
     const contractId = unwrapRpc(
-      await client.rpc("confirm_contract_intake", {
-        p_intake_id: input.intakeId,
-        p_swap_station_id: input.swapStationId,
-        p_status: input.status,
-        p_contract_type: input.contractType,
-        p_counterparty_name: input.counterpartyName,
-        p_counterparty_cnpj: cnpj,
-        p_numero_conexao: input.numeroConexao,
-        p_endereco: input.endereco,
-        p_contato: input.contato,
-        p_telefone: input.telefone,
-        p_email: input.email,
-        p_box_count: input.boxCount,
-        p_min_box: input.minBox,
-        p_valor_por_box: input.valorPorBox,
-        p_valor_mensal: input.valorMensal,
-        p_due_day: input.dueDay,
-        p_payment_method: input.paymentMethod,
-        p_banco: input.banco,
-        p_agencia: input.agencia,
-        p_conta: input.conta,
-        p_chave_pix: input.chavePix,
-        p_observacoes: input.observacoes,
-      }),
+      await client.rpc("confirm_contract_intake", buildConfirmArgs(input.intakeId, input)),
     ) as string;
 
     revalidatePath("/revisao/contratos");
@@ -136,6 +142,56 @@ export async function confirmContractIntake(
     revalidatePath("/alugueis");
     await revalidateSnapshot();
     return contractId;
+  });
+}
+
+/**
+ * Casa Vammo (decisão #68): register a rent contract with NO PDF. A Casa Vammo
+ * location is gratuito (no landlord bill), so there is no document to upload —
+ * we stage a document-less pending intake and confirm it in one call. The
+ * contract type comes from the form (the "Casa Vammo (sem PDF)" mode defaults it
+ * to `casa_vammo`; the human may pick another no-bill type like `gratuito`). On
+ * a confirm failure the just-created intake is dropped so it never lingers in
+ * the /revisão queue.
+ */
+export async function createCasaVammoContract(
+  input: Omit<ConfirmContractIntakeInput, "intakeId">,
+): Promise<ActionResult<string>> {
+  return withOperator(async (client) => {
+    const admin = supabaseAdmin();
+    const { data, error } = await admin
+      .from("contract_intake")
+      .insert({
+        document_id: null,
+        drive_file_id: null,
+        web_view_link: null,
+        nome_arquivo: "Casa Vammo (sem PDF)",
+        ai_extraction: {},
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    if (error) throw new Error(`contract_intake (casa vammo): ${error.message}`);
+    const intakeId = (data as { id: string }).id;
+
+    try {
+      const contractId = unwrapRpc(
+        await client.rpc("confirm_contract_intake", buildConfirmArgs(intakeId, input)),
+      ) as string;
+      revalidatePath("/revisao/contratos");
+      revalidatePath("/revisao");
+      revalidatePath("/alugueis");
+      await revalidateSnapshot();
+      return contractId;
+    } catch (err) {
+      // orphan cleanup — never leave a dangling pending intake in the queue.
+      await admin
+        .from("contract_intake")
+        .delete()
+        .eq("id", intakeId)
+        .eq("status", "pending");
+      throw err;
+    }
   });
 }
 
