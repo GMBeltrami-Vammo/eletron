@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -64,6 +65,7 @@ export function ApproveCobrancaDialog({
       : "boleto_email",
   );
   const [nf, setNf] = React.useState(row.notaFiscal ?? "");
+  const [dueDate, setDueDate] = React.useState(row.dueDate ?? "");
 
   const boleto = isBoletoMethod(method);
   const nfMissing = boleto && nf.trim() === "";
@@ -77,6 +79,7 @@ export function ApproveCobrancaDialog({
           kind,
           paymentMethod: method,
           notaFiscal: nf.trim() || null,
+          dueDate: dueDate || null,
         }),
       { success: "Enviada para Pagamentos" },
     ).then((ok) => {
@@ -110,6 +113,11 @@ export function ApproveCobrancaDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="ap-venc">Vencimento</Label>
+            <DateField id="ap-venc" value={dueDate} onValueChange={setDueDate} />
           </div>
 
           <div className="grid gap-1.5">

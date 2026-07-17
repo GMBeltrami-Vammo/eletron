@@ -5,8 +5,30 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
+import { collectSelectItems } from "./select-items"
 
-const Select = SelectPrimitive.Root
+/**
+ * Base UI's `Select.Value` shows the raw `value` in the trigger unless the Root
+ * gets an `items` map. This wrapper derives that map from the `SelectItem`
+ * descendants so the trigger shows the label everywhere (Gabriel 2026-07-17).
+ * An explicit `items` prop still wins; an unmatched value falls back to raw
+ * (same as before), so this is never worse. See select-items.ts.
+ */
+function Select<Value, Multiple extends boolean | undefined = false>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = React.useMemo(
+    () => items ?? collectSelectItems(children),
+    [items, children],
+  )
+  return (
+    <SelectPrimitive.Root items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -135,6 +157,8 @@ function SelectItem({
     </SelectPrimitive.Item>
   )
 }
+// Identifies SelectItem to collectSelectItems (select-items.ts) — must stay set.
+SelectItem.displayName = "SelectItem"
 
 function SelectSeparator({
   className,
