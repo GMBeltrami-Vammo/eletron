@@ -78,7 +78,10 @@ export function classifyFaturaForSend(
   if (!Number.isFinite(year) || year <= SENDABLE_YEAR - 1) return "ignoredPast";
   if (year >= SENDABLE_YEAR + 1) return "blockedFuture";
   if (f.dueDate < todayIso) return "pastDue";
-  if (f.autoDebit !== "cadastrado") return "naoCadastrado";
+  // Gabriel 2026-07-14: ALL not-overdue faturas are sent — débito automático is
+  // NO LONGER a gate; it only changes column B (see buildFiscalRow). A sem-DA
+  // fatura is sent as "Boletos outros bancos" instead of being left to the
+  // manual queue.
   if (!f.tabExists) return "semAba";
   return "send";
 }
@@ -99,11 +102,17 @@ export function nowFiscalTimestamp(now: Date): string {
   return `${p("day")}/${p("month")}/${p("year")} ${p("hour")}:${p("minute")}:${p("second")}`;
 }
 
+/** Column B: "DA" for débito automático; else "Boletos outros bancos" (Gabriel 2026-07-14). */
+export function fiscalColumnB(autoDebit: string): string {
+  return autoDebit === "cadastrado" ? "DA" : "Boletos outros bancos";
+}
+
 /**
  * Builds the 12-column fiscal row for a fatura. `sep` is the HYPERLINK argument
- * separator (';' on a pt-BR sheet). Col 1 is always "DA" (only Cadastrado
- * faturas are ever sent); Enel's description has NO " DA" suffix, EDP's does —
- * exactly as in the two real sample rows.
+ * separator (';' on a pt-BR sheet). Col B is "DA" for Cadastrado faturas, else
+ * "Boletos outros bancos" (non-DA are now sent too — Gabriel 2026-07-14);
+ * Enel's description has NO " DA" suffix, EDP-Cadastrado's does — exactly as in
+ * the two real sample rows.
  */
 export function buildFiscalRow(
   f: FaturaRef,
@@ -117,7 +126,7 @@ export function buildFiscalRow(
     : "Ver Fatura";
   return [
     timestamp,
-    "DA",
+    fiscalColumnB(f.autoDebit),
     SUPPLIER[f.provider],
     f.amount === null ? "" : formatValorBR(f.amount),
     f.nf ?? "",

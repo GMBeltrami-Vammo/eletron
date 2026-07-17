@@ -4,9 +4,11 @@ import type { Metadata } from "next";
 import { BackLink } from "@/components/revisao/back-link";
 import {
   ContractsWithoutStationTable,
+  EnelEdpSemDaTable,
   FaturasSemVencimentoTable,
   StationsWithoutContractTable,
   type ContractWithoutStationRow,
+  type EnelEdpSemDaRow,
   type FaturaSemVencimentoRow,
   type StationWithoutContractRow,
 } from "@/components/revisao/irregularities-tables";
@@ -65,6 +67,50 @@ async function IrregularidadesContent() {
   const accountById = new Map(
     snapshot.billingAccounts.map((account) => [account.id, account]),
   );
+  const stateByAccount = new Map(
+    snapshot.utilityAccountStates.map((s) => [s.billingAccountId, s]),
+  );
+  const chargesByAccount = new Map<string, typeof snapshot.charges>();
+  for (const c of snapshot.charges) {
+    if (!c.billingAccountId) continue;
+    const arr = chargesByAccount.get(c.billingAccountId);
+    if (arr) arr.push(c);
+    else chargesByAccount.set(c.billingAccountId, [c]);
+  }
+
+  // Enel/EDP energy accounts whose station is NOT registered for débito
+  // automático (auto_debit ≠ 'cadastrado') — Gabriel 2026-07-14: surface them
+  // so the team can chase the DA enrollment. Read-only derivation.
+  const enelEdpSemDa: EnelEdpSemDaRow[] = snapshot.billingAccounts
+    .filter(
+      (a) =>
+        a.accountType === ACCOUNT_TYPE.energyEnel ||
+        a.accountType === ACCOUNT_TYPE.energyEdp,
+    )
+    .filter((a) => (stateByAccount.get(a.id)?.autoDebit ?? "desconhecido") !== "cadastrado")
+    .map((a) => {
+      const state = stateByAccount.get(a.id);
+      const station = a.stationId !== null ? stationById.get(a.stationId) : undefined;
+      const charges = (chargesByAccount.get(a.id) ?? [])
+        .slice()
+        .sort((x, y) =>
+          (y.competencia ?? y.dueDate ?? "").localeCompare(
+            x.competencia ?? x.dueDate ?? "",
+          ),
+        );
+      const last = charges[0];
+      return {
+        vammoId: a.stationId,
+        stationName: station?.name ?? null,
+        installationKey: a.enelId ?? a.edpUc ?? null,
+        provider: a.accountType === ACCOUNT_TYPE.energyEdp ? "EDP" : "Enel",
+        address: station?.address ?? state?.address ?? null,
+        autoDebitRegistration:
+          a.autoDebitRegistration ?? state?.autoDebitRegistration ?? null,
+        lastBillValue: last?.amount ?? null,
+        lastBillFiscalExported: last?.fiscalExported ?? false,
+      } satisfies EnelEdpSemDaRow;
+    });
 
   // Energy faturas with NO due date (Gabriel 2026-07-14): a boleto should always
   // carry a vencimento — a missing one is an anomaly to fix (it's also tagged
@@ -161,6 +207,15 @@ async function IrregularidadesContent() {
             </span>
           </h2>
           <FaturasSemVencimentoTable rows={faturasSemVencimento} />
+        </section>
+        <section>
+          <h2 className="pb-3 text-base font-semibold">
+            Contas Enel/EDP sem débito automático registrado{" "}
+            <span className="font-normal text-muted-foreground tabular-nums">
+              ({enelEdpSemDa.length})
+            </span>
+          </h2>
+          <EnelEdpSemDaTable rows={enelEdpSemDa} />
         </section>
         <section>
           <h2 className="pb-3 text-base font-semibold">

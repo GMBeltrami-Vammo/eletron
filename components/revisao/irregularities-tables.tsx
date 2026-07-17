@@ -311,6 +311,114 @@ const semVencimentoColumns: ColumnDef<FaturaSemVencimentoRow, unknown>[] = [
   },
 ];
 
+/** Enel/EDP energy account whose station is NOT registered for débito automático. */
+export interface EnelEdpSemDaRow {
+  /** Swap-station id — the "ID" on /estações. */
+  vammoId: number | null;
+  stationName: string | null;
+  /** Enel id / EDP UC — the "Instalação" on /energia. */
+  installationKey: string | null;
+  provider: "Enel" | "EDP";
+  address: string | null;
+  autoDebitRegistration: string | null;
+  lastBillValue: number | null;
+  lastBillFiscalExported: boolean;
+}
+
+const semDaColumns: ColumnDef<EnelEdpSemDaRow, unknown>[] = [
+  {
+    id: "vammoId",
+    header: "ID (estação)",
+    accessorFn: (row) => row.vammoId ?? -1,
+    cell: ({ row }) => {
+      const { vammoId, stationName } = row.original;
+      if (vammoId === null) return <span className="text-muted-foreground">—</span>;
+      return (
+        <Link href={`/estacoes/${vammoId}`} className="font-medium hover:underline">
+          <span className="tabular-nums">#{vammoId}</span>
+          {stationName ? (
+            <span className="font-normal text-muted-foreground"> · {stationName}</span>
+          ) : null}
+        </Link>
+      );
+    },
+  },
+  {
+    id: "provedor",
+    header: "Provedor",
+    accessorFn: (row) => row.provider,
+    cell: ({ row }) => (
+      <StatusBadge color={row.original.provider === "Enel" ? "blue" : "dark-green"}>
+        {row.original.provider}
+      </StatusBadge>
+    ),
+  },
+  {
+    id: "instalacao",
+    header: "Instalação",
+    accessorFn: (row) => row.installationKey ?? "—",
+    cell: ({ getValue }) => (
+      <span className="font-mono text-xs tabular-nums">{String(getValue())}</span>
+    ),
+  },
+  {
+    id: "endereco",
+    header: "Endereço",
+    accessorFn: (row) => row.address ?? "—",
+    cell: ({ getValue }) => (
+      <span className="block max-w-96 whitespace-normal">{String(getValue())}</span>
+    ),
+  },
+  {
+    id: "registroDa",
+    header: "Registro DA",
+    accessorFn: (row) => row.autoDebitRegistration ?? "—",
+    cell: ({ row }) =>
+      row.original.autoDebitRegistration ? (
+        <span className="font-mono text-xs tabular-nums">
+          {row.original.autoDebitRegistration}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
+    id: "ultimoValor",
+    header: "Último valor",
+    accessorFn: (row) => row.lastBillValue ?? "",
+    cell: ({ row }) => (
+      <span className="block text-right tabular-nums">
+        {formatBRL(row.original.lastBillValue)}
+      </span>
+    ),
+    meta: { csvValue: (row: EnelEdpSemDaRow) => row.lastBillValue },
+  },
+  {
+    id: "ultimoFiscal",
+    header: "Última ao fiscal",
+    accessorFn: (row) => (row.lastBillFiscalExported ? "Sim" : "Não"),
+    cell: ({ row }) => (
+      <StatusBadge color={row.original.lastBillFiscalExported ? "green" : "grey"} outline>
+        {row.original.lastBillFiscalExported ? "Sim" : "Não"}
+      </StatusBadge>
+    ),
+  },
+];
+
+export function EnelEdpSemDaTable({ rows }: { rows: EnelEdpSemDaRow[] }) {
+  return (
+    <DataTable
+      columns={semDaColumns}
+      data={rows}
+      searchPlaceholder="Buscar estação, instalação, endereço…"
+      csvFilename="enel-edp-sem-debito-automatico"
+      pageSize={25}
+      filterableColumnIds="all"
+      emptyMessage="Nenhuma conta de energia sem débito automático."
+    />
+  );
+}
+
 export function FaturasSemVencimentoTable({
   rows,
 }: {

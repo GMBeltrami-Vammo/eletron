@@ -5,6 +5,7 @@ import type { FaturaRef } from "./check-faturas";
 import {
   buildFiscalRow,
   classifyFaturaForSend,
+  fiscalColumnB,
   fiscalTodayISO,
   formatDueDateBR,
   formatValorBR,
@@ -116,6 +117,20 @@ describe("buildFiscalRow — hyperlink separator + missing url", () => {
   });
 });
 
+describe("fiscalColumnB — DA vs Boletos outros bancos (Gabriel 2026-07-14)", () => {
+  it("Cadastrado → DA; anything else → Boletos outros bancos", () => {
+    expect(fiscalColumnB("cadastrado")).toBe("DA");
+    expect(fiscalColumnB("nao_cadastrado")).toBe("Boletos outros bancos");
+    expect(fiscalColumnB("desconhecido")).toBe("Boletos outros bancos");
+  });
+  it("buildFiscalRow col B follows the fatura's DA status", () => {
+    expect(buildFiscalRow(fatura({ autoDebit: "cadastrado" }), TS, ";")[1]).toBe("DA");
+    expect(buildFiscalRow(fatura({ autoDebit: "nao_cadastrado" }), TS, ";")[1]).toBe(
+      "Boletos outros bancos",
+    );
+  });
+});
+
 describe("fiscalTodayISO (São Paulo date)", () => {
   it("returns the São Paulo calendar date (UTC-3)", () => {
     expect(fiscalTodayISO(new Date("2026-07-10T12:00:00Z"))).toBe("2026-07-10");
@@ -155,9 +170,9 @@ describe("classifyFaturaForSend", () => {
     expect(cls({ dueDate: "2026-07-09" })).toBe("pastDue");
     expect(cls({ dueDate: "2026-07-10" })).toBe("send"); // == today
   });
-  it("2026 without débito automático → naoCadastrado", () => {
-    expect(cls({ autoDebit: "nao_cadastrado" })).toBe("naoCadastrado");
-    expect(cls({ autoDebit: "desconhecido" })).toBe("naoCadastrado");
+  it("2026 without débito automático → send (all not-overdue send; Gabriel 2026-07-14)", () => {
+    expect(cls({ autoDebit: "nao_cadastrado" })).toBe("send");
+    expect(cls({ autoDebit: "desconhecido" })).toBe("send");
   });
   it("2026 Cadastrado but no month tab → semAba", () => {
     expect(cls({ tabExists: false })).toBe("semAba");
