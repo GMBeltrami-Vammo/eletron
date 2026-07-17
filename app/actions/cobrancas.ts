@@ -38,6 +38,8 @@ export interface ReclassifyInput {
   conta?: string | null;
   chavePix?: string | null;
   codigoBoleto?: string | null;
+  /** Nota fiscal (mandatory for boleto on approve — Gabriel 2026-07-14). */
+  notaFiscal?: string | null;
   notes?: string | null;
 }
 
@@ -86,6 +88,7 @@ export async function reclassifyCharge(
         p_codigo_boleto: input.codigoBoleto ?? null,
         p_notes: input.notes ?? null,
         p_due_date: input.dueDate ?? null,
+        p_nota_fiscal: input.notaFiscal ?? null,
       }),
     ) as string;
 
@@ -125,14 +128,6 @@ async function teachSenderStation(client: UserClient, chargeId: string): Promise
   } catch {
     /* teaching is best-effort */
   }
-}
-
-/** "Aprovar como está" — accept the current classification, clearing needs_review. */
-export async function approveCobranca(
-  chargeId: string,
-  kind: ChargeKind,
-): Promise<ActionResult<string>> {
-  return reclassifyCharge({ chargeId, kind });
 }
 
 /**

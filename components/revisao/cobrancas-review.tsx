@@ -3,9 +3,10 @@
 /**
  * Email-classification review queue (R2, requirement 4): lists every
  * `needs_review` charge the n8n webhook (or a clone-era UNIDENTIFIED row) left
- * for a human, with a PDF-proxy link and a reclassify dialog. "Aprovar como
- * está" accepts the classification; "Revisar" opens the full editor. Both call
- * the `reclassify_charge` RPC through the server actions.
+ * for a human, with a PDF-proxy link and a reclassify dialog. "Aprovar" opens
+ * the classify-on-approve dialog (tipo + método + nota fiscal obrigatória p/
+ * boleto, decisão #47); "Revisar" opens the full editor. Both approve via the
+ * `reclassify_charge` RPC through the server actions.
  */
 
 import * as React from "react";
@@ -15,9 +16,8 @@ import { ExternalLink, PencilLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
-import { useRunAction } from "@/components/comprovantes/write-helpers";
 import { ChargeEditorDialog } from "@/components/cobrancas/charge-editor-dialog";
-import { approveCobranca } from "@/app/actions/cobrancas";
+import { ApproveCobrancaDialog } from "@/components/cobrancas/approve-cobranca-dialog";
 import { CHARGE_KIND_UI } from "@/lib/labels";
 import { formatBRL, formatCompetencia } from "@/lib/format";
 
@@ -44,7 +44,7 @@ export function CobrancasReview({
   available: boolean;
 }) {
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
-  const { run, pending } = useRunAction();
+  const [approving, setApproving] = React.useState<ReviewChargeRow | null>(null);
   const proposals = React.useMemo(
     () => buildUnifyProposals(rows, mergeTargets),
     [rows, mergeTargets],
@@ -155,12 +155,8 @@ export function CobrancasReview({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={pending || !available}
-                onClick={() =>
-                  run(() => approveCobranca(r.id, r.kind), {
-                    success: "Classificação aprovada",
-                  })
-                }
+                disabled={!available}
+                onClick={() => setApproving(r)}
               >
                 Aprovar
               </Button>
@@ -177,7 +173,7 @@ export function CobrancasReview({
         },
       },
     ],
-    [run, pending, available],
+    [available],
   );
 
   return (
@@ -203,6 +199,9 @@ export function CobrancasReview({
           cadastros={cadastros}
           onClose={() => setEditing(null)}
         />
+      ) : null}
+      {approving ? (
+        <ApproveCobrancaDialog row={approving} onClose={() => setApproving(null)} />
       ) : null}
     </>
   );

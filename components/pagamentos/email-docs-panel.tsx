@@ -13,6 +13,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Check,
   CirclePlus,
@@ -45,9 +46,10 @@ import { StatCard } from "@/components/vammo/stat-card";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import { useRunAction } from "@/components/comprovantes/write-helpers";
 import { ChargeEditorDialog } from "@/components/cobrancas/charge-editor-dialog";
+import { ApproveCobrancaDialog } from "@/components/cobrancas/approve-cobranca-dialog";
 import { UnifyProposalsPanel } from "@/components/revisao/unify-proposals-panel";
 import { buildUnifyProposals } from "@/components/revisao/unify-proposals";
-import { approveCobranca, approveCobrancas, discardCharges } from "@/app/actions/cobrancas";
+import { approveCobrancas, discardCharges } from "@/app/actions/cobrancas";
 import { setChargeDocument } from "@/app/actions/charges";
 import { CHARGE_KIND_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
@@ -58,6 +60,7 @@ import {
   buildEmailDocGroups,
   chargeReadiness,
   isDiscardableEmailCharge,
+  isReadyToSendToPagamentos,
   READINESS_GAP_LABEL,
   type EmailDocGroup,
 } from "./email-docs-groups";
@@ -80,6 +83,7 @@ export function EmailDocsPanel({
 }) {
   const { run, pending } = useRunAction();
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
+  const [approving, setApproving] = React.useState<ReviewChargeRow | null>(null);
   const [discarding, setDiscarding] = React.useState<DiscardTarget | null>(null);
   const [addingTo, setAddingTo] = React.useState<EmailDocGroup | null>(null);
 
@@ -103,14 +107,27 @@ export function EmailDocsPanel({
   const disabled = pending || !canWrite || !review.available;
 
   function sendAll(group: EmailDocGroup) {
+    // Bulk approves only the READY ones (pix/transferência, or boleto WITH nota
+    // fiscal). Boletos sem NF (e não-classificadas, que assumem boleto) precisam
+    // do passo por cobrança "Enviar para Pagamentos" — reportadas como puladas.
+    const ready = group.charges.filter(isReadyToSendToPagamentos);
+    const skipped = group.charges.length - ready.length;
+    if (ready.length === 0) {
+      toast.warning(
+        `Nenhuma pronta: ${skipped} boleto(s) sem nota fiscal — use "Enviar para Pagamentos" por cobrança.`,
+      );
+      return;
+    }
     void run(
-      () =>
-        approveCobrancas(group.charges.map((c) => ({ chargeId: c.id, kind: c.kind }))),
+      () => approveCobrancas(ready.map((c) => ({ chargeId: c.id, kind: c.kind }))),
       {
-        success: (r: { approved: number; failed: number; firstError: string | null }) =>
-          r.failed > 0
-            ? `${r.approved} enviada(s), ${r.failed} falharam${r.firstError ? ` — ${r.firstError}` : ""}`
-            : `${r.approved} cobrança(s) enviada(s) para Pagamentos`,
+        success: (r: { approved: number; failed: number; firstError: string | null }) => {
+          const parts = [`${r.approved} enviada(s) para Pagamentos`];
+          if (r.failed > 0)
+            parts.push(`${r.failed} falharam${r.firstError ? ` — ${r.firstError}` : ""}`);
+          if (skipped > 0) parts.push(`${skipped} pulada(s) (boleto sem NF)`);
+          return parts.join(" · ");
+        },
       },
     );
   }
@@ -298,11 +315,7 @@ export function EmailDocsPanel({
                           <Button
                             size="sm"
                             disabled={disabled}
-                            onClick={() =>
-                              void run(() => approveCobranca(c.id, c.kind), {
-                                success: "Enviada para Pagamentos",
-                              })
-                            }
+                            onClick={() => setApproving(c)}
                           >
                             <Send className="size-3.5" strokeWidth={2} />
                             Enviar para Pagamentos
@@ -373,6 +386,10 @@ export function EmailDocsPanel({
           title="Editar cobrança"
           description="Ajuste os campos extraídos do documento. Ao salvar, a cobrança é enviada para Pagamentos."
         />
+      ) : null}
+
+      {approving ? (
+        <ApproveCobrancaDialog row={approving} onClose={() => setApproving(null)} />
       ) : null}
 
       {addingTo && addingTo.documentId ? (

@@ -29,13 +29,13 @@ import { StatusBadge } from "@/components/vammo/status-badge";
 import { PdfViewer } from "@/components/comprovantes/pdf-viewer";
 import { useRunAction } from "@/components/comprovantes/write-helpers";
 import { ChargeEditorDialog } from "@/components/cobrancas/charge-editor-dialog";
+import { ApproveCobrancaDialog } from "@/components/cobrancas/approve-cobranca-dialog";
 import { NovaCobrancaDialog } from "@/components/pagamentos/nova-cobranca-dialog";
 import {
   isStagedEmailCharge,
   chargeReadiness,
   READINESS_GAP_LABEL,
 } from "@/components/pagamentos/email-docs-groups";
-import { approveCobranca } from "@/app/actions/cobrancas";
 import { setChargeDocument } from "@/app/actions/charges";
 import { CHARGE_KIND_UI, CHARGE_STATUS_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
@@ -79,6 +79,7 @@ export function DocumentoDetail({
 }) {
   const { run, pending } = useRunAction();
   const [editing, setEditing] = React.useState<ReviewChargeRow | null>(null);
+  const [approving, setApproving] = React.useState<ReviewChargeRow | null>(null);
   const [adding, setAdding] = React.useState(false);
 
   // distinct stations the document's charges touch (hook before any early return)
@@ -335,11 +336,7 @@ export function DocumentoDetail({
                           <Button
                             size="sm"
                             disabled={disabled}
-                            onClick={() =>
-                              void run(() => approveCobranca(c.id, c.kind), {
-                                success: "Enviada para Pagamentos",
-                              })
-                            }
+                            onClick={() => setApproving(c)}
                           >
                             <Send className="size-3.5" strokeWidth={2} />
                             Enviar
@@ -395,6 +392,10 @@ export function DocumentoDetail({
           title="Editar cobrança"
           description="Ajuste os campos extraídos do documento."
         />
+      ) : null}
+
+      {approving ? (
+        <ApproveCobrancaDialog row={approving} onClose={() => setApproving(null)} />
       ) : null}
 
       {adding ? (

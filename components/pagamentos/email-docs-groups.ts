@@ -164,3 +164,17 @@ export function chargeReadiness(r: {
   if (r.paymentMethod === null) gaps.push("metodo");
   return gaps;
 }
+
+/**
+ * Ready for the bulk "Enviar todas" (Gabriel 2026-07-14): a boleto — or an
+ * unclassified charge, since boleto is the default — needs a nota fiscal to be
+ * approved; pix/transferência don't. Charges that aren't ready must be
+ * classified one-by-one via the per-charge "Enviar para Pagamentos" dialog.
+ */
+export function isReadyToSendToPagamentos(r: {
+  paymentMethod: string | null;
+  notaFiscal: string | null;
+}): boolean {
+  if (r.paymentMethod === "pix" || r.paymentMethod === "transferencia") return true;
+  return (r.notaFiscal ?? "").trim() !== "";
+}

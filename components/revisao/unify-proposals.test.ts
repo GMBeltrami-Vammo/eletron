@@ -26,6 +26,7 @@ function dup(o: Partial<ReviewChargeRow>): ReviewChargeRow {
     conta: null,
     chavePix: null,
     linhaDigitavel: "0339902033...",
+    notaFiscal: null,
     notes: null,
     emailSender: null,
     documentId: "doc-1",

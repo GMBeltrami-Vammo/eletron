@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { useRunAction } from "@/components/comprovantes/write-helpers";
 import { visiblePaymentFields } from "@/components/cobrancas/payment-fields";
+import { isBoletoMethod } from "@/components/cobrancas/approve-cobranca-dialog";
 import { reclassifyCharge } from "@/app/actions/cobrancas";
 import { CHARGE_KIND_UI, PAYMENT_METHOD_LABEL } from "@/lib/labels";
 import type { ChargeKind, PaymentMethod } from "@/lib/domain";
@@ -106,11 +107,16 @@ export function ChargeEditorDialog({
   const [conta, setConta] = React.useState(row.conta ?? "");
   const [chavePix, setChavePix] = React.useState(row.chavePix ?? "");
   const [codigoBoleto, setCodigoBoleto] = React.useState(row.linhaDigitavel ?? "");
+  const [nf, setNf] = React.useState(row.notaFiscal ?? "");
   const [notes, setNotes] = React.useState(row.notes ?? "");
 
   const isEnergyBearing = kind === "energia" || kind === "aluguel_energia";
   const isRentBearing = kind === "aluguel" || kind === "aluguel_energia";
   const paymentFields = visiblePaymentFields(method as PaymentMethod | "");
+  // Salvar = reclassify = tira do staging (aprova). Mesma regra do "Enviar para
+  // Pagamentos": boleto exige nota fiscal para sair da revisão (decisão #47).
+  const isBoleto = isBoletoMethod((method || null) as PaymentMethod | null);
+  const nfMissing = isBoleto && nf.trim() === "";
 
   // Station↔contrato auto-fill (Gabriel): pick a station → fill its cadastro,
   // and vice-versa. If there's no link, don't block — just alert below.
@@ -146,6 +152,7 @@ export function ChargeEditorDialog({
     isRentBearing && stationId !== "" && !cadastroByStation.has(stationId);
 
   async function save() {
+    if (nfMissing) return;
     const ok = await run(
       () =>
         reclassifyCharge({
@@ -169,6 +176,7 @@ export function ChargeEditorDialog({
           codigoBoleto: paymentFields.includes("codigo_boleto")
             ? codigoBoleto || null
             : null,
+          notaFiscal: nf.trim() || null,
           notes: notes || null,
         }),
       { success: "Cobrança atualizada" },
@@ -342,6 +350,22 @@ export function ChargeEditorDialog({
               />
             </Field>
           ) : null}
+          {isBoleto ? (
+            <Field label="Nota fiscal *">
+              <Input
+                value={nf}
+                onChange={(e) => setNf(e.target.value)}
+                placeholder="obrigatória para boleto"
+                aria-invalid={nfMissing}
+                className="tabular-nums"
+              />
+              {nfMissing ? (
+                <p className="mt-1 text-xs text-error-emphasis">
+                  Obrigatória para boleto.
+                </p>
+              ) : null}
+            </Field>
+          ) : null}
 
           <HiddenInstruments row={row} visible={paymentFields} />
 
@@ -373,7 +397,7 @@ export function ChargeEditorDialog({
           <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancelar
           </Button>
-          <Button onClick={save} disabled={pending}>
+          <Button onClick={save} disabled={pending || nfMissing}>
             Salvar
           </Button>
         </DialogFooter>

@@ -37,6 +37,7 @@ export interface ReviewChargeRow {
   conta: string | null;
   chavePix: string | null;
   linhaDigitavel: string | null;
+  notaFiscal: string | null;
   notes: string | null;
   /** Normalized sender (charges.email_sender) — merge-proposal signal (#38). */
   emailSender: string | null;
@@ -137,6 +138,7 @@ interface ChargeRow {
   conta: string | null;
   chave_pix: string | null;
   linha_digitavel: string | null;
+  nota_fiscal: string | null;
   notes: string | null;
   email_sender: string | null;
   source_document_id: string | null;
@@ -150,7 +152,7 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
       admin
         .from("charges")
         .select(
-          "id, kind, competencia, amount, expected_amount, status, match_status, due_date, source, dedupe_key, station_id, billing_account_id, issuer_cnpj, payment_method, banco, agencia, conta, chave_pix, linha_digitavel, notes, email_sender, source_document_id",
+          "id, kind, competencia, amount, expected_amount, status, match_status, due_date, source, dedupe_key, station_id, billing_account_id, issuer_cnpj, payment_method, banco, agencia, conta, chave_pix, linha_digitavel, nota_fiscal, notes, email_sender, source_document_id",
         )
         .eq("match_status", "needs_review")
         // id tiebreaker: competencia is non-unique — without it the paginated
@@ -400,6 +402,7 @@ export async function readReviewQueue(): Promise<ReviewQueueData> {
         conta: c.conta,
         chavePix: c.chave_pix,
         linhaDigitavel: c.linha_digitavel,
+        notaFiscal: c.nota_fiscal,
         notes: c.notes,
         emailSender: c.email_sender,
         documentId: c.source_document_id,

@@ -32,6 +32,7 @@ function row(o: Partial<ReviewChargeRow>): ReviewChargeRow {
     conta: null,
     chavePix: null,
     linhaDigitavel: "0339...",
+    notaFiscal: null,
     notes: null,
     emailSender: "locador@exemplo.com",
     documentId: "doc-1",
