@@ -38,8 +38,28 @@ export interface ManualBillUploadInput {
   competencia?: string | null;
   nf?: string | null;
   notes?: string | null;
+  /**
+   * Manual payment method (Gabriel 2026-07-17): 'da' → débito automático,
+   * 'boleto' → boleto. Sets the charge's payment_method AND the per-bill DA fact
+   * (charge_energy_details.auto_debit) that the fiscal send reads for column B
+   * (#42). null → left unset (today's behavior; the send-freeze fills it).
+   */
+  metodo?: "da" | "boleto" | null;
   /** Extra Faturas detail fields for `charge_energy_details`. */
   energyDetails?: Record<string, unknown> | null;
+}
+
+/** método → the charge's payment_method + the per-bill auto_debit fact. */
+function metodoFields(
+  metodo: "da" | "boleto" | null | undefined,
+): { payment_method: string; auto_debit: string } | null {
+  if (metodo === "da") {
+    return { payment_method: "debito_automatico", auto_debit: "cadastrado" };
+  }
+  if (metodo === "boleto") {
+    return { payment_method: "boleto_email", auto_debit: "nao_cadastrado" };
+  }
+  return null;
 }
 
 export interface ManualBillUploadResult {
@@ -185,10 +205,12 @@ export async function createManualBillFromUpload(
   }
 
   // 6. create_manual_bill RPC (C1 dedupe guard raises pt-BR on duplicate)
+  const metodo = metodoFields(input.metodo);
   const energyDetails = {
     nf: input.nf ?? null,
     auto_debit_registration: account.auto_debit_registration ?? null,
     fatura_drive_url: webViewLink,
+    ...(metodo ?? {}),
     ...(input.energyDetails ?? {}),
   };
   const { data: chargeData, error: rpcErr } = await input.userClient.rpc(

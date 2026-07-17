@@ -58,6 +58,12 @@ export async function createManualBill(
       competencia: formData.get("competencia") ? String(formData.get("competencia")) : null,
       nf: formData.get("nf") ? String(formData.get("nf")) : null,
       notes: formData.get("notes") ? String(formData.get("notes")) : null,
+      metodo:
+        formData.get("metodo") === "da"
+          ? "da"
+          : formData.get("metodo") === "boleto"
+            ? "boleto"
+            : null,
     });
     revalidatePath("/energia");
     revalidatePath("/pagamentos");

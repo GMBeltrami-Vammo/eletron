@@ -35,6 +35,7 @@ import type { ChargeStatus, IngestSource } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 import type { PagamentoRow, StationOption } from "./types";
+import type { EnergyAccountOption } from "@/components/energia/types";
 import type { ReviewQueueData } from "@/app/(app)/revisao/cobrancas/queries";
 import { isAPagar } from "./a-pagar-panel";
 import { EmailDocsPanel } from "./email-docs-panel";
@@ -712,6 +713,7 @@ function LedgerPanel({
 export function PagamentosView({
   rows,
   stations,
+  energyAccounts,
   review,
   canWrite,
   isAdmin,
@@ -719,6 +721,8 @@ export function PagamentosView({
   rows: PagamentoRow[];
   /** Station options for the "Nova cobrança manual" picker. */
   stations: StationOption[];
+  /** Enel/EDP accounts for the Nova cobrança fatura branch (#63). */
+  energyAccounts: EnergyAccountOption[];
   /** needs_review queue data — feeds the "Documentos de e-mail" staging tab. */
   review: ReviewQueueData;
   /** operator or admin — enables Gerar mês + lifecycle actions. */
@@ -831,7 +835,11 @@ export function PagamentosView({
                 <SelectItem value="all">Todos os meses</SelectItem>
               </SelectContent>
             </Select>
-            <NovaCobrancaDialog canWrite={canWrite} stations={stations} />
+            <NovaCobrancaDialog
+              canWrite={canWrite}
+              stations={stations}
+              energyAccounts={energyAccounts}
+            />
             <GerarMesDialog canWrite={canWrite} />
           </>
         }
