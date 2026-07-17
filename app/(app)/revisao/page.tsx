@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { QueueCard } from "@/components/revisao/queue-card";
+import { deriveEnelEdpSemDa } from "@/components/revisao/sem-da-data";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,6 +51,8 @@ async function RevisaoContent() {
   ).length;
   const contractsWithoutStation =
     irregularities.joinAlerts.length - stationsWithoutContract;
+
+  const semDaCount = deriveEnelEdpSemDa(snapshot).length;
 
   return (
     <div>
@@ -114,6 +117,13 @@ async function RevisaoContent() {
                 : null
           }
           href="/revisao/instalacoes"
+        />
+        <QueueCard
+          title="Contas sem débito automático"
+          description="Contas de energia Enel/EDP cuja estação ainda não está em débito automático"
+          count={semDaCount}
+          hint={semDaCount === 0 ? "Tudo em dia" : "Perseguir o cadastro em DA"}
+          href="/revisao/sem-debito-automatico"
         />
       </div>
       {irregularities.issues.length > 0 ? (
