@@ -47,14 +47,16 @@ const CONCESSIONARIA_CUT_RE = /cortar aqui/i;
 // cut at the shared "Em caso de dúvidas" footer (DA_FOOTER_RE).
 const BOLETO_PAYMENT_HEADER_RE = /Comprovante de pagamento de boleto/i;
 
-// ── título-payment header (branch-5 dispatch + segmentation) ─────────────────
-// A bank-generated "Comprovante de Operação - Títulos Outros Bancos" — the
-// payer's proof of paying a título/boleto via Itaú Sispag (seen in the 05.06
-// rent comprovante). Neither n8n nor the PIX/TED branch parses its "Valor pago:"
-// layout (→ amount=null, type "outro"). Distinct from the concessionária header
-// ("…Concessionárias / 0048 - ELETROPAULO") and the "pagamento de boleto"
-// header, so no dispatch collision. Body cut at the "Cortar aqui" separator.
-const TITULOS_PAYMENT_HEADER_RE = /Comprovante de Opera[çc][aã]o\s*-\s*T[íi]tulos/i;
+// ── título / tributos header (branch-5 dispatch + segmentation) ──────────────
+// A bank-generated "Comprovante de Operação - Títulos Outros Bancos" OR
+// "…- Tributos Municipais" — the payer's proof of paying a título/boleto/tributo
+// via Itaú Sispag (Títulos seen in the 05.06 rent comprovante; Tributos seen on
+// pg 45 of 10.07). Same barcode + "Valor pago:" layout; without this branch the
+// PIX/TED parser reads amount=null + a garbage `banco`. Distinct from the
+// concessionária header ("…Concessionárias / 0048 - ELETROPAULO") and the
+// "pagamento de boleto" header, so no dispatch collision. Cut at "Cortar aqui".
+const TITULOS_PAYMENT_HEADER_RE =
+  /Comprovante de Opera[çc][aã]o\s*-\s*(?:T[íi]tulos|Tributos)/i;
 const BR_MONEY_RE = /\d{1,3}(?:\.\d{3})*,\d{2}/g;
 const BR_DATE_RE = /\d{2}[/.]\d{2}[/.]\d{4}/g;
 

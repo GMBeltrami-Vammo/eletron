@@ -527,3 +527,32 @@ describe.skip("real-PDF acceptance gate (needs redacted fixtures)", () => {
     expect(true).toBe(true);
   });
 });
+
+// A "Comprovante de Operação - Tributos Municipais" (pg 45 of 10.07) — same
+// barcode + "Valor pago" layout as Títulos; without the branch the PIX/TED
+// parser read amount=null + a garbage banco (Gabriel 2026-07-14).
+const TRIBUTOS_PAGE = [
+  "Comprovante de Operação - Tributos Municipais",
+  "Identificação no Extrato:",
+  "Dados da conta a ser debitada:",
+  "Agência: 0742 Conta: 22501 - 4",
+  "Nome: VAMMO",
+  "Dados do pagamento:",
+  "Representação numérica",
+  "do código de barras: 818200000202 005957012609 710020055775 066300299888",
+  "Valor pago: R$ 2.000,59",
+  "Pagamento efetuado em 10.07.2026 às 13:00:13, via Sispag, CTRL 002026071023155",
+  "Autenticação:",
+  "43194F3D1A06498605FF96E620F8265A3E330849",
+].join("\n");
+
+describe("parseComprovantePages — tributos municipais (Operação, barcode layout)", () => {
+  const [r] = parseComprovantePages([TRIBUTOS_PAGE], 45);
+  it("reads it as a boleto_barcode with the value + barcode (not amount=null)", () => {
+    expect(r.receiptType).toBe("boleto_barcode");
+    expect(r.amount).toBe(2000.59);
+    expect(r.codigoBarras).toBe("818200000202005957012609710020055775066300299888");
+    expect(r.paidAt).toBe("2026-07-10");
+    expect(r.banco).toBeNull();
+  });
+});
