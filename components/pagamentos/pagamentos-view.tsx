@@ -45,6 +45,7 @@ import { StatusActions } from "./status-actions";
 import { FlagBadges } from "./flag-badges";
 import { PagamentoDrawer } from "./pagamento-drawer";
 import { NovaCobrancaDialog } from "./nova-cobranca-dialog";
+import { FiscalSimDialog } from "./fiscal-sim-dialog";
 
 /**
  * Ingest source → pt-BR badge label (labels.ts has no ingest-source map yet;
@@ -848,13 +849,13 @@ export function PagamentosView({
       <Tabs defaultValue="enel_edp">
         <TabsList>
           <TabsTrigger value="enel_edp">
-            Enel/EDP
+            Energia
             <span className="rounded bg-muted px-1 text-xs tabular-nums">
               {enelEdpRows.length}
             </span>
           </TabsTrigger>
           <TabsTrigger value="outros">
-            Locação
+            Locações
             <span className="rounded bg-muted px-1 text-xs tabular-nums">
               {outrosRows.length}
             </span>
@@ -882,6 +883,11 @@ export function PagamentosView({
           />
         </TabsContent>
         <TabsContent value="outros">
+          {canWrite ? (
+            <div className="flex justify-end pb-3">
+              <FiscalSimDialog rows={outrosRows} />
+            </div>
+          ) : null}
           <LedgerPanel
             rows={outrosRows}
             columns={locacaoColumns}

@@ -9,7 +9,13 @@
  */
 
 import { parseFiscalRow } from "./fiscal-sheet";
+import { formatDueDateBR, fiscalTodayISO } from "./fiscal-dates";
 import type { FaturaRef } from "./check-faturas";
+
+// Re-export the pure date helpers so existing importers (send-fiscal.ts,
+// actions/fiscal.ts) keep getting them from fiscal-row; the canonical
+// definitions live in fiscal-dates.ts (client-safe, no server-only chain).
+export { formatDueDateBR, fiscalTodayISO };
 
 /** The only year the send is validated for; ≥ next year is blocked pending review. */
 export const SENDABLE_YEAR = 2026;
@@ -25,22 +31,6 @@ const ACCOUNT = "COGS - 401: Charging Infra/Energy: Electricity";
 /** 40.24 → "40,24" (comma decimal, NO thousands separator — per the samples). */
 export function formatValorBR(n: number): string {
   return n.toFixed(2).replace(".", ",");
-}
-
-/** ISO 'YYYY-MM-DD' → 'DD/MM/YYYY'. */
-export function formatDueDateBR(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
-
-/** Today in São Paulo as ISO 'YYYY-MM-DD' (for the due-date-passed guard). */
-export function fiscalTodayISO(now: Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
 }
 
 /** How the send should treat one fatura. */

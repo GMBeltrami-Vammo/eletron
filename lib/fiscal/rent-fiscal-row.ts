@@ -16,6 +16,9 @@
 
 export const RENT_FISCAL_STATUS =
   "Enviada via Eletron - Aguardando validaçao Fiscal";
+/** TED/PIX locação uses "liberaçao" (not "validaçao") — Gabriel 2026-07-17. */
+export const TEDPIX_FISCAL_STATUS =
+  "Enviada via Eletron - Aguardando liberaçao Fiscal";
 const RENT_COLUMN_B = "Boletos outros bancos";
 const CAT_RENT = "402: Charging Infra/Energy: Cabinets Real Estate";
 const COGS_RENT = "COGS - 402: Charging Infra/Energy: Cabinets Real Estate";
@@ -23,6 +26,17 @@ const CAT_ENERGY = "401: Charging Infra/Energy: Electricity";
 const COGS_ENERGY = "COGS - 401: Charging Infra/Energy: Electricity";
 
 export type RentFiscalKind = "aluguel" | "energia" | "aluguel_energia";
+/** Payment method that decides which fiscal row layout a locação charge uses. */
+export type RentFiscalMethod =
+  | "boleto"
+  | "pix"
+  | "transferencia"
+  | null;
+
+const TEDPIX_METHOD_B: Record<"pix" | "transferencia", string> = {
+  pix: "Pix",
+  transferencia: "Transferência Bancária",
+};
 
 /** 1020 → "1.020,00" (pt-BR: '.' thousands, ',' cents — per the sample). */
 export function formatValorBRThousands(n: number): string {
@@ -41,6 +55,13 @@ export function competenciaLabelBR(competencia: string | null): string {
 
 export interface RentFiscalRowInput {
   kind: RentFiscalKind;
+  /**
+   * Payment method — picks the row layout: 'pix'/'transferencia' → the TED/PIX
+   * locação layout; anything else (boleto/null) → the boleto layout (#65).
+   */
+  method?: RentFiscalMethod;
+  /** Counterparty CNPJ/CPF — only the TED/PIX layout uses it (col C). */
+  cnpj?: string | null;
   /** Send date, DD/MM/YYYY. */
   dateSent: string;
   /** Counterparty razão social. */
@@ -115,4 +136,47 @@ export function buildRentFiscalRow(
     link, // J
     RENT_FISCAL_STATUS, // K
   ];
+}
+
+/**
+ * The TED/PIX locação row (Gabriel 2026-07-17) — used when the charge is paid
+ * by pix or transferência (no boleto PDF, so col J is empty). Rent-only (402).
+ * Col A is the send date (Gabriel), the rest are the 10 columns he listed.
+ */
+export function buildTedPixRow(input: RentFiscalRowInput): string[] {
+  const methodB =
+    input.method === "transferencia"
+      ? TEDPIX_METHOD_B.transferencia
+      : TEDPIX_METHOD_B.pix;
+  const parceiroCnpj = input.cnpj
+    ? `${input.parceiro} - ${input.cnpj}`
+    : input.parceiro;
+  return [
+    input.dateSent, // A
+    methodB, // B  "Pix" | "Transferência Bancária"
+    parceiroCnpj, // C  "{Parceiro} - {CNPJ}"
+    formatValorBRThousands(input.valorTotal), // D
+    "Locação", // E
+    `Locação Gabinete - ${input.endereco}`, // F
+    input.dueDate, // G
+    CAT_RENT, // H
+    COGS_RENT, // I
+    "", // J  (sem documento)
+    TEDPIX_FISCAL_STATUS, // K
+  ];
+}
+
+/**
+ * Dispatches a locação charge to its fiscal row by payment method:
+ * pix/transferência → the TED/PIX layout; anything else → the boleto layout.
+ * `sep` = ';' on a pt-BR sheet (HYPERLINK arg separator).
+ */
+export function buildLocacaoFiscalRow(
+  input: RentFiscalRowInput,
+  sep: ";" | "," = ";",
+): string[] {
+  if (input.method === "pix" || input.method === "transferencia") {
+    return buildTedPixRow(input);
+  }
+  return buildRentFiscalRow(input, sep);
 }

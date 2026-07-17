@@ -21,6 +21,10 @@ export interface PagamentoRow {
   chargeId: string;
   stationId: number | null;
   stationName: string | null;
+  /** Station address — the endereço of the fiscal locação row (#66). */
+  stationAddress: string | null;
+  /** Active rent contract valor_mensal — the rent portion of the fiscal rateio (#66). */
+  contractRentAmount: number | null;
   matchStatus: MatchStatus;
   /** 'YYYY-MM-01' or null. */
   competencia: string | null;

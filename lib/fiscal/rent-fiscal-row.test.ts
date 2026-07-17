@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildLocacaoFiscalRow,
   buildRateioLabel,
   buildRentFiscalRow,
+  buildTedPixRow,
   competenciaLabelBR,
   fiscalCategoryPair,
   formatValorBRThousands,
   RENT_FISCAL_STATUS,
+  TEDPIX_FISCAL_STATUS,
   type RentFiscalRowInput,
 } from "./rent-fiscal-row";
 
@@ -113,5 +116,56 @@ describe("buildRentFiscalRow — no document url", () => {
   it("falls back to a plain 'Documento' label", () => {
     const row = buildRentFiscalRow({ ...base, documentUrl: "" });
     expect(row[9]).toBe("Documento");
+  });
+});
+
+describe("buildTedPixRow — locação via pix/transferência", () => {
+  it("pix layout: B=Pix, C=Parceiro - CNPJ, E=Locação, J empty, liberaçao status", () => {
+    const row = buildTedPixRow({
+      ...base,
+      method: "pix",
+      cnpj: "12345678000199",
+    });
+    expect(row).toEqual([
+      "17/07/2026",
+      "Pix",
+      "Imobiliária Exemplo Ltda - 12345678000199",
+      "1.020,00",
+      "Locação",
+      "Locação Gabinete - Rua das Flores, 100 - São Paulo",
+      "20/07/2026",
+      "402: Charging Infra/Energy: Cabinets Real Estate",
+      "COGS - 402: Charging Infra/Energy: Cabinets Real Estate",
+      "",
+      TEDPIX_FISCAL_STATUS,
+    ]);
+  });
+
+  it("transferência sets col B to 'Transferência Bancária'", () => {
+    const row = buildTedPixRow({ ...base, method: "transferencia", cnpj: "1" });
+    expect(row[1]).toBe("Transferência Bancária");
+  });
+
+  it("without a CNPJ, col C is just the parceiro", () => {
+    const row = buildTedPixRow({ ...base, method: "pix", cnpj: null });
+    expect(row[2]).toBe("Imobiliária Exemplo Ltda");
+  });
+});
+
+describe("buildLocacaoFiscalRow — dispatch by method", () => {
+  it("pix/transferência → TED/PIX layout", () => {
+    expect(buildLocacaoFiscalRow({ ...base, method: "pix", cnpj: "1" })[4]).toBe(
+      "Locação",
+    );
+    expect(buildLocacaoFiscalRow({ ...base, method: "transferencia" })[1]).toBe(
+      "Transferência Bancária",
+    );
+  });
+
+  it("boleto / unset → boleto layout (#65)", () => {
+    expect(buildLocacaoFiscalRow({ ...base, method: "boleto" })[1]).toBe(
+      "Boletos outros bancos",
+    );
+    expect(buildLocacaoFiscalRow(base)[1]).toBe("Boletos outros bancos");
   });
 });

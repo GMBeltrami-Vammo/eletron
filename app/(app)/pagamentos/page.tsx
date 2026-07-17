@@ -108,6 +108,14 @@ function buildRows(
           charge.stationId !== null
             ? (stationById.get(charge.stationId)?.name ?? null)
             : null,
+        stationAddress:
+          charge.stationId !== null
+            ? (stationById.get(charge.stationId)?.address ?? null)
+            : null,
+        contractRentAmount:
+          (account?.contractId
+            ? (contractById.get(account.contractId)?.valorMensal ?? null)
+            : null) ?? null,
         matchStatus: charge.matchStatus,
         competencia: charge.competencia,
         dueDate: charge.dueDate,
