@@ -15,7 +15,7 @@ import type {
   InstalacaoHistoryEntry,
   InstalacaoRow,
 } from "@/components/energia/types";
-import { energyCicloStage } from "@/lib/energia/ciclo";
+import { energyCicloStage, energyCicloIsPaid } from "@/lib/energia/ciclo";
 import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
 import { getRepository } from "@/lib/data/repository.server";
 import {
@@ -141,9 +141,11 @@ function buildRows(
       fiscalExported:
         (charge.fiscalExported ?? false) ||
         (detailsByCharge.get(charge.id)?.fiscalExported ?? false),
-      isPaid:
-        SETTLED_CHARGE_STATUSES.has(charge.status) ||
-        paymentOf(charge)?.documentId != null,
+      isPaid: energyCicloIsPaid({
+        settled: SETTLED_CHARGE_STATUSES.has(charge.status),
+        amount: charge.amount,
+        hasComprovante: paymentOf(charge)?.documentId != null,
+      }),
     }) as NonNullable<ReturnType<typeof energyCicloStage>>;
 
   const instalacoes: InstalacaoRow[] = energyAccounts.map((account) => {

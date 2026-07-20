@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { energyCicloStage } from "./ciclo";
+import { energyCicloIsPaid, energyCicloStage } from "./ciclo";
 
 describe("energyCicloStage", () => {
   const base = {
@@ -49,5 +49,37 @@ describe("energyCicloStage", () => {
     expect(
       energyCicloStage({ ...base, hasBillSignal: false }),
     ).toBeNull();
+  });
+});
+
+describe("energyCicloIsPaid (Gabriel 2026-07-18: Paga exige comprovante)", () => {
+  it("comprovante bound → paid", () => {
+    expect(
+      energyCicloIsPaid({ settled: false, amount: 120, hasComprovante: true }),
+    ).toBe(true);
+  });
+
+  it("settled 'pago' WITHOUT comprovante (clone/portal) → NOT paid", () => {
+    expect(
+      energyCicloIsPaid({ settled: true, amount: 120, hasComprovante: false }),
+    ).toBe(false);
+  });
+
+  it("R$0 fatura settled without comprovante → paid (#42 exception)", () => {
+    expect(
+      energyCicloIsPaid({ settled: true, amount: 0, hasComprovante: false }),
+    ).toBe(true);
+  });
+
+  it("R$0 but NOT settled → not paid", () => {
+    expect(
+      energyCicloIsPaid({ settled: false, amount: 0, hasComprovante: false }),
+    ).toBe(false);
+  });
+
+  it("open charge, no comprovante → not paid", () => {
+    expect(
+      energyCicloIsPaid({ settled: false, amount: 90, hasComprovante: false }),
+    ).toBe(false);
   });
 });

@@ -15,7 +15,7 @@ import {
   type PaymentLinkIndex,
 } from "@/lib/data/payment-links";
 import { resolveDocumentHref } from "@/lib/data/document-href";
-import { energyCicloStage } from "@/lib/energia/ciclo";
+import { energyCicloStage, energyCicloIsPaid } from "@/lib/energia/ciclo";
 import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
@@ -90,15 +90,27 @@ function buildRows(
         links.byDedupeKey.get(charge.dedupeKey) ??
           links.byChargeUuid.get(charge.id),
       );
+      // Ciclo "Paga" (#29, Gabriel 2026-07-18): for ENERGY, a bare settled
+      // status (the clone's portal-derived 'pago') is NOT paid — only a bound
+      // comprovante or a R$0-settled fatura (#42) is. Rent/third-party keep the
+      // looser rule (casa_vammo/gratuito auto-pago has no comprovante by design).
+      const settled = SETTLED_CHARGE_STATUSES.has(charge.status);
+      const isEnergyCharge =
+        account?.accountType === "energy_enel" ||
+        account?.accountType === "energy_edp";
       const ciclo = energyCicloStage({
         hasBillSignal: true,
         hasParsedCharge: charge.amount !== null,
         fiscalExported:
           (charge.fiscalExported ?? false) ||
           (detailsByCharge.get(charge.id)?.fiscalExported ?? false),
-        isPaid:
-          SETTLED_CHARGE_STATUSES.has(charge.status) ||
-          payment?.documentId != null,
+        isPaid: isEnergyCharge
+          ? energyCicloIsPaid({
+              settled,
+              amount: charge.amount,
+              hasComprovante: payment?.documentId != null,
+            })
+          : settled || payment?.documentId != null,
       });
 
       return {
