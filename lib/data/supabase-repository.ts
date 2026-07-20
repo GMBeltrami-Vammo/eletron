@@ -335,6 +335,7 @@ interface EnergyDetailRow {
   fatura_drive_url: string | null;
   fiscal_exported: boolean;
   fiscal_exported_at: string | null;
+  legacy_closed: boolean | null;
 }
 interface ChargeLineRow {
   id: string;
@@ -633,6 +634,7 @@ export async function loadChargingWorld(
         faturaDriveUrl: r.fatura_drive_url,
         fiscalExported: r.fiscal_exported,
         fiscalExportedAt: r.fiscal_exported_at,
+        legacyClosed: r.legacy_closed ?? false,
       };
     })
     .filter((d): d is ChargeEnergyDetails => d !== null);

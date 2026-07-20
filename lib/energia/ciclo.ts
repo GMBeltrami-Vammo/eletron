@@ -32,8 +32,14 @@ export function energyCicloIsPaid(input: {
   settled: boolean;
   amount: number | null;
   hasComprovante: boolean;
+  /** Pre-cutoff backlog fatura closed out (#71) — counts as Paga, comprovante dispensado. */
+  legacyClosed?: boolean;
 }): boolean {
-  return input.hasComprovante || (input.amount === 0 && input.settled);
+  return (
+    input.hasComprovante ||
+    (input.amount === 0 && input.settled) ||
+    input.legacyClosed === true
+  );
 }
 
 export interface CicloInput {

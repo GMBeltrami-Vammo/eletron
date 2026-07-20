@@ -26,6 +26,7 @@ function fatura(overrides: Partial<FaturaRef> = {}): FaturaRef {
     autoDebitRegistration: "100235348160",
     driveUrl: "https://drive.google.com/file/d/ABC123/view?usp=drivesdk",
     fiscalExported: false,
+    legacyClosed: false,
     ...overrides,
   };
 }
@@ -179,6 +180,18 @@ describe("classifyFaturaForSend", () => {
   });
   it("2026, Cadastrado, future due, tab exists → send", () => {
     expect(cls({})).toBe("send");
+  });
+  it("legacy_closed wins over everything → legacyClosed (skip, no send/demote)", () => {
+    expect(classifyFaturaForSend({ ...base, legacyClosed: true }, today)).toBe(
+      "legacyClosed",
+    );
+    // even a long-past due date stays legacyClosed (never demoted)
+    expect(
+      classifyFaturaForSend(
+        { ...base, legacyClosed: true, dueDate: "2025-01-01" },
+        today,
+      ),
+    ).toBe("legacyClosed");
   });
 });
 

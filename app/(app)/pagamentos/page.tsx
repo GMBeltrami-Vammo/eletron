@@ -109,6 +109,7 @@ function buildRows(
               settled,
               amount: charge.amount,
               hasComprovante: payment?.documentId != null,
+              legacyClosed: detailsByCharge.get(charge.id)?.legacyClosed ?? false,
             })
           : settled || payment?.documentId != null,
       });
@@ -152,6 +153,7 @@ function buildRows(
         chargeUuid: ref?.uuid ?? null,
         flags: charge.flags ?? [],
         fiscalExported: charge.fiscalExported ?? false,
+        comprovanteWaived: detailsByCharge.get(charge.id)?.legacyClosed ?? false,
         statusSource: charge.statusSource ?? null,
         lastActorEmail: ref?.lastActorEmail ?? null,
         lastActorAt: ref?.lastActorAt ?? null,

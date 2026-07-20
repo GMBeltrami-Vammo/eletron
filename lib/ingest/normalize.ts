@@ -1397,6 +1397,9 @@ export function normalizeSnapshot(raw: RawTabs): DomainSnapshot {
       faturaDriveUrl: extractHyperlinkUrl(row["link_fatura"] ?? ""),
       fiscalExported,
       fiscalExportedAt: null,
+      // Clone-era faturas aren't legacy-closed by default; the #71 backfill
+      // flips the pre-01/05/2026 ones directly in the DB.
+      legacyClosed: false,
     });
   }
 

@@ -322,6 +322,7 @@ const baseColumns: ColumnDef<PagamentoRow, unknown>[] = [
         dedupeKey={row.original.chargeId}
         amount={row.original.amount}
         summary={row.original.payment}
+        waived={row.original.comprovanteWaived}
       />
     ),
     meta: csvMeta((r) => (r.payment ? "vinculado" : "")),

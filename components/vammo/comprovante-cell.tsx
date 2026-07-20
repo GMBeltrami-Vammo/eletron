@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { Link2 } from "lucide-react";
+import { Check, Link2 } from "lucide-react";
 
 import { ComprovanteChip } from "@/components/vammo/comprovante-chip";
 import { BindComprovanteDialog } from "@/components/comprovantes/bind-comprovante-dialog";
@@ -24,12 +24,15 @@ export function ComprovanteCell({
   dedupeKey,
   amount,
   summary,
+  waived = false,
   align = "left",
 }: {
   /** Charge dedupe_key (the domain Charge.id) — resolved to the uuid server-side. */
   dedupeKey: string | null;
   amount: number | null;
   summary: PaymentLinkSummary | null;
+  /** Comprovante dispensado (fatura legada encerrada, #71) — shows a badge, no bind. */
+  waived?: boolean;
   align?: "left" | "center";
 }) {
   const [open, setOpen] = React.useState(false);
@@ -37,6 +40,21 @@ export function ComprovanteCell({
 
   if (summary) {
     return <span className={wrap}><ComprovanteChip summary={summary} /></span>;
+  }
+
+  // Legacy fatura closed out (#71): comprovante waived — a badge, not a bind.
+  if (waived) {
+    return (
+      <span className={wrap}>
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-muted-foreground"
+          title="Fatura antiga encerrada — comprovante dispensado (#71)"
+        >
+          <Check className="size-3" strokeWidth={2} />
+          Dispensado
+        </span>
+      </span>
+    );
   }
 
   // Can't bind without a charge key or a value to match by.

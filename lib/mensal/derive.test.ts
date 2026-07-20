@@ -194,6 +194,7 @@ function energyDetails(chargeId: string, tusdKwh: number | null): ChargeEnergyDe
     leituraAnterior: null, leituraAtual: null,
     autoDebit: "desconhecido", autoDebitRegistration: null,
     faturaDriveUrl: null, fiscalExported: false, fiscalExportedAt: null,
+    legacyClosed: false,
   };
 }
 

@@ -145,6 +145,7 @@ function buildRows(
         settled: SETTLED_CHARGE_STATUSES.has(charge.status),
         amount: charge.amount,
         hasComprovante: paymentOf(charge)?.documentId != null,
+        legacyClosed: detailsByCharge.get(charge.id)?.legacyClosed ?? false,
       }),
     }) as NonNullable<ReturnType<typeof energyCicloStage>>;
 
@@ -258,6 +259,7 @@ function buildRows(
       tariffClass: tariffClass(details),
       ciclo: cicloOf(charge),
       fiscalExported: details.fiscalExported,
+      comprovanteWaived: details.legacyClosed ?? false,
       autoDebit: state?.autoDebit ?? "desconhecido",
       // Prefer the per-fatura detail (always populated) — the installation state
       // is often null for exactly the não-cadastrado ones handled manually.

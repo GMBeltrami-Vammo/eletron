@@ -352,6 +352,12 @@ export interface ChargeEnergyDetails {
   fiscalExported: boolean;
   /** fiscal_exported_at — no timestamp in the sheet, so null from sync. */
   fiscalExportedAt: string | null;
+  /**
+   * legacy_closed — pre-01/05/2026 backlog fatura closed out (decision #71):
+   * the Ciclo reads it as Paga (comprovante dispensado) and the fiscal
+   * send/verify skip it (no send, no demote).
+   */
+  legacyClosed: boolean;
 }
 
 /** eletron.receipts — one row per receipt PAGE. (No Phase 1 source yet.) */

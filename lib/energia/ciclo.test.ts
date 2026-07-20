@@ -82,4 +82,15 @@ describe("energyCicloIsPaid (Gabriel 2026-07-18: Paga exige comprovante)", () =>
       energyCicloIsPaid({ settled: false, amount: 90, hasComprovante: false }),
     ).toBe(false);
   });
+
+  it("legacy_closed (pre-cutoff backlog, #71) → paid even without comprovante/settled", () => {
+    expect(
+      energyCicloIsPaid({
+        settled: false,
+        amount: 90,
+        hasComprovante: false,
+        legacyClosed: true,
+      }),
+    ).toBe(true);
+  });
 });

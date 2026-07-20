@@ -37,6 +37,8 @@ export interface FaturaRef {
   driveUrl: string | null;
   /** "Enviado ao fiscal" flag (charge_energy_details) — the send skips faturas already checked. */
   fiscalExported: boolean;
+  /** Pre-cutoff backlog fatura closed out (#71) — send/verify skip it (no send, no demote). */
+  legacyClosed: boolean;
 }
 
 export interface FaturaFiscalStatus extends FaturaRef {
@@ -69,6 +71,7 @@ interface CedRow {
   fatura_drive_url: string | null;
   fiscal_exported: boolean | null;
   auto_debit_registration: string | null;
+  legacy_closed: boolean | null;
 }
 
 /** Every Enel/EDP fatura with a due date, with its installation id + nf + tab. */
@@ -132,7 +135,7 @@ export async function loadEnergyFaturas(
       const { data, error } = await admin
         .from("charges")
         .select(
-          "id, billing_account_id, due_date, amount, charge_energy_details(nf, fatura_drive_url, fiscal_exported, auto_debit_registration)",
+          "id, billing_account_id, due_date, amount, charge_energy_details(nf, fatura_drive_url, fiscal_exported, auto_debit_registration, legacy_closed)",
         )
         .in("billing_account_id", slice)
         .not("due_date", "is", null)
@@ -167,6 +170,7 @@ export async function loadEnergyFaturas(
             ced?.auto_debit_registration?.trim() || acc.autoDebitReg,
           driveUrl: ced?.fatura_drive_url?.trim() || null,
           fiscalExported: ced?.fiscal_exported === true,
+          legacyClosed: ced?.legacy_closed === true,
         });
       }
       if (rows.length < 1000) break;

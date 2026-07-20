@@ -75,6 +75,8 @@ export interface PagamentoRow {
   flags: string[];
   /** "Enviado ao fiscal" (2_Pagamentos "No Fiscal" col) — exported, NOT paid. */
   fiscalExported: boolean;
+  /** Fatura legada encerrada (#71) — comprovante dispensado (badge na coluna Comprovante). */
+  comprovanteWaived: boolean;
   /** 'rpc' = human-set (sticky); 'sync' = pipeline; null when unknown. */
   statusSource: "sync" | "rpc" | null;
   /** Last write actor + timestamp for the AuditByline (rpc-touched rows only). */

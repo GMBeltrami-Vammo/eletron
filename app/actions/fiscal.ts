@@ -63,8 +63,10 @@ export async function verifyFaturasOnFiscal(): Promise<
     const registeredIds = report.results
       .filter((r) => r.registered)
       .map((r) => r.chargeId);
+    // Pre-cutoff backlog (#71) is closed out — never demote it, even if it
+    // isn't on the sheet (we're not chasing it).
     const notRegisteredIds = report.results
-      .filter((r) => !r.registered)
+      .filter((r) => !r.registered && !r.legacyClosed)
       .map((r) => r.chargeId);
 
     const promoted = unwrapRpc(

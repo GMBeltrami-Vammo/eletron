@@ -330,11 +330,18 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     accessorFn: (r) =>
       r.payment ? "Vinculado" : r.hasComprovante ? "Planilha" : "Não",
     cell: ({ row }) => {
-      const { payment, hasComprovante, comprovanteDate, chargeId, amount } =
-        row.original;
+      const {
+        payment,
+        hasComprovante,
+        comprovanteDate,
+        chargeId,
+        amount,
+        comprovanteWaived,
+      } = row.original;
       // sheet-era installation-level receipt (no charging payment) — historical
-      // fallback, not a blank cell, so it doesn't offer manual binding.
-      if (!payment && hasComprovante) {
+      // fallback, not a blank cell, so it doesn't offer manual binding. A legacy
+      // closed fatura (#71) shows the "Dispensado" badge instead (via the cell).
+      if (!payment && hasComprovante && !comprovanteWaived) {
         return (
           <span
             className="flex items-center justify-center gap-1 text-muted-foreground"
@@ -349,12 +356,13 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
           </span>
         );
       }
-      // Linked → chip; blank → "Vincular" (charge-first matcher).
+      // Linked → chip; legacy-closed → "Dispensado" badge; blank → "Vincular".
       return (
         <ComprovanteCell
           dedupeKey={chargeId}
           amount={amount}
           summary={payment}
+          waived={comprovanteWaived}
           align="center"
         />
       );
@@ -415,6 +423,7 @@ const SEND_ONE_UI: Record<
   { message: string; tone: "success" | "info" | "error" }
 > = {
   sent: { message: "Enviada ao fiscal", tone: "success" },
+  legacyClosed: { message: "Fatura antiga encerrada — não enviada", tone: "info" },
   registered: { message: "Já estava na planilha fiscal", tone: "info" },
   zero: { message: "Valor 0 — marcada como paga e conferida", tone: "success" },
   noValor: { message: "Sem valor — não enviada", tone: "info" },
@@ -546,6 +555,7 @@ export function FaturasTable({
         if (s.pastDue) parts.push(`${s.pastDue} vencidas (não enviadas)`);
         if (s.naoCadastrado) parts.push(`${s.naoCadastrado} sem débito automático`);
         if (s.ignoredPast) parts.push(`${s.ignoredPast} ignorada(s) (≤2025)`);
+        if (s.legacyClosed) parts.push(`${s.legacyClosed} antiga(s) encerrada(s)`);
         if (s.semAba) parts.push(`${s.semAba} sem aba`);
         if (s.verifyFailed) parts.push(`${s.verifyFailed} formato inválido`);
         if (s.appendFailed) parts.push(`${s.appendFailed} falha ao gravar`);

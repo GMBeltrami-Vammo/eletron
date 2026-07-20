@@ -93,6 +93,8 @@ export interface SendFiscalSummary {
   semAba: number;
   /** Skipped: no valor (amount null). */
   noValor: number;
+  /** Skipped: pre-cutoff backlog closed out (#71) — kept fiscal_exported, no demote. */
+  legacyClosed: number;
   /** Built rows that failed the round-trip self-check (never appended). */
   verifyFailed: number;
   /** Rows whose per-tab append call errored (NOT sent). */
@@ -119,6 +121,7 @@ function emptySummary(): SendFiscalSummary {
     blockedFuture: 0,
     semAba: 0,
     noValor: 0,
+    legacyClosed: 0,
     verifyFailed: 0,
     appendFailed: 0,
     blockedWarning: null,
@@ -158,6 +161,11 @@ export async function sendFaturasToFiscal(
 
   for (const f of results) {
     switch (classifyFaturaForSend(f, todayIso)) {
+      case "legacyClosed":
+        // Pre-cutoff backlog (#71): keep it checked, never demote, never send.
+        summary.legacyClosed += 1;
+        summary.fiscalTrueIds.push(f.chargeId);
+        break;
       case "registered":
         summary.alreadyOnSheet += 1;
         summary.fiscalTrueIds.push(f.chargeId);
@@ -234,6 +242,7 @@ export async function sendFaturasToFiscal(
 /** Per-bill send outcome — the classifier cases + the terminal states. */
 export type SendOneOutcome =
   | "sent"
+  | "legacyClosed"
   | "registered"
   | "zero"
   | "noValor"
@@ -292,6 +301,8 @@ export async function sendOneFaturaToFiscal(
   if (!f) return empty;
 
   switch (classifyFaturaForSend(f, todayIso)) {
+    case "legacyClosed":
+      return { ...empty, outcome: "legacyClosed", fiscalTrueIds: [chargeId] };
     case "registered":
       return { ...empty, outcome: "registered", fiscalTrueIds: [chargeId] };
     case "zero":

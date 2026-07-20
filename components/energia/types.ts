@@ -125,6 +125,8 @@ export interface FaturaRow {
    */
   ciclo: CicloStage;
   fiscalExported: boolean;
+  /** Fatura legada encerrada (#71) — comprovante dispensado (badge na coluna Comprovante). */
+  comprovanteWaived: boolean;
   /** Débito automático of the installation (R1 — from utility state). */
   autoDebit: AutoDebitStatus;
   autoDebitRegistration: string | null;

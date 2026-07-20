@@ -35,6 +35,7 @@ export function formatValorBR(n: number): string {
 
 /** How the send should treat one fatura. */
 export type SendClass =
+  | "legacyClosed" // pre-cutoff backlog closed out (#71) → skip, keep as-is
   | "registered" // already on the sheet → checked, not sent
   | "zero" // value 0 → paid + checked, not sent (decision #42 exception)
   | "noValor" // amount unknown → skip
@@ -58,9 +59,13 @@ export function classifyFaturaForSend(
     amount: number | null;
     dueDate: string;
     autoDebit: string;
+    legacyClosed?: boolean;
   },
   todayIso: string,
 ): SendClass {
+  // Pre-cutoff backlog closed out (#71): never send, never demote — wins over
+  // everything (incl. pastDue) so the daily send/verify leaves it untouched.
+  if (f.legacyClosed) return "legacyClosed";
   if (f.amount === 0) return "zero";
   if (f.registered) return "registered";
   if (f.amount === null) return "noValor";
