@@ -6,6 +6,7 @@ import {
   ChevronsUpDown,
   CircleCheck,
   ExternalLink,
+  Info,
   Plus,
   TriangleAlert,
 } from "lucide-react";
@@ -35,6 +36,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Popover,
   PopoverContent,
@@ -91,6 +99,11 @@ const schema = z.object({
       (v) => v === "" || /^(0[1-9]|1[0-2])\/\d{4}$/.test(v),
       "Use o formato MM/AAAA",
     ),
+  nf: z.string().trim().min(1, "Informe a nota fiscal"),
+  metodo: z.string().refine(
+    (v) => v === "da" || v === "boleto",
+    "Selecione DA ou Boleto",
+  ),
 });
 
 function accountLabel(a: EnergyAccountOption): string {
@@ -163,6 +176,7 @@ function ManualBillForm({
   const [valor, setValor] = React.useState("");
   const [vencimento, setVencimento] = React.useState("");
   const [nf, setNf] = React.useState("");
+  const [metodo, setMetodo] = React.useState<"" | "da" | "boleto">("");
   const [notas, setNotas] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [items, setItems] = React.useState<UploadItem[]>([]);
@@ -197,6 +211,7 @@ function ManualBillForm({
     setValor("");
     setVencimento("");
     setNf("");
+    setMetodo("");
     setNotas("");
     setFile(null);
     setItems([]);
@@ -205,7 +220,14 @@ function ManualBillForm({
   }
 
   async function onSubmit() {
-    const parsed = schema.safeParse({ accountId, valor, vencimento, competencia });
+    const parsed = schema.safeParse({
+      accountId,
+      valor,
+      vencimento,
+      competencia,
+      nf,
+      metodo,
+    });
     const errs: Record<string, string> = {};
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
@@ -227,7 +249,8 @@ function ManualBillForm({
       fd.append("dueDate", vencimento);
       const compIso = competenciaToIso(competencia);
       if (compIso) fd.append("competencia", compIso);
-      if (nf.trim()) fd.append("nf", nf.trim());
+      fd.append("nf", nf.trim());
+      fd.append("metodo", metodo);
       if (notas.trim()) fd.append("notes", notas.trim());
 
       const res = await createManualBill(fd);
@@ -449,16 +472,42 @@ function ManualBillForm({
           {/* NF */}
           <div className="space-y-1.5">
             <Label htmlFor="mb-nf">
-              NF / Nº doc.{" "}
-              <span className="font-normal text-muted-foreground">(opcional)</span>
+              Nota fiscal <span className="text-error-emphasis">*</span>
             </Label>
             <Input
               id="mb-nf"
               value={nf}
               onChange={(e) => setNf(e.target.value)}
+              aria-invalid={Boolean(errors.nf)}
               className="tabular-nums"
             />
+            {errors.nf ? (
+              <p className="text-xs text-destructive">{errors.nf}</p>
+            ) : null}
           </div>
+        </div>
+
+        {/* Método (DA / Boleto) */}
+        <div className="space-y-1.5">
+          <Label htmlFor="mb-metodo">
+            Método <span className="text-error-emphasis">*</span>
+          </Label>
+          <Select value={metodo} onValueChange={(v) => setMetodo(v as "da" | "boleto")}>
+            <SelectTrigger id="mb-metodo" className="w-full bg-card" aria-invalid={Boolean(errors.metodo)}>
+              <SelectValue placeholder="DA ou Boleto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="da">Débito automático</SelectItem>
+              <SelectItem value="boleto">Boleto</SelectItem>
+            </SelectContent>
+          </Select>
+          {errors.metodo ? (
+            <p className="text-xs text-destructive">{errors.metodo}</p>
+          ) : null}
+          <p className="flex items-start gap-1.5 rounded-md bg-info-subtle/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0 text-info-emphasis" strokeWidth={2} />
+            Confira na própria fatura (PDF) se ela é débito automático ou boleto.
+          </p>
         </div>
 
         {/* PDF */}
