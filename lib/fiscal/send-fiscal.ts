@@ -32,6 +32,48 @@ import {
 
 type SheetsClient = ReturnType<typeof createSheetsWriteClient>;
 
+/** The id sets a send result carries — shared shape between the batch summary
+ *  and the per-fatura result, so one function applies either. */
+export interface FiscalSendIdSets {
+  fiscalTrueIds: string[];
+  fiscalFalseIds: string[];
+  zeroValueIds: string[];
+}
+
+/**
+ * Applies a send/verify result's id sets via the audited RPCs — the ONE place
+ * that does this (was duplicated across sendToFiscal/sendFaturaToFiscal in
+ * app/actions/fiscal.ts, and now also the daily-cron path). `client` may be a
+ * user-scoped client (human actions — actor_email is the real clicking email)
+ * or the service-role admin client (cron — actor_email falls back to
+ * 'system:fiscal-send', migration 20260718100050).
+ */
+export async function applyFiscalSendIds(
+  client: ChargingClient,
+  ids: FiscalSendIdSets,
+): Promise<void> {
+  if (ids.fiscalTrueIds.length > 0) {
+    const { error } = await client.rpc("set_fiscal_exported", {
+      p_charge_ids: ids.fiscalTrueIds,
+      p_value: true,
+    });
+    if (error) throw new Error(error.message);
+  }
+  if (ids.fiscalFalseIds.length > 0) {
+    const { error } = await client.rpc("set_fiscal_exported", {
+      p_charge_ids: ids.fiscalFalseIds,
+      p_value: false,
+    });
+    if (error) throw new Error(error.message);
+  }
+  if (ids.zeroValueIds.length > 0) {
+    const { error } = await client.rpc("settle_zero_value_faturas", {
+      p_charge_ids: ids.zeroValueIds,
+    });
+    if (error) throw new Error(error.message);
+  }
+}
+
 export interface SendFiscalSummary {
   /** Rows successfully appended to the sheet this run. */
   sent: number;

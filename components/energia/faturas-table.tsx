@@ -681,7 +681,7 @@ export function FaturasTable({
             className="h-9 bg-card"
             onClick={runSendToFiscal}
             disabled={sendingFiscal || !canWrite}
-            title="Grava na planilha FISCAL as faturas elegíveis: 2026, com débito automático, ainda não na planilha"
+            title="Grava na planilha FISCAL as faturas elegíveis (2026, vencimento não passado, ainda não na planilha) — roda automaticamente 1x por dia; use este botão para adiantar"
           >
             {sendingFiscal ? (
               <Loader2 className="size-4 animate-spin" strokeWidth={2} />

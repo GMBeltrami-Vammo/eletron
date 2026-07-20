@@ -20,6 +20,7 @@ import { createSheetsClient, createSheetsWriteClient } from "@/lib/ingest/sheets
 import { checkFaturasOnFiscal, loadEnergyFaturas } from "@/lib/fiscal/check-faturas";
 import { SENDABLE_YEAR } from "@/lib/fiscal/fiscal-row";
 import {
+  applyFiscalSendIds,
   sendFaturasToFiscal,
   sendOneFaturaToFiscal,
   type SendFiscalSummary,
@@ -119,29 +120,7 @@ export async function sendToFiscal(): Promise<ActionResult<SendFiscalSummary>> {
     // "Verificar no fiscal" sync (run as part of the send): everything on the
     // sheet (registered + just sent) → checked; everything not on the sheet →
     // unchecked. Then settle the value-0 faturas (paid + auto-checked).
-    if (summary.fiscalTrueIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("set_fiscal_exported", {
-          p_charge_ids: summary.fiscalTrueIds,
-          p_value: true,
-        }),
-      );
-    }
-    if (summary.fiscalFalseIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("set_fiscal_exported", {
-          p_charge_ids: summary.fiscalFalseIds,
-          p_value: false,
-        }),
-      );
-    }
-    if (summary.zeroValueIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("settle_zero_value_faturas", {
-          p_charge_ids: summary.zeroValueIds,
-        }),
-      );
-    }
+    await applyFiscalSendIds(client, summary);
 
     revalidatePath("/energia");
     revalidatePath("/mensal");
@@ -176,29 +155,7 @@ export async function sendFaturaToFiscal(
       new Date(),
     );
 
-    if (result.fiscalTrueIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("set_fiscal_exported", {
-          p_charge_ids: result.fiscalTrueIds,
-          p_value: true,
-        }),
-      );
-    }
-    if (result.fiscalFalseIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("set_fiscal_exported", {
-          p_charge_ids: result.fiscalFalseIds,
-          p_value: false,
-        }),
-      );
-    }
-    if (result.zeroValueIds.length > 0) {
-      unwrapRpc(
-        await client.rpc("settle_zero_value_faturas", {
-          p_charge_ids: result.zeroValueIds,
-        }),
-      );
-    }
+    await applyFiscalSendIds(client, result);
 
     revalidatePath("/energia");
     revalidatePath("/mensal");
