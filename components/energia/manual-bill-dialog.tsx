@@ -471,9 +471,7 @@ function ManualBillForm({
 
           {/* NF */}
           <div className="space-y-1.5">
-            <Label htmlFor="mb-nf">
-              Nota fiscal <span className="text-error-emphasis">*</span>
-            </Label>
+            <Label htmlFor="mb-nf">Nota fiscal</Label>
             <Input
               id="mb-nf"
               value={nf}
@@ -489,9 +487,7 @@ function ManualBillForm({
 
         {/* Método (DA / Boleto) */}
         <div className="space-y-1.5">
-          <Label htmlFor="mb-metodo">
-            Método <span className="text-error-emphasis">*</span>
-          </Label>
+          <Label htmlFor="mb-metodo">Método</Label>
           <Select value={metodo} onValueChange={(v) => setMetodo(v as "da" | "boleto")}>
             <SelectTrigger id="mb-metodo" className="w-full bg-card" aria-invalid={Boolean(errors.metodo)}>
               <SelectValue placeholder="DA ou Boleto" />
