@@ -258,6 +258,7 @@ function buildRows(
       leituraAtual: details.leituraAtual,
       tariffClass: tariffClass(details),
       ciclo: cicloOf(charge),
+      billStatus: state?.billStatus ?? null,
       fiscalExported: details.fiscalExported,
       comprovanteWaived: details.legacyClosed ?? false,
       autoDebit: state?.autoDebit ?? "desconhecido",

@@ -124,6 +124,8 @@ export interface FaturaRow {
    * Fatura rows are parsed charges, so in practice ≥ 2.
    */
   ciclo: CicloStage;
+  /** Status do portal da concessionária (billStatus da conta) — exibido ao lado do Ciclo. */
+  billStatus: UtilityBillStatus | null;
   fiscalExported: boolean;
   /** Fatura legada encerrada (#71) — comprovante dispensado (badge na coluna Comprovante). */
   comprovanteWaived: boolean;

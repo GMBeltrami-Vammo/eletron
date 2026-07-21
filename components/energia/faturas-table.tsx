@@ -43,6 +43,7 @@ import {
   AUTO_DEBIT_UI,
   CICLO_UI,
   FISCAL_EXPORT_UI,
+  UTILITY_BILL_STATUS_UI,
 } from "@/lib/labels";
 import {
   formatBRL,
@@ -248,6 +249,19 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     ),
   },
   {
+    // Portal status (scraper billStatus, #33) — shown beside Ciclo like on
+    // Instalações ("Status portal") and /pagamentos ("Status provedor").
+    id: "statusPortal",
+    header: "Status portal",
+    accessorFn: (r) => (r.billStatus ? UTILITY_BILL_STATUS_UI[r.billStatus].label : ""),
+    cell: ({ row }) => {
+      const bs = row.original.billStatus;
+      if (!bs) return <span className="text-muted-foreground">—</span>;
+      const ui = UTILITY_BILL_STATUS_UI[bs];
+      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
+    },
+  },
+  {
     id: "ciclo",
     // Q11 — OUR lifecycle stage of this fatura (same scale as Instalações):
     // 1 Detectada · 2 Analisada · 3 Enviada ao fiscal · 4 Paga.
@@ -401,6 +415,7 @@ const COLUMN_ORDER = [
   "debitoAutomatico",
   "valor",
   "vencimento",
+  "statusPortal",
   "ciclo",
   "fiscal",
   "fatura",
