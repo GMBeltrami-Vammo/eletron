@@ -18,7 +18,10 @@ import { getSessionEmail } from "@/lib/http/guards";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { PaymentMethod } from "@/lib/domain";
 
-const VALUE_WINDOW = 0.5;
+// Manual value-match window (±R$5) — NOT the auto-matcher's strict ±0,50.
+// Energy DA payments legitimately differ from the fatura "Total" by small
+// amounts (juros/arredondamento). `showAll` removes the filter entirely.
+const VALUE_WINDOW = 5;
 
 export interface BindChargeHeader {
   /** Resolved DB uuid — what recordPayment binds to. */
@@ -102,7 +105,10 @@ interface ReceiptCandidateRow {
   documents: { original_filename: string | null; web_view_link: string | null } | null;
 }
 
-export async function loadBindCandidates(dedupeKey: string): Promise<BindContext> {
+export async function loadBindCandidates(
+  dedupeKey: string,
+  showAll = false,
+): Promise<BindContext> {
   const email = await getSessionEmail();
   if (!email) return UNAVAILABLE;
 
@@ -175,25 +181,29 @@ export async function loadBindCandidates(dedupeKey: string): Promise<BindContext
       kind: c.kind,
     };
 
-    // Can't match by value with no value.
-    if (c.amount === null) {
+    // Value filter: ±VALUE_WINDOW around the charge amount, UNLESS `showAll`
+    // (the "ver todos os valores" escape) — then list every unbound receipt
+    // (capped). A charge with no amount can only be resolved via showAll.
+    if (c.amount === null && !showAll) {
       return { available: true, charge, candidates: [], truncated: false };
     }
-
-    // Receipts of the same value (±R$0,50), not rejected.
-    const lo = c.amount - VALUE_WINDOW;
-    const hi = c.amount + VALUE_WINDOW;
+    const useValueFilter = !showAll && c.amount !== null;
     // Every unbound receipt of this value — Gabriel: "só não vinculados". A
     // `rejected` (bulk-discarded, #43) receipt is still unbound and, since the
     // pool shifted post-#44, may now be the right match, so it is NOT hidden;
     // "bound" (a payment references it) is the only exclusion.
-    const { data: recData, error: recErr } = await admin
+    let recQ = admin
       .from("receipts")
       .select(
         "id, document_id, page_number, receipt_type, amount, paid_at, chave_pix, cnpj_cpf, banco, agencia, conta, documents(original_filename, web_view_link)",
-      )
-      .gte("amount", lo)
-      .lte("amount", hi)
+      );
+    if (useValueFilter) {
+      const amount = c.amount as number;
+      recQ = recQ
+        .gte("amount", amount - VALUE_WINDOW)
+        .lte("amount", amount + VALUE_WINDOW);
+    }
+    const { data: recData, error: recErr } = await recQ
       .order("paid_at", { ascending: false })
       .limit(RECEIPT_SCAN_LIMIT);
     if (recErr) throw new Error(recErr.message);

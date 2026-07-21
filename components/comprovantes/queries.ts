@@ -59,8 +59,12 @@ const POOL_STATUSES = [
   "em_compensacao",
   "pago",
 ];
-/** Value-match window around the receipt amount (±R$0,50), like #62/#58. */
-const VALUE_MATCH_TOL = 0.5;
+// Value-match window around the receipt amount for the MANUAL Conciliar picker.
+// ±R$5 (not the auto-matcher's strict ±0,50): energy DA payments legitimately
+// differ from the fatura "Total" by small amounts (juros/arredondamento — e.g.
+// R$2.439,92 pago vs R$2.439,13 na fatura), and the human confirms the bind.
+// The "Todas as cobranças" toggle removes the filter for larger diffs.
+const VALUE_MATCH_TOL = 5;
 
 function chargingEnvPresent(): boolean {
   return Boolean(

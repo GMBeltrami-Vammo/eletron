@@ -57,16 +57,18 @@ export function BindComprovanteDialog({
 }) {
   const { run, pending } = useRunAction();
   const [ctx, setCtx] = React.useState<BindContext | null>(null);
+  const [showAll, setShowAll] = React.useState(false);
 
   React.useEffect(() => {
     let alive = true;
-    void loadBindCandidates(dedupeKey).then((res) => {
+    setCtx(null);
+    void loadBindCandidates(dedupeKey, showAll).then((res) => {
       if (alive) setCtx(res);
     });
     return () => {
       alive = false;
     };
-  }, [dedupeKey]);
+  }, [dedupeKey, showAll]);
 
   const charge = ctx?.charge ?? null;
 
@@ -93,8 +95,9 @@ export function BindComprovanteDialog({
         <DialogHeader>
           <DialogTitle>Vincular comprovante</DialogTitle>
           <DialogDescription>
-            Comprovantes ainda sem vínculo com o mesmo valor (±R$0,50). Vincular
-            marca a cobrança como paga.
+            Comprovantes ainda sem vínculo com valor próximo{" "}
+            {showAll ? "(todos os valores)" : "(±R$5,00)"}. Vincular marca a
+            cobrança como paga.
           </DialogDescription>
         </DialogHeader>
 
@@ -155,11 +158,30 @@ export function BindComprovanteDialog({
               </div>
             </div>
 
+            {/* Value-window toggle — ±R$5 vs all values (juros/multa) */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-muted-foreground">
+                {showAll
+                  ? "Mostrando comprovantes de todos os valores"
+                  : "Valor ≈ o da cobrança (±R$5,00)"}
+              </span>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? "Filtrar por valor" : "Ver todos os valores"}
+              </Button>
+            </div>
+
             {/* Candidate receipts */}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {ctx.candidates.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
-                  Nenhum comprovante solto com esse valor (±R$0,50).
+                  {showAll
+                    ? "Nenhum comprovante solto disponível."
+                    : 'Nenhum comprovante solto com esse valor (±R$5,00). Tente "Ver todos os valores".'}
                 </p>
               ) : (
                 <ul className="space-y-2">
