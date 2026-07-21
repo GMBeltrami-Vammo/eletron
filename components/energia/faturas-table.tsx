@@ -317,26 +317,23 @@ const columns: ColumnDef<FaturaRow, unknown>[] = [
     accessorFn: (r) => AUTO_DEBIT_UI[r.autoDebit].label,
     cell: ({ row }) => {
       const ui = AUTO_DEBIT_UI[row.original.autoDebit];
-      const reg = row.original.autoDebitRegistration;
-      return (
-        <span className="flex flex-col items-start gap-0.5">
-          <StatusBadge color={ui.color}>{ui.label}</StatusBadge>
-          {reg ? (
-            <span
-              className="font-mono text-[11px] tabular-nums text-muted-foreground"
-              title="Nº de registro do débito automático"
-            >
-              {reg}
-            </span>
-          ) : null}
-        </span>
-      );
+      return <StatusBadge color={ui.color}>{ui.label}</StatusBadge>;
     },
-    meta: csvMeta((r) =>
-      r.autoDebitRegistration
-        ? `${AUTO_DEBIT_UI[r.autoDebit].label} (${r.autoDebitRegistration})`
-        : AUTO_DEBIT_UI[r.autoDebit].label,
-    ),
+  },
+  {
+    // Nº de registro do débito automático (quando disponível) — coluna própria,
+    // como em Instalações / Contas sem DA. Importante para perseguir o cadastro.
+    id: "registroDa",
+    header: "Registro DA",
+    accessorFn: (r) => r.autoDebitRegistration ?? "",
+    cell: ({ row }) =>
+      row.original.autoDebitRegistration ? (
+        <span className="font-mono text-xs tabular-nums">
+          {row.original.autoDebitRegistration}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
   },
   {
     id: "comprovante",
@@ -413,6 +410,7 @@ const COLUMN_ORDER = [
   "estacao",
   "competencia",
   "debitoAutomatico",
+  "registroDa",
   "valor",
   "vencimento",
   "statusPortal",
