@@ -17,6 +17,7 @@ import {
 import { resolveDocumentHref } from "@/lib/data/document-href";
 import { energyCicloStage, energyCicloIsPaid } from "@/lib/energia/ciclo";
 import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
+import { isFaturaAArrumar } from "@/lib/energia/fatura-a-arrumar";
 import type { LoadedSnapshot } from "@/lib/data/repository";
 import { getViewer } from "@/components/admin/viewer";
 import { readReviewQueue } from "@/app/(app)/revisao/cobrancas/queries";
@@ -164,6 +165,21 @@ function buildRows(
         ),
         sourceDocumentId: charge.sourceDocumentId ?? null,
       };
+    })
+    .filter((r) => {
+      // Faturas a arrumar (Gabriel 2026-07-21): energy faturas recebidas sem
+      // venc/comp/valor/NF ficam em quarentena em /revisão, fora do ledger real.
+      const isEnergy =
+        r.accountType === "energy_enel" || r.accountType === "energy_edp";
+      if (!isEnergy) return true;
+      return !isFaturaAArrumar({
+        dueDate: r.dueDate,
+        competencia: r.competencia,
+        amount: r.amount,
+        nf: r.notaFiscal,
+        settled: SETTLED_CHARGE_STATUSES.has(r.status),
+        legacyClosed: r.comprovanteWaived,
+      });
     });
 }
 

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { QueueCard } from "@/components/revisao/queue-card";
 import { deriveEnelEdpSemDa } from "@/components/revisao/sem-da-data";
+import { deriveFaturasAArrumar } from "@/components/revisao/faturas-a-arrumar-data";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,6 +54,8 @@ async function RevisaoContent() {
     irregularities.joinAlerts.length - stationsWithoutContract;
 
   const semDaCount = deriveEnelEdpSemDa(snapshot).length;
+  // Count only — uuids (empty map) don't affect the count.
+  const faturasAArrumarCount = deriveFaturasAArrumar(snapshot, new Map()).length;
 
   return (
     <div>
@@ -124,6 +127,13 @@ async function RevisaoContent() {
           count={semDaCount}
           hint={semDaCount === 0 ? "Tudo em dia" : "Perseguir o cadastro em DA"}
           href="/revisao/sem-debito-automatico"
+        />
+        <QueueCard
+          title="Faturas a arrumar"
+          description="Faturas de energia recebidas sem vencimento, competência, valor ou NF — fora das tabelas reais até completar"
+          count={faturasAArrumarCount}
+          hint={faturasAArrumarCount === 0 ? "Tudo em dia" : "Completar dado faltante"}
+          href="/revisao/faturas-a-arrumar"
         />
       </div>
       {irregularities.issues.length > 0 ? (

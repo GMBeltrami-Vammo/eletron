@@ -4,17 +4,14 @@ import type { Metadata } from "next";
 import { BackLink } from "@/components/revisao/back-link";
 import {
   ContractsWithoutStationTable,
-  FaturasSemVencimentoTable,
   StationsWithoutContractTable,
   type ContractWithoutStationRow,
-  type FaturaSemVencimentoRow,
   type StationWithoutContractRow,
 } from "@/components/revisao/irregularities-tables";
 import { DataTableSkeleton } from "@/components/vammo/data-table";
 import { FreshnessDot } from "@/components/vammo/freshness-dot";
 import { PageHeader } from "@/components/vammo/page-header";
 import { getRepository } from "@/lib/data/repository.server";
-import { ACCOUNT_TYPE } from "@/lib/domain";
 
 export const metadata: Metadata = { title: "Irregularidades" };
 
@@ -62,43 +59,9 @@ async function IrregularidadesContent() {
   const contractById = new Map(
     snapshot.contracts.map((contract) => [contract.id, contract]),
   );
-  const accountById = new Map(
-    snapshot.billingAccounts.map((account) => [account.id, account]),
-  );
-  // Energy faturas with NO due date (Gabriel 2026-07-14): a boleto should always
-  // carry a vencimento — a missing one is an anomaly to fix (it's also tagged
-  // "Vencida · sem data" and floated to the top of /pagamentos › Enel/EDP). Only
-  // OPEN energy charges — rent charges legitimately have no due date.
-  const OPEN_TO_REVIEW = new Set(["pago", "antecipado", "cancelada", "nao_aplicavel"]);
-  const faturasSemVencimento: FaturaSemVencimentoRow[] = snapshot.charges
-    .filter((charge) => {
-      if (charge.dueDate !== null) return false;
-      if (OPEN_TO_REVIEW.has(charge.status)) return false;
-      const account = charge.billingAccountId
-        ? accountById.get(charge.billingAccountId)
-        : undefined;
-      return (
-        account?.accountType === ACCOUNT_TYPE.energyEnel ||
-        account?.accountType === ACCOUNT_TYPE.energyEdp
-      );
-    })
-    .map((charge) => {
-      const account = charge.billingAccountId
-        ? accountById.get(charge.billingAccountId)
-        : undefined;
-      return {
-        chargeId: charge.id,
-        provider: account?.accountType === ACCOUNT_TYPE.energyEdp ? "EDP" : "Enel",
-        installationKey: account?.enelId ?? account?.edpUc ?? null,
-        stationId: charge.stationId,
-        stationName:
-          charge.stationId !== null
-            ? (stationById.get(charge.stationId)?.name ?? null)
-            : null,
-        competencia: charge.competencia,
-        amount: charge.amount,
-      } satisfies FaturaSemVencimentoRow;
-    });
+  // Faturas de energia sem vencimento agora fazem parte da fila "Faturas a
+  // arrumar" (/revisao/faturas-a-arrumar, Gabriel 2026-07-21), que também
+  // cobre sem competência / valor / NF e as tira das tabelas reais.
 
   const stationsWithoutContract: StationWithoutContractRow[] =
     irregularities.joinAlerts
@@ -152,15 +115,6 @@ async function IrregularidadesContent() {
         }
       />
       <div className="space-y-8">
-        <section>
-          <h2 className="pb-3 text-base font-semibold">
-            Faturas de energia sem vencimento{" "}
-            <span className="font-normal text-muted-foreground tabular-nums">
-              ({faturasSemVencimento.length})
-            </span>
-          </h2>
-          <FaturasSemVencimentoTable rows={faturasSemVencimento} />
-        </section>
         <section>
           <h2 className="pb-3 text-base font-semibold">
             Estações sem contrato{" "}

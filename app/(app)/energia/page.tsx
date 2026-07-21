@@ -17,6 +17,7 @@ import type {
 } from "@/components/energia/types";
 import { energyCicloStage, energyCicloIsPaid } from "@/lib/energia/ciclo";
 import { SETTLED_CHARGE_STATUSES } from "@/lib/ingest/derive";
+import { isFaturaAArrumar } from "@/lib/energia/fatura-a-arrumar";
 import { getRepository } from "@/lib/data/repository.server";
 import {
   readPaymentLinks,
@@ -237,6 +238,20 @@ function buildRows(
       continue;
     }
     const state = stateByAccount.get(account.id);
+    // Faturas a arrumar (Gabriel 2026-07-21): recebida sem venc/comp/valor/NF →
+    // quarentena em /revisão › Faturas a arrumar, fora desta tabela real.
+    if (
+      isFaturaAArrumar({
+        dueDate: charge.dueDate,
+        competencia: charge.competencia,
+        amount: charge.amount,
+        nf: charge.notaFiscal ?? details.nf ?? null,
+        settled: SETTLED_CHARGE_STATUSES.has(charge.status),
+        legacyClosed: details.legacyClosed ?? false,
+      })
+    ) {
+      continue;
+    }
     faturas.push({
       chargeId: charge.id,
       provider: account.accountType as EnergyProvider,

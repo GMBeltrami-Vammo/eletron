@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
 import { StatusBadge } from "@/components/vammo/status-badge";
 import type { ContractType, StationStatus } from "@/lib/domain";
-import { formatBRL, formatCompetencia, formatDate } from "@/lib/format";
+import { formatBRL, formatDate } from "@/lib/format";
 import { CONTRACT_TYPE_UI, STATION_STATUS_UI } from "@/lib/labels";
 
 import { Phase2Button } from "./phase2-button";
@@ -221,96 +221,6 @@ export function StationsWithoutContractTable({
   );
 }
 
-/** Energy fatura with no due date — an anomaly (a boleto should have one). */
-export interface FaturaSemVencimentoRow {
-  chargeId: string;
-  provider: "Enel" | "EDP";
-  installationKey: string | null;
-  stationId: number | null;
-  stationName: string | null;
-  competencia: string | null;
-  amount: number | null;
-}
-
-const semVencimentoColumns: ColumnDef<FaturaSemVencimentoRow, unknown>[] = [
-  {
-    id: "provedor",
-    header: "Provedor",
-    accessorFn: (row) => row.provider,
-    cell: ({ row }) => (
-      <StatusBadge color={row.original.provider === "Enel" ? "blue" : "dark-green"}>
-        {row.original.provider}
-      </StatusBadge>
-    ),
-  },
-  {
-    id: "instalacao",
-    header: "Instalação",
-    accessorFn: (row) => row.installationKey ?? "—",
-    cell: ({ getValue }) => (
-      <span className="font-mono text-xs tabular-nums">{String(getValue())}</span>
-    ),
-  },
-  {
-    id: "estacao",
-    header: "Estação",
-    accessorFn: (row) => row.stationId ?? -1,
-    cell: ({ row }) => {
-      const { stationId, stationName } = row.original;
-      if (stationId === null) {
-        return <span className="text-muted-foreground">sem estação</span>;
-      }
-      return (
-        <Link href={`/estacoes/${stationId}`} className="font-medium hover:underline">
-          <span className="tabular-nums">#{stationId}</span>
-          {stationName ? (
-            <span className="font-normal text-muted-foreground"> · {stationName}</span>
-          ) : null}
-        </Link>
-      );
-    },
-  },
-  {
-    id: "competencia",
-    header: "Competência",
-    accessorFn: (row) => row.competencia ?? "",
-    cell: ({ row }) => (
-      <span className="tabular-nums">
-        {formatCompetencia(row.original.competencia)}
-      </span>
-    ),
-  },
-  {
-    id: "valor",
-    header: "Valor",
-    accessorFn: (row) => row.amount ?? "",
-    cell: ({ row }) => (
-      <span className="block text-right tabular-nums">
-        {formatBRL(row.original.amount)}
-      </span>
-    ),
-    meta: { csvValue: (row: FaturaSemVencimentoRow) => row.amount },
-  },
-  {
-    id: "acoes",
-    enableSorting: false,
-    enableHiding: false,
-    cell: ({ row }) => {
-      const { stationId } = row.original;
-      // The vencimento is set from /pagamentos (Ajustar valor/vencimento) — the
-      // station 360 opens the Enel/EDP payments for this installation.
-      const href = stationId !== null ? `/estacoes/${stationId}` : "/pagamentos";
-      return (
-        <div className="flex justify-end">
-          <Button size="xs" variant="outline" render={<Link href={href} />}>
-            Corrigir vencimento
-          </Button>
-        </div>
-      );
-    },
-  },
-];
-
 /** Enel/EDP energy account whose station is NOT registered for débito automático. */
 export interface EnelEdpSemDaRow {
   /** Swap-station id — the "ID" on /estações. */
@@ -451,24 +361,6 @@ export function EnelEdpSemDaTable({ rows }: { rows: EnelEdpSemDaRow[] }) {
       pageSize={25}
       filterableColumnIds="all"
       emptyMessage="Nenhuma conta de energia sem débito automático."
-    />
-  );
-}
-
-export function FaturasSemVencimentoTable({
-  rows,
-}: {
-  rows: FaturaSemVencimentoRow[];
-}) {
-  return (
-    <DataTable
-      columns={semVencimentoColumns}
-      data={rows}
-      searchPlaceholder="Buscar instalação, estação…"
-      csvFilename="faturas-sem-vencimento"
-      pageSize={25}
-      filterableColumnIds="all"
-      emptyMessage="Nenhuma fatura de energia sem vencimento."
     />
   );
 }
