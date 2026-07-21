@@ -42,8 +42,14 @@ import type {
 
 type Admin = ReturnType<typeof supabaseAdmin>;
 
-const OPEN_STATUSES = ["pendente", "boleto_recebido", "atrasado"];
-const MATCHABLE_STATUSES = [
+// Candidate pool for manual conciliação: every status a comprovante could pay,
+// INCLUDING 'pago'. Enel/EDP faturas are usually pago-via-portal
+// (status_source='sync') with NO bound comprovante, and a dropped comprovante
+// must be able to bind to them (matcher parity, #41/#44) — otherwise they never
+// show in the Conciliar picker. Charges that ALREADY have a bound comprovante
+// (a receipt-backed payment) are excluded below, so a conciliada is never
+// re-offered. 'cancelada'/'nao_aplicavel' stay out (terminal/void).
+const POOL_STATUSES = [
   "pendente",
   "boleto_recebido",
   "atrasado",
@@ -51,7 +57,10 @@ const MATCHABLE_STATUSES = [
   "antecipado",
   "negociada",
   "em_compensacao",
+  "pago",
 ];
+/** Value-match window around the receipt amount (±R$0,50), like #62/#58. */
+const VALUE_MATCH_TOL = 0.5;
 
 function chargingEnvPresent(): boolean {
   return Boolean(
@@ -537,51 +546,66 @@ interface ChargeOptRow {
 }
 
 export async function searchOpenChargesData(
-  onlyOpen: boolean,
+  value: number | null,
 ): Promise<OpenChargeOption[]> {
   const gated = await gatedAdmin();
   if (!gated) return [];
   const { admin } = gated;
-  const statuses = onlyOpen ? OPEN_STATUSES : MATCHABLE_STATUSES;
   try {
-    const { data } = await admin
+    let q = admin
       .from("charges")
       .select(
         "id, station_id, kind, competencia, amount, due_date, status, dedupe_key",
       )
-      .in("status", statuses)
+      .in("status", POOL_STATUSES);
+    // Value filter (Gabriel 2026-07-21): show only charges within ±R$0,50 do
+    // valor do recibo em vez de TODAS as em aberto. value=null → mostra todas.
+    if (value !== null) {
+      q = q
+        .gte("amount", round2(value - VALUE_MATCH_TOL))
+        .lte("amount", round2(value + VALUE_MATCH_TOL));
+    }
+    const { data } = await q
       .order("competencia", { ascending: false, nullsFirst: false })
       .limit(500);
     const rows = (data ?? []) as unknown as ChargeOptRow[];
     const chargeIds = rows.map((r) => r.id);
 
+    // Sum allocations AND flag charges that already carry a bound comprovante
+    // (a receipt-backed payment) — those are conciliadas, never re-offered.
+    // A pago-via-portal Enel/EDP charge has NO payment row → passes through.
     const allocated = new Map<string, number>();
+    const boundComprovante = new Set<string>();
     if (chargeIds.length) {
       const { data: pd } = await admin
         .from("payments")
-        .select("charge_id, amount")
+        .select("charge_id, amount, receipt_id")
         .in("charge_id", chargeIds);
       for (const p of (pd ?? []) as unknown as {
         charge_id: string;
         amount: unknown;
+        receipt_id: string | null;
       }[]) {
         allocated.set(
           p.charge_id,
           (allocated.get(p.charge_id) ?? 0) + (toNum(p.amount) ?? 0),
         );
+        if (p.receipt_id !== null) boundComprovante.add(p.charge_id);
       }
     }
 
+    const candidates = rows.filter((r) => !boundComprovante.has(r.id));
+
     const stationIds = [
       ...new Set(
-        rows
+        candidates
           .map((r) => r.station_id)
           .filter((x): x is number => typeof x === "number"),
       ),
     ];
     const stationNames = await fetchStationNames(admin, stationIds);
 
-    return rows.map((r) => {
+    return candidates.map((r) => {
       const amount = toNum(r.amount);
       const paid = allocated.get(r.id) ?? 0;
       const openAmount =

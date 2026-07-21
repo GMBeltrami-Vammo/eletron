@@ -809,6 +809,7 @@ export function ReviewQueue({
           receipt={{
             id: target.row.id,
             receiptType: target.row.receiptType,
+            amount: target.row.amount,
             remaining: target.row.amount,
             paidAt: target.row.paidAt,
           }}

@@ -37,7 +37,7 @@ export async function fetchReviewData(): Promise<ReviewData> {
 }
 
 export async function fetchOpenCharges(
-  onlyOpen: boolean,
+  value: number | null,
 ): Promise<OpenChargeOption[]> {
-  return searchOpenChargesData(onlyOpen);
+  return searchOpenChargesData(value);
 }

@@ -58,8 +58,8 @@ function toMoneyInput(value: number | null): string {
 export interface ChargePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The receipt being matched (drives default valor + payment method). */
-  receipt: Pick<ReceiptView, "id" | "receiptType" | "remaining" | "paidAt">;
+  /** The receipt being matched (drives default valor + payment method + value filter). */
+  receipt: Pick<ReceiptView, "id" | "receiptType" | "amount" | "remaining" | "paidAt">;
   isOperator: boolean;
   /** Query keys to invalidate after a successful match. */
   invalidate?: QueryKey[];
@@ -75,14 +75,18 @@ export function ChargePicker({
   invalidate,
   preselectChargeId,
 }: ChargePickerProps) {
-  const [onlyOpen, setOnlyOpen] = React.useState(true);
+  const [filterByValue, setFilterByValue] = React.useState(true);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [valor, setValor] = React.useState("");
   const { run, pending } = useRunAction();
 
+  // Valor do recibo p/ o filtro por valor (±R$0,50 no servidor). null = todas.
+  const receiptValue = receipt.amount ?? receipt.remaining ?? null;
+  const valueFilter = filterByValue ? receiptValue : null;
+
   const { data: charges = [], isLoading } = useQuery({
-    queryKey: ["comprovantes-open-charges", onlyOpen],
-    queryFn: () => fetchOpenCharges(onlyOpen),
+    queryKey: ["comprovantes-open-charges", valueFilter],
+    queryFn: () => fetchOpenCharges(valueFilter),
     enabled: open,
     staleTime: 15_000,
   });
@@ -158,10 +162,16 @@ export function ChargePicker({
           <Button
             type="button"
             size="xs"
-            variant={onlyOpen ? "secondary" : "outline"}
-            onClick={() => setOnlyOpen((v) => !v)}
+            variant={filterByValue ? "secondary" : "outline"}
+            onClick={() => setFilterByValue((v) => !v)}
+            disabled={receiptValue === null}
+            title={
+              filterByValue
+                ? "Mostrando cobranças com valor próximo ao recibo (±R$0,50). Clique para ver todas."
+                : "Mostrando todas as cobranças. Clique para filtrar pelo valor do recibo."
+            }
           >
-            {onlyOpen ? "Somente em aberto" : "Todas as cobranças"}
+            {filterByValue ? `Valor ≈ ${formatBRL(receiptValue)}` : "Todas as cobranças"}
           </Button>
           <span className="text-xs text-muted-foreground">
             Restante do recibo:{" "}
