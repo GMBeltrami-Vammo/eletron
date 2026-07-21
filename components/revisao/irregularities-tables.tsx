@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { Plus } from "lucide-react";
+import { ExternalLink, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/vammo/data-table";
@@ -322,6 +322,10 @@ export interface EnelEdpSemDaRow {
   address: string | null;
   autoDebitRegistration: string | null;
   lastBillValue: number | null;
+  /** Vencimento da última fatura de energia da conta (ISO). */
+  lastBillDueDate: string | null;
+  /** Link do Drive da última fatura, se disponível. */
+  lastBillFaturaUrl: string | null;
   lastBillFiscalExported: boolean;
 }
 
@@ -394,6 +398,17 @@ const semDaColumns: ColumnDef<EnelEdpSemDaRow, unknown>[] = [
     meta: { csvValue: (row: EnelEdpSemDaRow) => row.lastBillValue },
   },
   {
+    id: "ultimoVencimento",
+    header: "Último vencimento",
+    accessorFn: (row) => row.lastBillDueDate ?? "",
+    cell: ({ row }) =>
+      row.original.lastBillDueDate ? (
+        <span className="tabular-nums">{formatDate(row.original.lastBillDueDate)}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     id: "ultimoFiscal",
     header: "Última ao fiscal",
     accessorFn: (row) => (row.lastBillFiscalExported ? "Sim" : "Não"),
@@ -402,6 +417,27 @@ const semDaColumns: ColumnDef<EnelEdpSemDaRow, unknown>[] = [
         {row.original.lastBillFiscalExported ? "Sim" : "Não"}
       </StatusBadge>
     ),
+  },
+  {
+    id: "ultimaFatura",
+    header: "Última fatura (PDF)",
+    enableSorting: false,
+    accessorFn: (row) => row.lastBillFaturaUrl ?? "",
+    cell: ({ row }) =>
+      row.original.lastBillFaturaUrl ? (
+        <a
+          href={row.original.lastBillFaturaUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Ver fatura
+          <ExternalLink className="size-3.5" strokeWidth={2} />
+        </a>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
   },
 ];
 

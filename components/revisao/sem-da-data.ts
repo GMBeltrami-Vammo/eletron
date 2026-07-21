@@ -25,6 +25,10 @@ export function deriveEnelEdpSemDa(snapshot: LoadedSnapshot): EnelEdpSemDaRow[] 
     if (arr) arr.push(c);
     else chargesByAccount.set(c.billingAccountId, [c]);
   }
+  // Energy detail per charge (for the last fatura's Drive PDF link).
+  const detailByCharge = new Map(
+    snapshot.chargeEnergyDetails.map((d) => [d.chargeId, d]),
+  );
 
   return snapshot.billingAccounts
     .filter(
@@ -55,6 +59,8 @@ export function deriveEnelEdpSemDa(snapshot: LoadedSnapshot): EnelEdpSemDaRow[] 
         autoDebitRegistration:
           a.autoDebitRegistration ?? state?.autoDebitRegistration ?? null,
         lastBillValue: last?.amount ?? null,
+        lastBillDueDate: last?.dueDate ?? null,
+        lastBillFaturaUrl: last ? (detailByCharge.get(last.id)?.faturaDriveUrl ?? null) : null,
         lastBillFiscalExported: last?.fiscalExported ?? false,
       } satisfies EnelEdpSemDaRow;
     });
