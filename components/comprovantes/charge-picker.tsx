@@ -167,7 +167,7 @@ export function ChargePicker({
             disabled={receiptValue === null}
             title={
               filterByValue
-                ? "Mostrando cobranças com valor próximo ao recibo (±R$5,00). Clique para ver todas."
+                ? "Mostrando cobranças com valor próximo ao recibo (±R$0,50). Clique para ver todas."
                 : "Mostrando todas as cobranças. Clique para filtrar pelo valor do recibo."
             }
           >

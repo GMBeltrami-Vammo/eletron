@@ -96,7 +96,7 @@ export function BindComprovanteDialog({
           <DialogTitle>Vincular comprovante</DialogTitle>
           <DialogDescription>
             Comprovantes ainda sem vínculo com valor próximo{" "}
-            {showAll ? "(todos os valores)" : "(±R$5,00)"}. Vincular marca a
+            {showAll ? "(todos os valores)" : "(±R$0,50)"}. Vincular marca a
             cobrança como paga.
           </DialogDescription>
         </DialogHeader>
@@ -158,12 +158,12 @@ export function BindComprovanteDialog({
               </div>
             </div>
 
-            {/* Value-window toggle — ±R$5 vs all values (juros/multa) */}
+            {/* Value-window toggle — ±R$0,50 vs all values (juros/multa) */}
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-muted-foreground">
                 {showAll
                   ? "Mostrando comprovantes de todos os valores"
-                  : "Valor ≈ o da cobrança (±R$5,00)"}
+                  : "Valor ≈ o da cobrança (±R$0,50)"}
               </span>
               <Button
                 type="button"
@@ -181,7 +181,7 @@ export function BindComprovanteDialog({
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   {showAll
                     ? "Nenhum comprovante solto disponível."
-                    : 'Nenhum comprovante solto com esse valor (±R$5,00). Tente "Ver todos os valores".'}
+                    : 'Nenhum comprovante solto com esse valor (±R$0,50). Tente "Ver todos os valores".'}
                 </p>
               ) : (
                 <ul className="space-y-2">

@@ -18,10 +18,10 @@ import { getSessionEmail } from "@/lib/http/guards";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { PaymentMethod } from "@/lib/domain";
 
-// Manual value-match window (±R$5) — NOT the auto-matcher's strict ±0,50.
-// Energy DA payments legitimately differ from the fatura "Total" by small
-// amounts (juros/arredondamento). `showAll` removes the filter entirely.
-const VALUE_WINDOW = 5;
+// Manual value-match window (±R$0,50) — Gabriel 2026-07-21: diffs maiores não
+// são match (mesmo valor ± centavos). `showAll` remove o filtro p/ os casos
+// legítimos de valor diferente (juros/multa), decididos pelo humano.
+const VALUE_WINDOW = 0.5;
 
 export interface BindChargeHeader {
   /** Resolved DB uuid — what recordPayment binds to. */
