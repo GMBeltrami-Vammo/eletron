@@ -1,26 +1,21 @@
 "use client";
 
 /**
- * "Comprovante vinculado" chip (Phase 2.5 R1) — deep-links a ledger row to its
- * comprovante's deep-dive page (`/comprovantes/{documentId}?page=N`). Shared by
+ * "Comprovante vinculado" chip — on click/tap opens the EXACT matched page of
+ * the bound comprovante (`/api/files/[documentId]/page/[page]`, the isolated
+ * per-page Supabase artifact #39/#41) in a new tab, NOT the whole document
+ * (Gabriel 2026-07-21). Hover (desktop) previews the same page. Shared by
  * /energia faturas, /pagamentos, station 360 payments tab and /alugueis.
  *
- * On hover (desktop), a preview card shows the EXACT isolated page that matched,
- * served from Supabase (`/api/files/[id]/page/[page]` — the per-page artifact
- * the pipeline eagerly materializes at match time). The iframe mounts lazily on
- * open; on click / touch the chip still navigates to the deep-dive.
- *
  * Three states:
- *  - linked payment WITH document  → green chip, clickable + hover preview;
+ *  - linked payment WITH document  → green chip, clickable (nova aba) + hover;
  *  - payment without document      → green chip, not clickable (clone-era row);
- *  - `legacy` fallback (sheet-era ultimo_comprovante) → grey outline chip.
+ *  - `legacy` fallback (summary=null upstream) → handled before this renders.
  */
 
-import Link from "next/link";
 import { Paperclip } from "lucide-react";
 
 import {
-  comprovanteHref,
   comprovantePageSrc,
   type PaymentLinkSummary,
 } from "@/lib/data/payment-links.shared";
@@ -39,14 +34,15 @@ export function ComprovanteChip({
   className?: string;
 }) {
   if (!summary) return null;
-  const href = comprovanteHref(summary);
+  // The isolated matched page (falls back to page 1) — both the click target
+  // and the hover preview point here, so the row shows ONLY this bill's page.
   const pageSrc = comprovantePageSrc(summary);
   const label = summary.count > 1 ? `Comprovante ×${summary.count}` : "Comprovante";
   const chip = (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md border border-success/40 bg-success-subtle/40 px-1.5 py-0.5 text-xs font-medium text-success-emphasis",
-        href && "underline-offset-2 hover:underline",
+        pageSrc && "underline-offset-2 hover:underline",
         className,
       )}
     >
@@ -55,29 +51,34 @@ export function ComprovanteChip({
     </span>
   );
 
-  // No linked document → static chip (no deep-link, no preview).
-  if (!href) return chip;
+  // No linked document → static chip (no page to open, no preview).
+  if (!pageSrc) return chip;
 
-  // Clickable + hover preview of the matched page.
+  // Clickable (opens the isolated matched page in a new tab) + hover preview.
   return (
     <HoverCard>
       <HoverCardTrigger
-        render={<Link href={href} prefetch={false} onClick={(e) => e.stopPropagation()} />}
+        render={
+          <a
+            href={pageSrc}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          />
+        }
       >
         {chip}
       </HoverCardTrigger>
-      {pageSrc ? (
-        <HoverCardContent
-          className="w-[360px] max-w-[90vw]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <iframe
-            src={pageSrc}
-            title="Prévia do comprovante"
-            className="h-[460px] w-full rounded-md border-0 bg-white"
-          />
-        </HoverCardContent>
-      ) : null}
+      <HoverCardContent
+        className="w-[360px] max-w-[90vw]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <iframe
+          src={pageSrc}
+          title="Prévia do comprovante"
+          className="h-[460px] w-full rounded-md border-0 bg-white"
+        />
+      </HoverCardContent>
     </HoverCard>
   );
 }
