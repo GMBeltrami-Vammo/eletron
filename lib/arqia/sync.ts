@@ -4,7 +4,8 @@ import "server-only";
  * runArqiaSync — the app-side replacement for the n8n `Alerta - SIM_Data_Arqia`
  * (Gabriel 2026-07-22). Fetches the fleet + consumption from the Arqia API,
  * reconciles charging.arqia_sims (new→active, sumido→inactive), computes the
- * pró-rata quota (300/SIM) + Σ compras do mês, writes the daily snapshot, and —
+ * pró-rata quota (a quota de CADA chip, vinda da API) + Σ compras do mês, writes
+ * the daily snapshot, and —
  * if usage > threshold — records an alert and pushes it to Slack.
  *
  * First-ever run (empty table): new SIMs get first_seen_on = 1º do mês (frota
@@ -124,8 +125,11 @@ export async function runArqiaSync(
   }
 
   // Pró-rata quota over the ACTIVE fleet (fetched), preserving first_seen_on.
+  // A quota de cada chip vem da API (snap.quotaByIccid); só a rampa temporal de
+  // um chip visto pela 1ª vez no mês reduz a fração — não há mais valor fixo.
   const activeSims: QuotaSim[] = snap.iccids.map((iccid) => ({
     firstSeenOn: existingById.get(iccid)?.first_seen_on ?? baseline,
+    quotaMb: snap.quotaByIccid[iccid] ?? 0,
   }));
   const baseQuotaMb = proRataQuotaMb(activeSims, now);
 

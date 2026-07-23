@@ -5,7 +5,6 @@ import {
   proRataQuotaMb,
   usagePct,
   monthElapsedPct,
-  PER_SIM_MONTHLY_QUOTA_MB,
 } from "./quota";
 
 describe("parseDataUnitMb", () => {
@@ -23,22 +22,42 @@ describe("parseDataUnitMb", () => {
 });
 
 describe("proRataQuotaMb", () => {
-  it("SIM de mês anterior conta quota cheia (300)", () => {
+  it("SIM de mês anterior conta a quota cheia DO CHIP (da API)", () => {
     const now = new Date(2026, 6, 15); // 15/jul/2026
-    expect(proRataQuotaMb([{ firstSeenOn: "2026-05-28" }], now)).toBe(300);
+    expect(proRataQuotaMb([{ firstSeenOn: "2026-05-28", quotaMb: 500 }], now)).toBe(500);
   });
-  it("SIM criado no mês corrente é pró-rateado ((lastDay-day+2)/lastDay)", () => {
-    const now = new Date(2026, 6, 20); // julho tem 31 dias
-    // dia 10 → (31-10+2)/31 * 300 = 23/31*300 ≈ 222.58 → arredonda
-    expect(proRataQuotaMb([{ firstSeenOn: "2026-07-10" }], now)).toBe(Math.round((23 / 31) * 300));
-  });
-  it("soma múltiplos SIMs", () => {
-    const now = new Date(2026, 6, 20);
+  it("usa a quota própria de cada chip (500 aqui, não um valor fixo)", () => {
+    const now = new Date(2026, 6, 15);
     const q = proRataQuotaMb(
-      [{ firstSeenOn: "2026-05-01" }, { firstSeenOn: "2026-06-15" }],
+      [
+        { firstSeenOn: "2026-04-01", quotaMb: 500 },
+        { firstSeenOn: "2026-04-01", quotaMb: 300 },
+      ],
       now,
     );
-    expect(q).toBe(2 * PER_SIM_MONTHLY_QUOTA_MB);
+    expect(q).toBe(800); // 500 + 300 — quotas distintas por chip
+  });
+  it("SIM criado no mês corrente pró-rateia a quota DO CHIP ((lastDay-day+2)/lastDay)", () => {
+    const now = new Date(2026, 6, 20); // julho tem 31 dias
+    // dia 10 → (31-10+2)/31 * 500 = 23/31*500 ≈ 370.97 → arredonda
+    expect(proRataQuotaMb([{ firstSeenOn: "2026-07-10", quotaMb: 500 }], now)).toBe(
+      Math.round((23 / 31) * 500),
+    );
+  });
+  it("soma múltiplos SIMs (quota cheia quando de meses anteriores)", () => {
+    const now = new Date(2026, 6, 20);
+    const q = proRataQuotaMb(
+      [
+        { firstSeenOn: "2026-05-01", quotaMb: 500 },
+        { firstSeenOn: "2026-06-15", quotaMb: 500 },
+      ],
+      now,
+    );
+    expect(q).toBe(1000);
+  });
+  it("quota ausente/0 do chip contribui 0 (não inventa valor)", () => {
+    const now = new Date(2026, 6, 20);
+    expect(proRataQuotaMb([{ firstSeenOn: "2026-05-01", quotaMb: 0 }], now)).toBe(0);
   });
   it("frota vazia = 0", () => {
     expect(proRataQuotaMb([], new Date(2026, 6, 20))).toBe(0);

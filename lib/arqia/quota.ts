@@ -25,37 +25,36 @@ export function daysInMonth(year: number, month1: number): number {
   return new Date(year, month1, 0).getDate();
 }
 
-export const PER_SIM_MONTHLY_QUOTA_MB = 300;
-
 export interface QuotaSim {
   /** ISO 'YYYY-MM-DD' — when the SIM was first seen (pro-rata base). */
   firstSeenOn: string;
+  /** Quota mensal DO PRÓPRIO chip, em MB (vem da API — campo `quota`). */
+  quotaMb: number;
 }
 
 /**
- * Pró-rata monthly quota (MB): 300/SIM, but a SIM first seen DURING the current
- * month is pro-rated by `(lastDay - day + 2) / lastDay` — the exact n8n formula.
- * `now` gives the reference month. Only pass ACTIVE sims.
+ * Pró-rata monthly quota (MB): soma a quota mensal DE CADA chip (da API), mas um
+ * chip visto pela 1ª vez DURANTE o mês corrente tem a sua quota pró-rateada por
+ * `(lastDay - day + 2) / lastDay` — a mesma fórmula do n8n, só que sobre a quota
+ * do próprio chip em vez de um valor fixo. `now` dá o mês de referência. Passe
+ * só os chips ATIVOS.
  */
-export function proRataQuotaMb(
-  sims: QuotaSim[],
-  now: Date,
-  perSimMb: number = PER_SIM_MONTHLY_QUOTA_MB,
-): number {
+export function proRataQuotaMb(sims: QuotaSim[], now: Date): number {
   const curYear = now.getFullYear();
   const curMonth1 = now.getMonth() + 1; // 1-indexed
   const lastDay = daysInMonth(curYear, curMonth1);
 
   let total = 0;
   for (const sim of sims) {
+    const q = Number.isFinite(sim.quotaMb) ? sim.quotaMb : 0;
     const [y, m, d] = (sim.firstSeenOn ?? "").split("-").map((n) => parseInt(n, 10));
     const inCurrentMonth =
       Number.isFinite(y) && Number.isFinite(m) && y === curYear && m === curMonth1;
     if (inCurrentMonth && Number.isFinite(d)) {
       const daysRemaining = lastDay - d + 2;
-      total += (daysRemaining / lastDay) * perSimMb;
+      total += (daysRemaining / lastDay) * q;
     } else {
-      total += perSimMb;
+      total += q;
     }
   }
   return Math.round(total);

@@ -39,10 +39,18 @@ interface Contract {
   CD_ICCID?: string | null;
 }
 
+export interface ArqiaSimUsage {
+  iccid: string;
+  quotaMb: number;
+  consumptionMb: number;
+}
+
 export interface ArqiaSnapshot {
   iccids: string[];
   accountName: string;
   consumptionMb: number;
+  /** Quota mensal de CADA chip (MB), lida da própria API (campo `quota`). */
+  quotaByIccid: Record<string, number>;
 }
 
 async function login(env: ArqiaEnv): Promise<string> {
@@ -93,34 +101,60 @@ async function listIccids(
   return { iccids, accountName: env.accountFilter };
 }
 
-async function getConsumptionMb(
+/**
+ * Consumo por chip: cada resource traz `quota` (a franquia mensal DO PRÓPRIO
+ * chip) e `consumption`. Retorna a lista parseada em MB — o sync soma o consumo
+ * e usa a quota por chip para o cálculo pró-rata (em vez de um valor fixo).
+ */
+async function getUsage(
   env: ArqiaEnv,
   sessionId: string,
   iccids: string[],
-): Promise<number> {
-  if (iccids.length === 0) return 0;
+): Promise<ArqiaSimUsage[]> {
+  if (iccids.length === 0) return [];
   const res = await fetch(`${BASE}/contrato/statusConexaoPlataformatConsumo`, {
     method: "POST",
     headers: authHeaders(env, sessionId),
     body: JSON.stringify({ resource_type: "iccid", resources: iccids }),
   });
   if (!res.ok) throw new Error(`Arqia consumo falhou (${res.status})`);
-  const body = (await res.json()) as { resources?: { consumption?: string }[] };
+  const body = (await res.json()) as {
+    resources?: { iccid?: string; quota?: string; consumption?: string }[];
+  };
   const resources = body?.resources ?? [];
-  let total = 0;
-  for (const r of resources) total += parseDataUnitMb(r.consumption);
-  return round2(total);
+  return resources
+    .filter((r): r is { iccid: string; quota?: string; consumption?: string } =>
+      typeof r.iccid === "string" && r.iccid !== "",
+    )
+    .map((r) => ({
+      iccid: r.iccid,
+      quotaMb: round2(parseDataUnitMb(r.quota)),
+      consumptionMb: round2(parseDataUnitMb(r.consumption)),
+    }));
 }
 
 /**
- * Full fetch: login → filtered iccids → total consumption (MB). Returns null if
- * unconfigured; throws on an API failure (the caller records it).
+ * Full fetch: login → filtered iccids → consumo/quota por chip. A quota de cada
+ * chip vem da API (não é fixa). Returns null if unconfigured; throws on an API
+ * failure (the caller records it).
  */
 export async function fetchArqiaSnapshot(): Promise<ArqiaSnapshot | null> {
   const env = arqiaEnv();
   if (!env) return null;
   const sessionId = await login(env);
   const { iccids, accountName } = await listIccids(env, sessionId);
-  const consumptionMb = await getConsumptionMb(env, sessionId, iccids);
-  return { iccids, accountName, consumptionMb };
+  const usage = await getUsage(env, sessionId, iccids);
+
+  const quotaByIccid: Record<string, number> = {};
+  let consumptionTotal = 0;
+  for (const u of usage) {
+    quotaByIccid[u.iccid] = u.quotaMb;
+    consumptionTotal += u.consumptionMb;
+  }
+  return {
+    iccids,
+    accountName,
+    consumptionMb: round2(consumptionTotal),
+    quotaByIccid,
+  };
 }
