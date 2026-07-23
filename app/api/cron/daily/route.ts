@@ -22,6 +22,7 @@ import { isAuthorizedCron } from "@/lib/sync/cron-auth";
 import { runMetabaseSync } from "@/lib/sync/metabase-sync";
 import { sweepComprovantes } from "@/lib/comprovantes/sweep";
 import { runFiscalSendCron } from "@/lib/fiscal/send-fiscal-cron";
+import { runArqiaSyncCron } from "@/lib/arqia/sync-cron";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -57,8 +58,14 @@ async function handle(req: Request): Promise<NextResponse> {
   const alerts = await step(() => runAlertsEval({ admin, trigger: "cron:daily" }));
   const sweep = await step(() => sweepComprovantes(admin));
   const fiscalSend = await step(() => runFiscalSendCron(admin, "cron:daily"));
+  const arqia = await step(() => runArqiaSyncCron(admin, "cron:daily"));
 
-  const ok = !failed(metabase) && !failed(alerts) && !failed(sweep) && !failed(fiscalSend);
+  const ok =
+    !failed(metabase) &&
+    !failed(alerts) &&
+    !failed(sweep) &&
+    !failed(fiscalSend) &&
+    !failed(arqia);
   return NextResponse.json(
     {
       ok,
@@ -66,6 +73,7 @@ async function handle(req: Request): Promise<NextResponse> {
       alertsEval: alerts,
       comprovantesSweep: sweep,
       fiscalSendEnergy: fiscalSend,
+      arqiaSync: arqia,
     },
     { status: ok ? 200 : 500 },
   );

@@ -8,6 +8,7 @@ import {
   Inbox,
   Receipt,
   Settings2,
+  SignalHigh,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/leituras", label: "Leituras", icon: Camera },
   { href: "/revisao", label: "Revisão", icon: Inbox, badgeKey: "revisao" },
   { href: "/alertas", label: "Alertas", icon: Bell, badgeKey: "alertas" },
+  { href: "/arqia", label: "Arqia", icon: SignalHigh },
   { href: "/admin", label: "Configurações", icon: Settings2 },
 ];
 
