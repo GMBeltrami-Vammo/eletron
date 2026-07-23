@@ -19,14 +19,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { CircleAlert, Plus, RefreshCw, Send } from "lucide-react";
+import { CircleAlert, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  createArqiaDataPurchase,
-  sendArqiaTestMessage,
-  syncArqiaNow,
-} from "@/app/actions/arqia";
+import { createArqiaDataPurchase, syncArqiaNow } from "@/app/actions/arqia";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -95,17 +91,6 @@ export function ArqiaView({ data, isOperator }: { data: ArqiaData; isOperator: b
     });
   }
 
-  function testSlack() {
-    startTransition(async () => {
-      const res = await sendArqiaTestMessage();
-      if (res.ok) {
-        toast.success(`Slack OK — enviado para ${res.count} destinatário(s).`);
-      } else {
-        toast.error(res.error ?? "Falha no teste do Slack.");
-      }
-    });
-  }
-
   const chartData = data.monthSeries.map((s) => ({
     day: Number(s.snapshotOn.slice(8, 10)),
     consumo: Number((s.consumptionMb / 1024).toFixed(3)),
@@ -136,10 +121,6 @@ export function ArqiaView({ data, isOperator }: { data: ArqiaData; isOperator: b
             <Button variant="outline" onClick={sync} disabled={pending}>
               <RefreshCw className="size-4" strokeWidth={2} />
               Sincronizar agora
-            </Button>
-            <Button variant="outline" onClick={testSlack} disabled={pending}>
-              <Send className="size-4" strokeWidth={2} />
-              Testar Slack (bot)
             </Button>
           </>
         ) : null}
