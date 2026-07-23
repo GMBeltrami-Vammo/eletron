@@ -100,3 +100,20 @@ $$;
 
 revoke execute on function charging.create_arqia_data_purchase(numeric, text) from public, anon;
 grant  execute on function charging.create_arqia_data_purchase(numeric, text) to authenticated;
+
+-- Table-level grants (RLS/policies não bastam — o role precisa do privilégio).
+-- O app lê/escreve via service_role (supabaseAdmin); authenticated só SELECT.
+-- (Aplicado em prod na migration arqia_grants; aqui p/ um apply do zero ficar
+-- completo — apply_migration não herda os grants padrão do schema charging.)
+grant select, insert, update, delete on
+  charging.arqia_sims,
+  charging.arqia_snapshots,
+  charging.arqia_data_purchases,
+  charging.arqia_alerts
+  to service_role;
+grant select on
+  charging.arqia_sims,
+  charging.arqia_snapshots,
+  charging.arqia_data_purchases,
+  charging.arqia_alerts
+  to authenticated;
