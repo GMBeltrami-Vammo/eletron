@@ -58,7 +58,9 @@ async function handle(req: Request): Promise<NextResponse> {
   const alerts = await step(() => runAlertsEval({ admin, trigger: "cron:daily" }));
   const sweep = await step(() => sweepComprovantes(admin));
   const fiscalSend = await step(() => runFiscalSendCron(admin, "cron:daily"));
-  const arqia = await step(() => runArqiaSyncCron(admin, "cron:daily"));
+  // Cron: atualiza E manda os alertas (> 80%). O botão "Atualizar" no app
+  // chama com sendAlerts=false (só atualiza).
+  const arqia = await step(() => runArqiaSyncCron(admin, "cron:daily", true));
 
   const ok =
     !failed(metabase) &&

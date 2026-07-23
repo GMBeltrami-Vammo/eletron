@@ -77,6 +77,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 export async function runArqiaSync(
   admin: ChargingClient,
   now: Date,
+  opts: { sendAlerts: boolean },
 ): Promise<ArqiaSyncResult> {
   const snap = await fetchArqiaSnapshot();
   if (!snap) return { status: "unconfigured" };
@@ -159,10 +160,12 @@ export async function runArqiaSync(
     { onConflict: "snapshot_on" },
   );
 
-  // Alert over threshold.
-  const threshold = Number(process.env.ARQIA_ALERT_THRESHOLD ?? 70);
+  // Alert over threshold (default 80%, Gabriel 2026-07-23) — SÓ quando
+  // sendAlerts (o cron diário). O botão "Atualizar" passa sendAlerts=false:
+  // atualiza os dados/snapshot e NUNCA manda Slack nem grava alerta.
+  const threshold = Number(process.env.ARQIA_ALERT_THRESHOLD ?? 80);
   let alerted = false;
-  if (pct > threshold) {
+  if (opts.sendAlerts && pct > threshold) {
     const gb = (mb: number) => (mb / 1024).toFixed(2);
     const message =
       `⚠️ Alerta de uso de dados (Arqia):\n` +

@@ -45,8 +45,8 @@ const gb = (mb: number | null | undefined): string =>
   mb == null ? "—" : `${(mb / 1024).toFixed(2)} GB`;
 
 function usageTone(pct: number): StatTone {
-  if (pct >= 90) return "error";
-  if (pct >= 70) return "warning";
+  if (pct >= 95) return "error";
+  if (pct >= 80) return "warning"; // alerta do cron dispara acima de 80%
   return "success";
 }
 

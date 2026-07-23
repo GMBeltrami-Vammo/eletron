@@ -21,6 +21,7 @@ export type ArqiaSyncCronResult =
 export async function runArqiaSyncCron(
   admin: ChargingClient,
   trigger: string,
+  sendAlerts: boolean,
 ): Promise<ArqiaSyncCronResult> {
   if (!arqiaEnv()) return { status: "unconfigured" };
 
@@ -28,7 +29,7 @@ export async function runArqiaSyncCron(
   if (!jobId) return { status: "skipped_locked" };
 
   try {
-    const result = await runArqiaSync(admin, new Date());
+    const result = await runArqiaSync(admin, new Date(), { sendAlerts });
     await finalizeJob(admin, jobId, {
       status: "success",
       trigger,

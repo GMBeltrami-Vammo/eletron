@@ -31,7 +31,8 @@ export async function createArqiaDataPurchase(input: {
 
 export async function syncArqiaNow(): Promise<ActionResult> {
   return withOperator(async () => {
-    await runArqiaSyncCron(supabaseAdmin(), "manual:arqia");
+    // "Atualizar" só atualiza os dados — NUNCA manda Slack (sendAlerts=false).
+    await runArqiaSyncCron(supabaseAdmin(), "manual:arqia", false);
     revalidatePath("/arqia");
   });
 }
